@@ -68,7 +68,7 @@ class DashboardHeader extends StatelessWidget {
               decoration: BoxDecoration(
 
                 color:
-                    Colors.green.withOpacity(0.1),
+                    Colors.green.withValues(alpha: 0.1),
 
                 borderRadius:
                     BorderRadius.circular(20),

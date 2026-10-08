@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'widgets/stat_card.dart';
+import 'widgets/revenue_card.dart';
+import 'widgets/operation_status.dart';
+
 
 
 class DashboardPage extends StatelessWidget {
@@ -16,11 +19,9 @@ class DashboardPage extends StatelessWidget {
     return Scaffold(
 
       appBar: AppBar(
-
         title: const Text(
-          "Dashboard",
+          "FIREFA Dashboard",
         ),
-
       ),
 
 
@@ -35,27 +36,35 @@ class DashboardPage extends StatelessWidget {
               CrossAxisAlignment.start,
 
 
-          children:[
+          children: [
 
 
             const Text(
-
-              "Good Morning, Owner",
+              "Good Morning, Owner 👋",
 
               style: TextStyle(
-
                 fontSize:28,
-
-                fontWeight:
-                    FontWeight.bold,
-
+                fontWeight:FontWeight.bold,
               ),
-
             ),
 
 
-            const SizedBox(height:24),
+            const SizedBox(height:8),
 
+
+            const Text(
+              "Main Outlet • Online",
+              style:TextStyle(
+                color:Colors.grey,
+              ),
+            ),
+
+
+            const SizedBox(height:32),
+
+
+
+            // STATISTIC CARDS
 
             LayoutBuilder(
 
@@ -65,7 +74,7 @@ class DashboardPage extends StatelessWidget {
                 int columns = 1;
 
 
-                if(constraints.maxWidth > 900){
+                if(constraints.maxWidth > 1000){
 
                   columns = 4;
 
@@ -76,6 +85,7 @@ class DashboardPage extends StatelessWidget {
                   columns = 2;
 
                 }
+
 
 
                 return GridView.count(
@@ -143,14 +153,35 @@ class DashboardPage extends StatelessWidget {
 
                     ),
 
+
                   ],
 
                 );
 
-
               },
 
             ),
+
+
+
+            const SizedBox(height:24),
+
+
+
+            // REVENUE
+
+            const RevenueCard(),
+
+
+
+            const SizedBox(height:24),
+
+
+
+            // OPERATION STATUS
+
+            const OperationStatus(),
+
 
 
           ],

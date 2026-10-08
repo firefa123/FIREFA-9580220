@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_theme.dart';
+
 import '../../dashboard/dashboard_page.dart';
 
 class LoginForm extends StatefulWidget {
@@ -91,7 +91,7 @@ class _LoginFormState extends State<LoginForm> {
 
         DropdownButtonFormField<String>(
 
-          value:selectedRole,
+          initialValue: selectedRole,
 
           decoration: const InputDecoration(
             labelText:"Login as",
