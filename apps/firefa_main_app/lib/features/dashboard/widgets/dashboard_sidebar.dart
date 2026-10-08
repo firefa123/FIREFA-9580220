@@ -27,45 +27,21 @@ class DashboardSidebar extends StatelessWidget {
 
   final menus = const [
 
-    {
-      "title":"Dashboard",
-      "icon":Icons.dashboard_outlined,
-    },
+    ("Dashboard", Icons.dashboard_outlined),
 
-    {
-      "title":"POS",
-      "icon":Icons.point_of_sale_outlined,
-    },
+    ("POS", Icons.point_of_sale_outlined),
 
-    {
-      "title":"Orders",
-      "icon":Icons.receipt_long_outlined,
-    },
+    ("Orders", Icons.receipt_long_outlined),
 
-    {
-      "title":"Tables",
-      "icon":Icons.table_bar_outlined,
-    },
+    ("Tables", Icons.table_bar_outlined),
 
-    {
-      "title":"Menu",
-      "icon":Icons.restaurant_menu_outlined,
-    },
+    ("Menu", Icons.restaurant_menu_outlined),
 
-    {
-      "title":"Inventory",
-      "icon":Icons.inventory_2_outlined,
-    },
+    ("Inventory", Icons.inventory_2_outlined),
 
-    {
-      "title":"Reports",
-      "icon":Icons.analytics_outlined,
-    },
+    ("Reports", Icons.analytics_outlined),
 
-    {
-      "title":"Settings",
-      "icon":Icons.settings_outlined,
-    },
+    ("Settings", Icons.settings_outlined),
 
   ];
 
@@ -82,83 +58,82 @@ class DashboardSidebar extends StatelessWidget {
 
 
       width:
-          collapsed ? 80 : 230,
-
-
-      padding:
-          const EdgeInsets.symmetric(
-
-            horizontal:10,
-
-            vertical:16,
-
-          ),
-
+          collapsed ? 70 : 230,
 
 
       child: Column(
 
-        children:[
+        children: [
 
 
-          Row(
+          SizedBox(
 
-            mainAxisAlignment:
+            height:60,
+
+
+            child:
 
               collapsed
 
-              ? MainAxisAlignment.center
+              ? Center(
 
-              : MainAxisAlignment.start,
+                  child: IconButton(
 
+                    icon:
+                        const Icon(Icons.menu),
 
-            children:[
-
-
-              IconButton(
-
-                icon:
-                    const Icon(Icons.menu),
-
-
-                onPressed:
-                    onToggle,
-
-              ),
-
-
-
-              if(!collapsed)
-
-                const Text(
-
-                  "FIREFA",
-
-                  style:TextStyle(
-
-                    fontSize:24,
-
-                    fontWeight:
-                        FontWeight.bold,
+                    onPressed:
+                        onToggle,
 
                   ),
 
+                )
+
+
+              : Row(
+
+                  children:[
+
+
+                    IconButton(
+
+                      icon:
+                          const Icon(Icons.menu),
+
+                      onPressed:
+                          onToggle,
+
+                    ),
+
+
+                    const Text(
+
+                      "FIREFA",
+
+                      style:TextStyle(
+
+                        fontSize:24,
+
+                        fontWeight:
+                            FontWeight.bold,
+
+                      ),
+
+                    ),
+
+
+                  ],
+
                 ),
-
-
-            ],
 
           ),
 
-
-
-          const SizedBox(height:30),
 
 
 
           Expanded(
 
-            child:ListView.builder(
+            child: ListView.builder(
 
               itemCount:
                   menus.length,
@@ -176,70 +151,22 @@ class DashboardSidebar extends StatelessWidget {
 
 
 
-                return Container(
+                return Padding(
 
-                  margin:
-                      const EdgeInsets.only(
+                  padding:
 
-                        bottom:8,
+                    const EdgeInsets.symmetric(
 
-                      ),
+                      vertical:4,
+
+                    ),
 
 
 
-                  decoration:BoxDecoration(
-
-                    color:
-
-                      active
-
-                      ? Colors.teal.withValues(alpha:0.1)
-
-                      : Colors.transparent,
-
+                  child: InkWell(
 
                     borderRadius:
                         BorderRadius.circular(12),
-
-                  ),
-
-
-
-                  child:ListTile(
-
-
-                    contentPadding:
-                        EdgeInsets.symmetric(
-
-                          horizontal:
-                              collapsed ? 12 : 8,
-
-                        ),
-
-
-
-                    leading:
-
-                        Icon(
-
-                          item["icon"] as IconData,
-
-                        ),
-
-
-
-                    title:
-
-                      collapsed
-
-                      ? null
-
-                      : Text(
-
-                          item["title"] as String,
-
-                        ),
-
 
 
                     onTap:(){
@@ -248,6 +175,74 @@ class DashboardSidebar extends StatelessWidget {
 
                     },
 
+
+
+                    child: Container(
+
+                      height:48,
+
+
+                      alignment:
+
+                        collapsed
+
+                        ? Alignment.center
+
+                        : Alignment.centerLeft,
+
+
+
+                      decoration:BoxDecoration(
+
+                        color:
+
+                          active
+
+                          ? Colors.teal.withValues(alpha:0.1)
+
+                          : Colors.transparent,
+
+
+                        borderRadius:
+
+                          BorderRadius.circular(12),
+
+                      ),
+
+
+
+                      child:
+
+                        collapsed
+
+                        ? Icon(item.$2)
+
+
+                        : Row(
+
+                            children:[
+
+
+                              const SizedBox(width:16),
+
+
+
+                              Icon(item.$2),
+
+
+
+                              const SizedBox(width:12),
+
+
+
+                              Text(item.$1),
+
+
+                            ],
+
+                          ),
+
+                    ),
 
                   ),
 
@@ -267,23 +262,32 @@ class DashboardSidebar extends StatelessWidget {
 
 
 
-          Icon(
+          collapsed
 
-            Icons.cloud_done_outlined,
+          ? const Icon(
+              Icons.cloud_done_outlined,
+            )
 
-          ),
+          : const Row(
 
+              children:[
 
+                SizedBox(width:16),
 
-          if(!collapsed)
+                Icon(
+                  Icons.cloud_done_outlined,
+                ),
 
-            const Text(
+                SizedBox(width:10),
 
-              "Online",
+                Text("Online"),
+
+              ],
 
             ),
 
 
+          const SizedBox(height:16),
 
         ],
 
