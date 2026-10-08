@@ -5,10 +5,13 @@ import 'widgets/revenue_card.dart';
 import 'widgets/dashboard_sidebar.dart';
 
 
+
 class DashboardPage extends StatefulWidget {
 
   const DashboardPage({
+
     super.key,
+
   });
 
 
@@ -25,6 +28,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   int selectedIndex = 0;
 
+
   bool sidebarCollapsed = true;
 
 
@@ -35,41 +39,57 @@ class _DashboardPageState extends State<DashboardPage> {
 
     return Scaffold(
 
+
       body: Row(
 
-        children: [
+        children:[
 
 
 
           DashboardSidebar(
 
-            selectedIndex: selectedIndex,
+
+            selectedIndex:
+                selectedIndex,
 
 
-            collapsed: sidebarCollapsed,
+            collapsed:
+                sidebarCollapsed,
 
 
-            onToggle: (){
+
+            onToggle:(){
+
 
               setState((){
+
 
                 sidebarCollapsed =
                     !sidebarCollapsed;
 
+
               });
+
 
             },
 
 
-            onSelected: (index){
+
+            onSelected:(index){
+
 
               setState((){
 
-                selectedIndex = index;
+
+                selectedIndex =
+                    index;
+
 
               });
 
+
             },
+
 
           ),
 
@@ -78,27 +98,32 @@ class _DashboardPageState extends State<DashboardPage> {
 
           Expanded(
 
-            child: SingleChildScrollView(
+
+            child:SingleChildScrollView(
+
 
               padding:
                   const EdgeInsets.all(24),
 
 
 
-              child: Column(
+              child:Column(
+
 
                 crossAxisAlignment:
                     CrossAxisAlignment.start,
 
 
-                children: [
+
+                children:[
+
 
 
                   const Text(
 
                     "Good Morning, Owner",
 
-                    style: TextStyle(
+                    style:TextStyle(
 
                       fontSize:28,
 
@@ -120,10 +145,12 @@ class _DashboardPageState extends State<DashboardPage> {
                     builder:(context,constraints){
 
 
+
                       int columns = 1;
 
 
-                      if(constraints.maxWidth > 1000){
+
+                      if(constraints.maxWidth > 900){
 
                         columns = 4;
 
@@ -157,7 +184,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
 
 
-                        children: const [
+                        children:const[
 
 
 
@@ -167,8 +194,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
                             value:"Rp 8.500.000",
 
-                            icon:
-                              Icons.payments_outlined,
+                            icon:Icons.payments_outlined,
 
                           ),
 
@@ -180,8 +206,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
                             value:"245",
 
-                            icon:
-                              Icons.shopping_bag_outlined,
+                            icon:Icons.shopping_bag_outlined,
 
                           ),
 
@@ -193,8 +218,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
                             value:"18",
 
-                            icon:
-                              Icons.table_bar_outlined,
+                            icon:Icons.table_bar_outlined,
 
                           ),
 
@@ -206,16 +230,15 @@ class _DashboardPageState extends State<DashboardPage> {
 
                             value:"5",
 
-                            icon:
-                              Icons.inventory_2_outlined,
+                            icon:Icons.inventory_2_outlined,
 
                           ),
+
 
 
                         ],
 
                       );
-
 
                     },
 
@@ -231,30 +254,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
 
 
-                  const SizedBox(height:24),
-
-
-
-                  const Card(
-
-                    child: Padding(
-
-                      padding:
-                        EdgeInsets.all(24),
-
-
-                      child: Text(
-
-                        "Live Operation\n\nKitchen : 12 Orders Cooking\nTables : 18 Occupied",
-
-                      ),
-
-                    ),
-
-                  ),
-
-
-
                 ],
 
               ),
@@ -267,6 +266,7 @@ class _DashboardPageState extends State<DashboardPage> {
         ],
 
       ),
+
 
     );
 

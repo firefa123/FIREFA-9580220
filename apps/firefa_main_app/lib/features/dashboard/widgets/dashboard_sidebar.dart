@@ -75,230 +75,217 @@ class DashboardSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
 
 
-    return SizedBox(
+    return AnimatedContainer(
 
-      width: collapsed ? 80 : 230,
-
-
-      height: double.infinity,
+      duration:
+          const Duration(milliseconds:250),
 
 
-      child: AnimatedContainer(
-
-        duration:
-            const Duration(milliseconds:250),
+      width:
+          collapsed ? 80 : 230,
 
 
-        padding:
-            const EdgeInsets.symmetric(
+      padding:
+          const EdgeInsets.symmetric(
 
-              horizontal:12,
+            horizontal:10,
 
-              vertical:16,
+            vertical:16,
 
-            ),
-
-
-        child: Column(
-
-
-          children: [
+          ),
 
 
 
-            Row(
+      child: Column(
 
-              children: [
-
-
-
-                IconButton(
-
-                  icon:
-                      const Icon(Icons.menu),
+        children:[
 
 
-                  onPressed:
-                      onToggle,
+          Row(
+
+            mainAxisAlignment:
+
+              collapsed
+
+              ? MainAxisAlignment.center
+
+              : MainAxisAlignment.start,
+
+
+            children:[
+
+
+              IconButton(
+
+                icon:
+                    const Icon(Icons.menu),
+
+
+                onPressed:
+                    onToggle,
+
+              ),
+
+
+
+              if(!collapsed)
+
+                const Text(
+
+                  "FIREFA",
+
+                  style:TextStyle(
+
+                    fontSize:24,
+
+                    fontWeight:
+                        FontWeight.bold,
+
+                  ),
 
                 ),
 
 
+            ],
+
+          ),
 
 
-                if(!collapsed)
 
-                  const Expanded(
+          const SizedBox(height:30),
 
-                    child: Text(
 
-                      "FIREFA",
 
-                      style: TextStyle(
+          Expanded(
 
-                        fontSize:26,
+            child:ListView.builder(
 
-                        fontWeight:
-                            FontWeight.bold,
+              itemCount:
+                  menus.length,
 
-                        letterSpacing:1.5,
+
+              itemBuilder:(context,index){
+
+
+                final item =
+                    menus[index];
+
+
+                final active =
+                    selectedIndex == index;
+
+
+
+                return Container(
+
+                  margin:
+                      const EdgeInsets.only(
+
+                        bottom:8,
 
                       ),
 
-                    ),
+
+
+                  decoration:BoxDecoration(
+
+                    color:
+
+                      active
+
+                      ? Colors.teal.withValues(alpha:0.1)
+
+                      : Colors.transparent,
+
+
+                    borderRadius:
+                        BorderRadius.circular(12),
 
                   ),
 
 
-              ],
+
+                  child:ListTile(
 
 
-            ),
+                    contentPadding:
+                        EdgeInsets.symmetric(
 
-
-
-            const SizedBox(height:30),
-
-
-
-
-            Expanded(
-
-
-              child: ListView.builder(
-
-
-                itemCount:
-                    menus.length,
-
-
-                itemBuilder:(context,index){
-
-
-                  final item =
-                      menus[index];
-
-
-                  final active =
-                      selectedIndex == index;
-
-
-
-                  return Container(
-
-
-                    margin:
-                        const EdgeInsets.only(
-
-                          bottom:8,
+                          horizontal:
+                              collapsed ? 12 : 8,
 
                         ),
 
 
 
-                    decoration: BoxDecoration(
+                    leading:
 
-                      color:
+                        Icon(
 
-                          active
+                          item["icon"] as IconData,
 
-                          ? Colors.teal.withValues(alpha:0.1)
-
-                          : Colors.transparent,
-
-
-                      borderRadius:
-                          BorderRadius.circular(12),
-
-                    ),
+                        ),
 
 
 
-                    child: ListTile(
+                    title:
 
+                      collapsed
 
-                      contentPadding:
+                      ? null
 
-                          EdgeInsets.symmetric(
+                      : Text(
 
-                            horizontal:
-                                collapsed ? 12 : 16,
+                          item["title"] as String,
 
-                          ),
-
-
-
-                      leading:
-
-                          Icon(
-
-                            item["icon"] as IconData,
-
-                          ),
+                        ),
 
 
 
-                      title:
+                    onTap:(){
 
-                          collapsed
+                      onSelected(index);
 
-                          ? null
-
-                          : Text(
-
-                              item["title"] as String,
-
-                            ),
+                    },
 
 
+                  ),
 
-                      onTap:(){
-
-                        onSelected(index);
-
-                      },
-
-                    ),
+                );
 
 
-                  );
+              },
 
 
-                },
+            ),
+
+          ),
 
 
-              ),
 
+          const Divider(),
+
+
+
+          Icon(
+
+            Icons.cloud_done_outlined,
+
+          ),
+
+
+
+          if(!collapsed)
+
+            const Text(
+
+              "Online",
 
             ),
 
 
 
-            const Divider(),
-
-
-
-            Icon(
-
-              Icons.cloud_done_outlined,
-
-            ),
-
-
-            if(!collapsed)
-
-              const Text(
-
-                "Online",
-
-              ),
-
-
-          ],
-
-
-        ),
-
+        ],
 
       ),
 
