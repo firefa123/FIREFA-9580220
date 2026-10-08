@@ -12,18 +12,27 @@ class RevenueCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
 
+
     return Card(
 
       elevation: 0,
 
+
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
+
+        borderRadius:
+            BorderRadius.circular(20),
+
       ),
+
 
 
       child: Padding(
 
-        padding: const EdgeInsets.all(24),
+        padding:
+            const EdgeInsets.all(24),
+
+
 
         child: Column(
 
@@ -31,7 +40,9 @@ class RevenueCard extends StatelessWidget {
               CrossAxisAlignment.start,
 
 
+
           children: [
+
 
 
             Row(
@@ -43,16 +54,27 @@ class RevenueCard extends StatelessWidget {
               children: [
 
 
-                const Text(
 
-                  "Revenue Overview",
+                const Expanded(
 
-                  style: TextStyle(
+                  child: Text(
 
-                    fontSize: 18,
+                    "Revenue Overview",
 
-                    fontWeight:
-                        FontWeight.bold,
+                    maxLines: 1,
+
+                    overflow:
+                        TextOverflow.ellipsis,
+
+
+                    style: TextStyle(
+
+                      fontSize:18,
+
+                      fontWeight:
+                          FontWeight.bold,
+
+                    ),
 
                   ),
 
@@ -60,13 +82,23 @@ class RevenueCard extends StatelessWidget {
 
 
 
+
+                const SizedBox(width:12),
+
+
+
+
                 Container(
 
                   padding:
                       const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
+
+                        horizontal:10,
+
+                        vertical:5,
+
                       ),
+
 
 
                   decoration: BoxDecoration(
@@ -81,6 +113,7 @@ class RevenueCard extends StatelessWidget {
                   ),
 
 
+
                   child: const Text(
 
                     "Today",
@@ -90,7 +123,9 @@ class RevenueCard extends StatelessWidget {
                       color:
                           Colors.green,
 
-                      fontSize: 12,
+
+                      fontSize:12,
+
 
                       fontWeight:
                           FontWeight.w600,
@@ -108,23 +143,41 @@ class RevenueCard extends StatelessWidget {
 
 
 
+
             const SizedBox(height:24),
 
 
 
-            const Text(
 
-              "Rp 8.500.000",
+            FittedBox(
 
-              style: TextStyle(
+              fit:
+                  BoxFit.scaleDown,
 
-                fontSize: 32,
 
-                fontWeight:
-                    FontWeight.bold,
+              alignment:
+                  Alignment.centerLeft,
 
-                color:
-                    AppTheme.primary,
+
+
+              child: const Text(
+
+                "Rp 8.500.000",
+
+
+                style: TextStyle(
+
+                  fontSize:32,
+
+
+                  fontWeight:
+                      FontWeight.bold,
+
+
+                  color:
+                      AppTheme.primary,
+
+                ),
 
               ),
 
@@ -132,13 +185,16 @@ class RevenueCard extends StatelessWidget {
 
 
 
-            const SizedBox(height:8),
+
+            const SizedBox(height:12),
+
 
 
 
             Row(
 
               children: [
+
 
 
                 Container(
@@ -153,25 +209,29 @@ class RevenueCard extends StatelessWidget {
                         color:
                             Colors.green,
 
+
                         shape:
                             BoxShape.circle,
 
                       ),
 
 
-                  child:
-                      const Icon(
 
-                        Icons.arrow_upward,
+                  child: const Icon(
 
-                        size:12,
+                    Icons.arrow_upward,
 
-                        color:
-                            Colors.white,
 
-                      ),
+                    size:12,
+
+
+                    color:
+                        Colors.white,
+
+                  ),
 
                 ),
+
 
 
 
@@ -179,21 +239,37 @@ class RevenueCard extends StatelessWidget {
 
 
 
-                Text(
 
-                  "+12.5% dibanding kemarin",
+                const Expanded(
 
-                  style: TextStyle(
+                  child: Text(
 
-                    color:
-                        Colors.green.shade700,
+                    "+12.5% dibanding kemarin",
 
-                    fontWeight:
-                        FontWeight.w500,
+
+                    maxLines:2,
+
+
+                    overflow:
+                        TextOverflow.ellipsis,
+
+
+
+                    style: TextStyle(
+
+                      color:
+                          Colors.green,
+
+
+                      fontWeight:
+                          FontWeight.w500,
+
+                    ),
 
                   ),
 
                 ),
+
 
 
               ],
@@ -202,7 +278,9 @@ class RevenueCard extends StatelessWidget {
 
 
 
+
             const SizedBox(height:30),
+
 
 
 
@@ -211,39 +289,59 @@ class RevenueCard extends StatelessWidget {
               height:100,
 
 
-              child: Row(
 
-                crossAxisAlignment:
-                    CrossAxisAlignment.end,
+              child: LayoutBuilder(
 
-
-                mainAxisAlignment:
-                    MainAxisAlignment.spaceBetween,
+                builder:
+                    (context,constraints){
 
 
-                children: [
 
-                  _bar(35),
+                  return Row(
 
-                  _bar(55),
-
-                  _bar(45),
-
-                  _bar(75),
-
-                  _bar(65),
-
-                  _bar(90),
+                    crossAxisAlignment:
+                        CrossAxisAlignment.end,
 
 
-                ],
+                    mainAxisAlignment:
+                        MainAxisAlignment.spaceEvenly,
+
+
+
+                    children: [
+
+
+
+                      _bar(constraints.maxWidth,35),
+
+                      _bar(constraints.maxWidth,55),
+
+                      _bar(constraints.maxWidth,45),
+
+                      _bar(constraints.maxWidth,75),
+
+                      _bar(constraints.maxWidth,65),
+
+                      _bar(constraints.maxWidth,90),
+
+
+
+                    ],
+
+
+                  );
+
+
+                },
 
               ),
 
             ),
 
 
+
           ],
+
 
         ),
 
@@ -251,22 +349,30 @@ class RevenueCard extends StatelessWidget {
 
     );
 
+
   }
 
 
 
-  Widget _bar(double height) {
+
+  Widget _bar(double width,double height){
+
 
     return Container(
 
-      width:18,
+      width:
+          width < 250 ? 12 : 18,
 
-      height:height,
+
+      height:
+          height,
+
 
       decoration: BoxDecoration(
 
         color:
             AppTheme.primary,
+
 
         borderRadius:
             BorderRadius.circular(8),
@@ -274,6 +380,7 @@ class RevenueCard extends StatelessWidget {
       ),
 
     );
+
 
   }
 

@@ -25,6 +25,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
   int selectedIndex = 0;
 
+  bool sidebarCollapsed = true;
+
 
 
   @override
@@ -38,9 +40,26 @@ class _DashboardPageState extends State<DashboardPage> {
         children: [
 
 
+
           DashboardSidebar(
 
             selectedIndex: selectedIndex,
+
+
+            collapsed: sidebarCollapsed,
+
+
+            onToggle: (){
+
+              setState((){
+
+                sidebarCollapsed =
+                    !sidebarCollapsed;
+
+              });
+
+            },
+
 
             onSelected: (index){
 
@@ -56,12 +75,14 @@ class _DashboardPageState extends State<DashboardPage> {
 
 
 
+
           Expanded(
 
             child: SingleChildScrollView(
 
               padding:
                   const EdgeInsets.all(24),
+
 
 
               child: Column(
@@ -79,7 +100,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
                     style: TextStyle(
 
-                      fontSize: 28,
+                      fontSize:28,
 
                       fontWeight:
                           FontWeight.bold,
@@ -96,15 +117,13 @@ class _DashboardPageState extends State<DashboardPage> {
 
                   LayoutBuilder(
 
-                    builder:
-                    (context,constraints){
+                    builder:(context,constraints){
 
 
                       int columns = 1;
 
 
-
-                      if(constraints.maxWidth > 900){
+                      if(constraints.maxWidth > 1000){
 
                         columns = 4;
 
@@ -119,7 +138,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
 
                       return GridView.count(
-
 
                         crossAxisCount:
                             columns,
@@ -142,13 +160,15 @@ class _DashboardPageState extends State<DashboardPage> {
                         children: const [
 
 
+
                           StatCard(
 
-                            "Today's Sales",
+                            title:"Today's Sales",
 
-                            "Rp 8.500.000",
+                            value:"Rp 8.500.000",
 
-                            Icons.payments_outlined,
+                            icon:
+                              Icons.payments_outlined,
 
                           ),
 
@@ -156,23 +176,12 @@ class _DashboardPageState extends State<DashboardPage> {
 
                           StatCard(
 
-                            "Orders",
+                            title:"Orders",
 
-                            "245",
+                            value:"245",
 
-                            Icons.shopping_bag_outlined,
-
-                          ),
-
-
-
-                          StatCard(
-
-                            "Active Tables",
-
-                            "18",
-
-                            Icons.table_bar_outlined,
+                            icon:
+                              Icons.shopping_bag_outlined,
 
                           ),
 
@@ -180,17 +189,30 @@ class _DashboardPageState extends State<DashboardPage> {
 
                           StatCard(
 
-                            "Low Stock",
+                            title:"Active Tables",
 
-                            "5",
+                            value:"18",
 
-                            Icons.inventory_2_outlined,
+                            icon:
+                              Icons.table_bar_outlined,
+
+                          ),
+
+
+
+                          StatCard(
+
+                            title:"Low Stock",
+
+                            value:"5",
+
+                            icon:
+                              Icons.inventory_2_outlined,
 
                           ),
 
 
                         ],
-
 
                       );
 
@@ -213,121 +235,17 @@ class _DashboardPageState extends State<DashboardPage> {
 
 
 
-                  Card(
+                  const Card(
 
                     child: Padding(
 
                       padding:
-                          const EdgeInsets.all(24),
+                        EdgeInsets.all(24),
 
 
-                      child: Column(
+                      child: Text(
 
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
-
-
-                        children: const [
-
-
-                          Text(
-
-                            "Live Operation",
-
-                            style: TextStyle(
-
-                              fontSize:18,
-
-                              fontWeight:
-                                  FontWeight.bold,
-
-                            ),
-
-                          ),
-
-
-                          SizedBox(height:16),
-
-
-                          Text(
-                            "Kitchen : 12 Orders Cooking",
-                          ),
-
-
-                          SizedBox(height:8),
-
-
-                          Text(
-                            "Tables : 18 Occupied",
-                          ),
-
-
-                        ],
-
-
-                      ),
-
-                    ),
-
-                  ),
-
-
-
-                  const SizedBox(height:24),
-
-
-
-                  Card(
-
-                    child: Padding(
-
-                      padding:
-                          const EdgeInsets.all(24),
-
-
-                      child: Column(
-
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
-
-
-                        children: const [
-
-
-                          Text(
-
-                            "Recent Orders",
-
-                            style: TextStyle(
-
-                              fontSize:18,
-
-                              fontWeight:
-                                  FontWeight.bold,
-
-                            ),
-
-                          ),
-
-
-                          SizedBox(height:16),
-
-
-                          Text(
-                            "#1025 - Table 05 - Preparing",
-                          ),
-
-
-                          SizedBox(height:8),
-
-
-                          Text(
-                            "#1026 - Table 02 - Completed",
-                          ),
-
-
-                        ],
-
+                        "Live Operation\n\nKitchen : 12 Orders Cooking\nTables : 18 Occupied",
 
                       ),
 
@@ -338,7 +256,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
 
                 ],
-
 
               ),
 
