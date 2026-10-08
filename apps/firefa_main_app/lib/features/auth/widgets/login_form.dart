@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
-
+import '../../dashboard/dashboard_page.dart';
 
 class LoginForm extends StatefulWidget {
   const LoginForm({
@@ -181,18 +181,11 @@ class _LoginFormState extends State<LoginForm> {
 
             onPressed:(){
 
-              ScaffoldMessenger
-                  .of(context)
-                  .showSnackBar(
-
-                SnackBar(
-
-                  content:Text(
-                    "Login sebagai $selectedRole",
-                  ),
-
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                builder: (_) => const DashboardPage(),
                 ),
-
               );
 
             },
