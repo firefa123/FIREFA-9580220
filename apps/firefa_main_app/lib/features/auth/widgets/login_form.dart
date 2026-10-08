@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 
 
-
 class LoginForm extends StatefulWidget {
   const LoginForm({
     super.key,
@@ -18,18 +17,29 @@ class _LoginFormState extends State<LoginForm> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
 
-  bool rememberMe = false;
   bool obscurePassword = true;
+  bool rememberMe = false;
+
+  String selectedRole = "Owner";
+
+
+  final roles = [
+    "Owner",
+    "Manager",
+    "Cashier",
+    "Kitchen / Bar",
+  ];
 
 
   @override
   Widget build(BuildContext context) {
+
     return Column(
       children: [
 
         TextField(
           controller: emailController,
-          keyboardType: TextInputType.emailAddress,
+
           decoration: const InputDecoration(
             labelText: "Email",
             prefixIcon: Icon(
@@ -39,48 +49,98 @@ class _LoginFormState extends State<LoginForm> {
         ),
 
 
-        const SizedBox(height: 16),
+        const SizedBox(height:16),
 
 
         TextField(
           controller: passwordController,
+
           obscureText: obscurePassword,
+
           decoration: InputDecoration(
+
             labelText: "Password",
+
             prefixIcon: const Icon(
               Icons.lock_outline,
             ),
 
+
             suffixIcon: IconButton(
+
               icon: Icon(
                 obscurePassword
                     ? Icons.visibility_off_outlined
                     : Icons.visibility_outlined,
               ),
 
-              onPressed: () {
+              onPressed: (){
                 setState(() {
-                  obscurePassword = !obscurePassword;
+                  obscurePassword =
+                      !obscurePassword;
                 });
               },
+
             ),
           ),
         ),
 
 
-        const SizedBox(height: 16),
+        const SizedBox(height:20),
+
+
+        DropdownButtonFormField<String>(
+
+          value:selectedRole,
+
+          decoration: const InputDecoration(
+            labelText:"Login as",
+            prefixIcon: Icon(
+              Icons.person_outline,
+            ),
+          ),
+
+
+          items: roles.map((role){
+
+            return DropdownMenuItem(
+              value: role,
+              child: Text(role),
+            );
+
+          }).toList(),
+
+
+          onChanged:(value){
+
+            setState(() {
+              selectedRole=value!;
+            });
+
+          },
+
+        ),
+
+
+        const SizedBox(height:16),
 
 
         Row(
-          children: [
+
+          children:[
 
             Checkbox(
-              value: rememberMe,
-              onChanged: (value) {
+
+              value:rememberMe,
+
+              onChanged:(value){
+
                 setState(() {
-                  rememberMe = value ?? false;
+                  rememberMe=value ?? false;
                 });
+
               },
+
             ),
 
 
@@ -93,45 +153,58 @@ class _LoginFormState extends State<LoginForm> {
 
 
             TextButton(
-              onPressed: () {},
-              child: const Text(
+
+              onPressed:(){},
+
+              child:const Text(
                 "Forgot password?",
               ),
+
             ),
 
           ],
+
         ),
 
 
-        const SizedBox(height: 20),
+        const SizedBox(height:20),
 
 
         SizedBox(
-          width: double.infinity,
-          height: 50,
 
-          child: FilledButton(
-            onPressed: () {
+          width:double.infinity,
 
-              // sementara dummy login
+          height:52,
 
-              ScaffoldMessenger.of(context)
+
+          child:FilledButton(
+
+            onPressed:(){
+
+              ScaffoldMessenger
+                  .of(context)
                   .showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    "Login FIREFA berhasil dipanggil",
+
+                SnackBar(
+
+                  content:Text(
+                    "Login sebagai $selectedRole",
                   ),
+
                 ),
+
               );
 
             },
 
-            child: const Text(
+
+            child:const Text(
               "LOGIN",
             ),
-          ),
-        ),
 
+          ),
+
+        ),
 
       ],
     );
