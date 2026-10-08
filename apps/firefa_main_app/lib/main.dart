@@ -1,6 +1,6 @@
-
 import 'package:flutter/material.dart';
 import 'core/theme/app_theme.dart';
+import 'features/auth/login_page.dart';
 
 void main() {
   runApp(const FirefaApp());
@@ -30,16 +30,23 @@ class FirefaHomePage extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
+            constraints: const BoxConstraints(
+              maxWidth: 420,
+            ),
+
             child: Column(
               mainAxisSize: MainAxisSize.min,
+
               children: [
+
                 const Icon(
                   Icons.restaurant_menu_rounded,
                   size: 72,
                   color: AppTheme.primary,
                 ),
+
                 const SizedBox(height: 24),
+
                 const Text(
                   'FIREFA',
                   style: TextStyle(
@@ -48,7 +55,9 @@ class FirefaHomePage extends StatelessWidget {
                     letterSpacing: 3,
                   ),
                 ),
+
                 const SizedBox(height: 8),
+
                 const Text(
                   'Restaurant Operating System',
                   textAlign: TextAlign.center,
@@ -57,15 +66,30 @@ class FirefaHomePage extends StatelessWidget {
                     color: AppTheme.textSecondary,
                   ),
                 ),
+
                 const SizedBox(height: 32),
+
                 SizedBox(
                   width: double.infinity,
+
                   child: FilledButton(
-                    onPressed: () {},
-                    child: const Text('Mulai Sekarang'),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const LoginPage(),
+                        ),
+                      );
+                    },
+
+                    child: const Text(
+                      'Mulai Sekarang',
+                    ),
                   ),
                 ),
+
                 const SizedBox(height: 20),
+
                 const Text(
                   'FIREFA-9580220',
                   style: TextStyle(
@@ -73,6 +97,7 @@ class FirefaHomePage extends StatelessWidget {
                     color: AppTheme.textSecondary,
                   ),
                 ),
+
               ],
             ),
           ),
