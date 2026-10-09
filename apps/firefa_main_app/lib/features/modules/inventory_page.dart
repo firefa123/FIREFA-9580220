@@ -224,7 +224,7 @@ class _InventoryPageState extends State<InventoryPage> {
     name.dispose();
     amount.dispose();
     note.dispose();
-    if (!mounted || result == null || !allowed || sourceOutlet != outlet.selectedOutletId) return;
+    if (!mounted || result == null || !allowed || sourceOutlet != outlet.selectedOutletId) { return; }
     final success = action == 'edit'
       ? store.update(outletId: sourceOutlet, id: item.id, name: result.name, unit: result.unit, minimumStock: result.amount)
       : store.adjust(outletId: sourceOutlet, id: item.id, type: result.type, amount: result.amount, note: result.note);
@@ -289,12 +289,12 @@ class _InventoryPageState extends State<InventoryPage> {
     quantity.dispose();
     note.dispose();
     if (!mounted || result == null || !allowed ||
-        sourceOutlet != outlet.selectedOutletId) return;
+        sourceOutlet != outlet.selectedOutletId) { return; }
     final ok = store.createOpname(outletId: sourceOutlet,
       itemId: item.id, physicalStock: result.physical, note: result.note);
-    if (!ok) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+    {if (!ok) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
       content: Text('Opname gagal: periksa jumlah atau selesaikan opname tertunda.'),
-    ));
+    ));}
   }
 
   Future<void> decideOpname(FirefaStockOpname record, bool approve) async {
@@ -313,12 +313,12 @@ class _InventoryPageState extends State<InventoryPage> {
       ),
     );
     if (!mounted || confirmed != true || !allowed ||
-        sourceOutlet != outlet.selectedOutletId) return;
+        sourceOutlet != outlet.selectedOutletId) { return; }
     final ok = store.resolveOpname(outletId: sourceOutlet,
       opnameId: record.id, approve: approve);
-    if (!ok) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+    {if (!ok) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
       content: Text('Keputusan gagal. Stok mungkin sudah berubah; buat opname baru.'),
-    ));
+    ));}
   }
 
   Widget _metric(String label, int count, Color color) {
@@ -354,7 +354,7 @@ class _InventoryPageState extends State<InventoryPage> {
           if (movementDate != null) {
             final date = DateTime.tryParse(movement.timestamp);
             if (date == null || date.year != movementDate!.year ||
-                date.month != movementDate!.month || date.day != movementDate!.day) return false;
+                date.month != movementDate!.month || date.day != movementDate!.day) { return false; }
           }
           return true;
         }).toList();
