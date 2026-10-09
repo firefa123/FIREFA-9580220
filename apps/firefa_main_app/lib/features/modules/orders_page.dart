@@ -27,6 +27,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
   String filter = 'All';
   String searchQuery = '';
+  final searchController = TextEditingController();
   String paymentFilter = 'all';
   DateTimeRange? dateRange;
   final Set<String> expandedOrders = <String>{};
@@ -136,6 +137,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
   @override
   void dispose() {
+    searchController.dispose();
     outletStore.removeListener(_refresh);
     orderStore.removeListener(_refresh);
     syncQueue.removeListener(_refresh);
@@ -374,6 +376,7 @@ class _OrdersPageState extends State<OrdersPage> {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             SizedBox(width: 260, child: TextField(
+              controller: searchController,
               decoration: const InputDecoration(
                 labelText: 'Cari ID, produk, tipe atau meja',
                 prefixIcon: Icon(Icons.search),
@@ -415,6 +418,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 filter = 'All';
                 paymentFilter = 'all';
                 searchQuery = '';
+                searchController.clear();
                 dateRange = null;
               }),
               icon: const Icon(Icons.filter_alt_off_outlined),
