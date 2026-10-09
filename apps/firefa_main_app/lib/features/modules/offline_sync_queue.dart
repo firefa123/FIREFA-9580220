@@ -150,6 +150,37 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     return repaired;
   }
 
+  /// Exported together with orders for one authoritative local snapshot.
+  Map<String, dynamic> exportSnapshot() {
+    _ensureInitialized();
+    return {
+      'version': 1,
+      'nextSequence': _nextSequence,
+      'entries': _entries.map((entry) => entry.toJson()).toList(),
+    };
+  }
+
+  /// Used only when a validated combined snapshot is restored.
+  void restoreCombinedSnapshot(Map<String, dynamic> data) {
+    _ensureInitialized();
+    final restored = (data['entries'] as List)
+        .map((value) => FirefaSyncEntry.fromJson(
+              Map<String, dynamic>.from(value as Map),
+            ))
+        .toList();
+    final sequence = data['nextSequence'] as int;
+    _entries
+      ..clear()
+      ..addAll(restored);
+    _nextSequence = sequence;
+    for (final entry in _entries) {
+      if (entry.status == FirefaSyncStatus.syncing) {
+        entry.status = FirefaSyncStatus.pending;
+      }
+    }
+    notifyListeners();
+  }
+
   void _scheduleSave() {
     final snapshot = jsonEncode({
       'version': 1,
