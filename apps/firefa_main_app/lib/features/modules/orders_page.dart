@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/auth/role_permissions.dart';
 import '../../core/outlet/active_outlet_store.dart';
@@ -25,6 +26,9 @@ class _OrdersPageState extends State<OrdersPage> {
   bool showSyncEvents = false;
 
   String filter = 'All';
+  String searchQuery = '';
+  String paymentFilter = 'all';
+  DateTimeRange? dateRange;
   final Set<String> expandedOrders = <String>{};
 
   String get outletId => outletStore.selectedOutletId;
@@ -36,18 +40,80 @@ class _OrdersPageState extends State<OrdersPage> {
   List<FirefaOrder> get orders => orderStore.ordersForOutlet(outletId);
 
   List<FirefaOrder> get visibleOrders {
-    if (filter == 'All') return orders;
-
-    if (filter == 'Unpaid') {
-      return orders.where((order) {
-        return order.paymentStatus == FirefaPaymentStatus.unpaid &&
-            order.status != FirefaOrderStatus.cancelled;
-      }).toList();
-    }
-
+    final query = searchQuery.trim().toLowerCase();
     return orders.where((order) {
-      return order.status.label == filter;
-    }).toList();
+      if (filter == 'Unpaid' &&
+          (order.paymentStatus != FirefaPaymentStatus.unpaid ||
+              order.status == FirefaOrderStatus.cancelled)) {
+        return false;
+      }
+      if (filter != 'All' && filter != 'Unpaid' &&
+          order.status.label != filter) {
+        return false;
+      }
+      if (paymentFilter == 'paid' &&
+          order.paymentStatus != FirefaPaymentStatus.paid) return false;
+      if (paymentFilter == 'unpaid' &&
+          order.paymentStatus != FirefaPaymentStatus.unpaid) return false;
+      if (dateRange != null) {
+        final day = DateUtils.dateOnly(order.createdAt);
+        if (day.isBefore(dateRange!.start) || day.isAfter(dateRange!.end)) {
+          return false;
+        }
+      }
+      if (query.isNotEmpty &&
+          !order.id.toLowerCase().contains(query) &&
+          !order.orderType.toLowerCase().contains(query) &&
+          !(order.tableId?.toLowerCase().contains(query) ?? false) &&
+          !order.items.any((item) =>
+              item.productName.toLowerCase().contains(query))) {
+        return false;
+      }
+      return true;
+    }).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  String _csvCell(String value) {
+    final escaped = value.replaceAll('"', '""');
+    final safe = escaped.isNotEmpty && '=+-@'.contains(escaped[0])
+        ? "'$escaped" : escaped;
+    return '"$safe"';
+  }
+
+  Future<void> _copyOrdersCsv() async {
+    final selectedOutlet = outletId;
+    if (!canManage || !outletStore.canAccessOutlet(selectedOutlet)) return;
+    final rows = visibleOrders;
+    if (rows.any((order) => order.outletId != selectedOutlet)) return;
+    final csv = <String>[
+      'Order ID,Outlet ID,Tanggal,Tipe,Meja,Status,Pembayaran,Item Qty,Subtotal,Diskon,Pajak,Service,Total,Produk',
+      for (final order in rows)
+        [
+          order.id, order.outletId, order.createdAt.toIso8601String(),
+          order.orderType, order.tableId ?? '', order.status.label,
+          order.paymentStatus.name, order.itemCount.toString(),
+          order.subtotal.toString(), order.discount.toString(),
+          order.tax.toString(), order.service.toString(),
+          order.total.toString(),
+          order.items.map((item) => '${item.productName} x${item.quantity}').join('; '),
+        ].map(_csvCell).join(','),
+    ].join('\r\n');
+    await Clipboard.setData(ClipboardData(text: csv));
+    if (!mounted || outletId != selectedOutlet ||
+        !canManage || !outletStore.canAccessOutlet(selectedOutlet)) return;
+    message('CSV ${rows.length} pesanan disalin ke clipboard.');
+  }
+
+  Future<void> _chooseDateRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      initialDateRange: dateRange,
+    );
+    if (!mounted || picked == null) return;
+    setState(() => dateRange = picked);
   }
 
   @override
@@ -276,6 +342,47 @@ class _OrdersPageState extends State<OrdersPage> {
               showCheckmark: false,
               selectedColor: const Color(0xFFE0F2F1),
               onSelected: (_) => setState(() => filter = filter == 'Unpaid' ? 'All' : 'Unpaid'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(spacing: 10, runSpacing: 10,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(width: 260, child: TextField(
+              decoration: const InputDecoration(
+                labelText: 'Cari ID, produk, tipe atau meja',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) => setState(() => searchQuery = value),
+            )),
+            DropdownButton<String>(
+              value: paymentFilter,
+              items: const [
+                DropdownMenuItem(value: 'all', child: Text('Semua pembayaran')),
+                DropdownMenuItem(value: 'paid', child: Text('Paid')),
+                DropdownMenuItem(value: 'unpaid', child: Text('Unpaid')),
+              ],
+              onChanged: (value) {
+                if (value != null) setState(() => paymentFilter = value);
+              },
+            ),
+            OutlinedButton.icon(
+              onPressed: _chooseDateRange,
+              icon: const Icon(Icons.date_range_outlined),
+              label: Text(dateRange == null ? 'Rentang tanggal'
+                  : '${dateRange!.start.day}/${dateRange!.start.month}/${dateRange!.start.year} - '
+                    '${dateRange!.end.day}/${dateRange!.end.month}/${dateRange!.end.year}'),
+            ),
+            if (dateRange != null)
+              TextButton(onPressed: () => setState(() => dateRange = null),
+                child: const Text('Hapus tanggal')),
+            OutlinedButton.icon(
+              onPressed: canManage && outletStore.canAccessOutlet(outletId)
+                  ? _copyOrdersCsv : null,
+              icon: const Icon(Icons.copy_all_outlined),
+              label: Text('Salin CSV (${visibleOrders.length})'),
             ),
           ],
         ),
