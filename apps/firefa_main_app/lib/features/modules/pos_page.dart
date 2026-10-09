@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/outlet/active_outlet_store.dart';
+import 'menu_store.dart';
 import 'order_models.dart';
 import 'order_store.dart';
 import 'pos_payment_dialog.dart';
@@ -27,12 +28,14 @@ class _PosPageState extends State<PosPage> {
   final Map<String, List<_CartItem>> carts = {};
   final Map<String, _OrderSettings> settings = {};
   final persistentStore = FirefaPersistentCartStore.instance;
+  final menuStore = FirefaMenuStore.instance;
+  late final Future<void> menuReady;
 
   void _restoreOutlet(String id) {
     if (carts.containsKey(id)) return;
     final saved = persistentStore.getCart(id);
     carts[id] = saved.items.map((item) {
-      final product = products.where((p) => p.id == item.productId).firstOrNull;
+      final product = _resolveSavedProduct(id, item);
       if (product == null) return null;
       return _CartItem(
         product: product,
@@ -59,6 +62,7 @@ class _PosPageState extends State<PosPage> {
       FirefaCartData(
         items: cart.map((item) => FirefaCartItemData(
           productId: item.product.id,
+          productName: item.product.name,
           size: item.size,
           extras: List<String>.from(item.extras),
           note: item.note,
@@ -201,6 +205,8 @@ class _PosPageState extends State<PosPage> {
   @override
   void initState() {
     super.initState();
+    menuReady = menuStore.initialize();
+    menuStore.addListener(_onOutletChanged);
     outletStore.addListener(_onOutletChanged);
   }
 
@@ -211,13 +217,46 @@ class _PosPageState extends State<PosPage> {
   @override
   void dispose() {
     outletStore.removeListener(_onOutletChanged);
+    menuStore.removeListener(_onOutletChanged);
     searchController.dispose();
     super.dispose();
   }
 
+  _Product _fromMenu(FirefaMenuItem item) => _Product(
+    item.id, item.name, item.category, item.price,
+    Icons.restaurant_menu, const Color(0xFFE0F2F1),
+  );
+
+  _Product? _resolveSavedProduct(String id, FirefaCartItemData saved) {
+    final demo = products.where((p) => p.id == saved.productId).firstOrNull;
+    if (demo != null) {
+      return _Product(demo.id, saved.productName ?? demo.name,
+          demo.category, demo.price, demo.icon, demo.color);
+    }
+    final matches = menuStore.forOutlet(id)
+        .where((item) => item.id == saved.productId);
+    final menu = matches.firstOrNull;
+    if (menu != null) {
+      final current = _fromMenu(menu);
+      return _Product(current.id, saved.productName ?? current.name,
+          current.category, current.price, current.icon, current.color);
+    }
+    if (saved.productName != null) {
+      return _Product(saved.productId, saved.productName!, 'Other',
+          saved.unitPrice, Icons.restaurant_menu, const Color(0xFFE0F2F1));
+    }
+    return null;
+  }
+
+  List<_Product> get catalogProducts {
+    final items = menuStore.forOutlet(outletId);
+    if (items.isEmpty) return products;
+    return items.where((item) => item.isActive).map(_fromMenu).toList();
+  }
+
   List<_Product> get visibleProducts {
     final query = searchController.text.toLowerCase().trim();
-    return products.where((product) {
+    return catalogProducts.where((product) {
       return (category == 'All' || category == product.category) &&
           product.name.toLowerCase().contains(query);
     }).toList();
@@ -273,6 +312,9 @@ class _PosPageState extends State<PosPage> {
 
   Future<void> configureProduct(_Product product, {_CartItem? editing}) async {
     final sourceOutlet = outletId;
+    if (editing == null && !catalogProducts.any((p) => p.id == product.id)) {
+      return;
+    }
     final isDrink =
         product.category == 'Coffee' || product.category == 'Non Coffee';
 
@@ -443,6 +485,12 @@ class _PosPageState extends State<PosPage> {
       return;
     }
 
+    if (editing == null && !catalogProducts.any((p) => p.id == product.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Menu tidak aktif atau tidak tersedia.'),
+      ));
+      return;
+    }
     addItem(result, editing: editing);
   }
 
@@ -739,6 +787,21 @@ class _PosPageState extends State<PosPage> {
   }
 
   Widget buildCatalog() {
+    return FutureBuilder<void>(
+      future: menuReady,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Text('Katalog menu lokal gagal dimuat. Data lama tidak diubah.');
+        }
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return _buildReadyCatalog();
+      },
+    );
+  }
+
+  Widget _buildReadyCatalog() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
