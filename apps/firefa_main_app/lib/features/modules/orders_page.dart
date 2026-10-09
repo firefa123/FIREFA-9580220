@@ -133,7 +133,9 @@ class _OrdersPageState extends State<OrdersPage> {
         return;
       }
       final current = orderStore.findOrder(selectedOutlet, order.id);
-      if (current == null) return;
+      if (current == null) {
+        return;
+      }
       final receipt = FirefaReceiptFormatter.format(
         order: current,
         outletName: outletName,
