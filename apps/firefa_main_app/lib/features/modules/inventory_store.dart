@@ -53,6 +53,34 @@ class FirefaStockMovement {
   factory FirefaStockMovement.fromJson(Map<String,dynamic> j) => FirefaStockMovement(id:j['id'] as String,outletId:j['outletId'] as String,itemId:j['itemId'] as String,itemName:j['itemName'] as String,type:j['type'] as String,before:j['before'] as int,after:j['after'] as int,note:j['note'] as String,timestamp:j['timestamp'] as String);
 }
 
+class FirefaStockOpname {
+  const FirefaStockOpname({
+    required this.id, required this.outletId, required this.itemId,
+    required this.itemName, required this.systemStock, required this.physicalStock,
+    required this.note, required this.createdAt, required this.status,
+    required this.resolvedAt,
+  });
+  final String id, outletId, itemId, itemName, note, createdAt, status;
+  final String? resolvedAt;
+  final int systemStock, physicalStock;
+  int get difference => physicalStock - systemStock;
+  Map<String, dynamic> toJson() => {
+    'id': id, 'outletId': outletId, 'itemId': itemId,
+    'itemName': itemName, 'systemStock': systemStock,
+    'physicalStock': physicalStock, 'note': note,
+    'createdAt': createdAt, 'status': status, 'resolvedAt': resolvedAt,
+  };
+  factory FirefaStockOpname.fromJson(Map<String, dynamic> json) =>
+    FirefaStockOpname(
+      id: json['id'] as String, outletId: json['outletId'] as String,
+      itemId: json['itemId'] as String, itemName: json['itemName'] as String,
+      systemStock: json['systemStock'] as int,
+      physicalStock: json['physicalStock'] as int,
+      note: json['note'] as String, createdAt: json['createdAt'] as String,
+      status: json['status'] as String, resolvedAt: json['resolvedAt'] as String?,
+    );
+}
+
 class FirefaInventoryStore extends ChangeNotifier {
   FirefaInventoryStore._();
   static final FirefaInventoryStore instance = FirefaInventoryStore._();
@@ -63,6 +91,8 @@ class FirefaInventoryStore extends ChangeNotifier {
   final List<FirefaInventoryItem> _items = [];
   final List<FirefaStockMovement> _movements = [];
   int _nextMovementId = 1;
+  final List<FirefaStockOpname> _opnames = [];
+  int _nextOpnameId = 1;
   Future<void> _pendingSave = Future<void>.value();
   Future<void>? _initializing;
   bool _initialized = false;
@@ -84,6 +114,8 @@ class FirefaInventoryStore extends ChangeNotifier {
         _nextId = decoded['nextId'] as int;
         _movements..clear()..addAll((decoded['movements'] as List<dynamic>? ?? []).map((entry) => FirefaStockMovement.fromJson(Map<String,dynamic>.from(entry as Map))));
         _nextMovementId = decoded['nextMovementId'] as int? ?? 1;
+        _opnames..clear()..addAll((decoded['opnames'] as List<dynamic>? ?? []).map((entry) => FirefaStockOpname.fromJson(Map<String, dynamic>.from(entry as Map))));
+        _nextOpnameId = decoded['nextOpnameId'] as int? ?? 1;
       }
       _initialized = true;
       notifyListeners();
@@ -169,6 +201,67 @@ class FirefaInventoryStore extends ChangeNotifier {
     return true;
   }
 
+  List<FirefaStockOpname> opnamesForOutlet(String outletId) {
+    if (!_initialized) throw StateError('Inventory belum diinisialisasi');
+    return List.unmodifiable(_opnames.where((record) => record.outletId == outletId).toList().reversed);
+  }
+
+  bool createOpname({
+    required String outletId, required String itemId,
+    required int physicalStock, required String note,
+  }) {
+    if (!_initialized || physicalStock < 0 || physicalStock > 999999999 ||
+        note.trim().length > 200) return false;
+    final index = _index(outletId, itemId);
+    if (index < 0 || _opnames.any((record) => record.outletId == outletId &&
+        record.itemId == itemId && record.status == 'pending')) return false;
+    final item = _items[index];
+    _opnames.add(FirefaStockOpname(
+      id: 'opname-${_nextOpnameId++}', outletId: outletId,
+      itemId: item.id, itemName: item.name, systemStock: item.stock,
+      physicalStock: physicalStock, note: note.trim(),
+      createdAt: DateTime.now().toIso8601String(),
+      status: 'pending', resolvedAt: null,
+    ));
+    notifyListeners();
+    _save();
+    return true;
+  }
+
+  bool resolveOpname({
+    required String outletId, required String opnameId,
+    required bool approve,
+  }) {
+    if (!_initialized) return false;
+    final recordIndex = _opnames.indexWhere((record) =>
+        record.id == opnameId && record.outletId == outletId &&
+        record.status == 'pending');
+    if (recordIndex < 0) return false;
+    final record = _opnames[recordIndex];
+    final itemIndex = _index(outletId, record.itemId);
+    if (approve && (itemIndex < 0 ||
+        _items[itemIndex].stock != record.systemStock)) return false;
+    if (approve && record.difference != 0) {
+      final success = adjust(
+        outletId: outletId, id: record.itemId, type: 'correction',
+        amount: record.physicalStock,
+        note: 'Stock opname ${record.id}: ${record.note}',
+      );
+      if (!success) return false;
+    }
+    _opnames[recordIndex] = FirefaStockOpname(
+      id: record.id, outletId: record.outletId, itemId: record.itemId,
+      itemName: record.itemName, systemStock: record.systemStock,
+      physicalStock: record.physicalStock, note: record.note,
+      createdAt: record.createdAt,
+      status: approve ? 'approved' : 'rejected',
+      resolvedAt: DateTime.now().toIso8601String(),
+    );
+    notifyListeners();
+    _save();
+    return true;
+  }
+
   bool remove(String outletId, String id) {
     if (!_initialized) return false;
     final index = _index(outletId, id);
@@ -186,6 +279,8 @@ class FirefaInventoryStore extends ChangeNotifier {
       'items': _items.map((item) => item.toJson()).toList(),
       'nextMovementId': _nextMovementId,
       'movements': _movements.map((m) => m.toJson()).toList(),
+      'nextOpnameId': _nextOpnameId,
+      'opnames': _opnames.map((record) => record.toJson()).toList(),
     });
     _pendingSave = _pendingSave.catchError((Object error) {
       debugPrint('Inventory save sebelumnya gagal: $error');
