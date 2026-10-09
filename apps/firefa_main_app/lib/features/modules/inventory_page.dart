@@ -233,6 +233,27 @@ class _InventoryPageState extends State<InventoryPage> {
     }
   }
 
+  String _csvCell(Object value) {
+    final raw = value.toString();
+    final safe = RegExp(r'^[=+@-]').hasMatch(raw) ? "'$raw" : raw;
+    return '"${safe.replaceAll('"', '""')}"';
+  }
+
+  Future<void> copyCsv(List<FirefaInventoryItem> items, String outletName) async {
+    final rows = <List<Object>>[
+      ['Outlet', 'Nama Barang', 'Satuan', 'Stok', 'Minimum', 'Status'],
+      for (final item in items)
+        [outletName, item.name, item.unit, item.stock, item.minimumStock,
+          item.isOutOfStock ? 'Habis' : item.isLowStock ? 'Rendah' : 'Aman'],
+    ];
+    final csv = rows.map((row) => row.map(_csvCell).join(',')).join('\\r\\n');
+    await Clipboard.setData(ClipboardData(text: csv));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('CSV disalin. Tempel ke file .csv untuk menyimpan laporan.'),
+    ));
+  }
+
   Widget _metric(String label, int count, Color color) {
     return Container(
       width: 145, padding: const EdgeInsets.all(14),
@@ -345,6 +366,12 @@ class _InventoryPageState extends State<InventoryPage> {
                     },
                   ),
                 ]),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.copy),
+                  label: const Text('Salin CSV (barang terfilter)'),
+                  onPressed: outlet.canAccessOutlet(outlet.selectedOutletId)
+                    ? () => copyCsv(filteredItems, outlet.selectedOutletName) : null,
+                ),
                 const SizedBox(height: 14),
                 if (items.isNotEmpty && filteredItems.isEmpty)
                   const Padding(padding: EdgeInsets.all(12), child: Text('Tidak ada barang sesuai filter.')),
