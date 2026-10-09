@@ -15,12 +15,15 @@ class FirefaPurchaseOrder {
     required this.note, required this.status, required this.createdAt,
     required this.receivedAt, this.receivedQuantity = 0,
     this.receipts = const [], this.cancelledAt,
+    this.followUpNote = '', this.followUpDate,
   });
   final String id, outletId, supplierId, supplierName, itemId, itemName;
   final String unit, note, status, createdAt;
   final int quantity, unitCost;
   final String? receivedAt;
   final String? cancelledAt;
+  final String followUpNote;
+  final String? followUpDate;
   final int receivedQuantity;
   final List<FirefaPurchaseReceipt> receipts;
   int get remainingQuantity => quantity - receivedQuantity;
@@ -32,6 +35,7 @@ class FirefaPurchaseOrder {
     'unit': unit, 'quantity': quantity, 'unitCost': unitCost,
     'note': note, 'status': status, 'createdAt': createdAt,
     'receivedAt': receivedAt, 'cancelledAt': cancelledAt,
+    'followUpNote': followUpNote, 'followUpDate': followUpDate,
     'receivedQuantity': receivedQuantity,
     'receipts': receipts.map((r) => r.toJson()).toList(),
   };
@@ -52,6 +56,8 @@ class FirefaPurchaseOrder {
         createdAt: json['createdAt'] as String,
         receivedAt: json['receivedAt'] as String?,
         cancelledAt: json['cancelledAt'] as String?,
+        followUpNote: json['followUpNote'] as String? ?? '',
+        followUpDate: json['followUpDate'] as String?,
         receivedQuantity: json['receivedQuantity'] as int? ??
             ((json['status'] == 'received') ? json['quantity'] as int : 0),
         receipts: (json['receipts'] as List<dynamic>? ?? [])
@@ -68,6 +74,18 @@ class FirefaPurchaseOrder {
         receivedAt: next == 'cancelled' ? receivedAt : timestamp,
         cancelledAt: next == 'cancelled' ? timestamp : cancelledAt,
         receivedQuantity: receivedQuantity, receipts: receipts,
+        followUpNote: followUpNote, followUpDate: followUpDate,
+      );
+
+  FirefaPurchaseOrder withFollowUp(String note, String? date) =>
+      FirefaPurchaseOrder(
+        id: id, outletId: outletId, supplierId: supplierId,
+        supplierName: supplierName, itemId: itemId, itemName: itemName,
+        unit: unit, quantity: quantity, unitCost: unitCost,
+        note: this.note, status: status, createdAt: createdAt,
+        receivedAt: receivedAt, cancelledAt: cancelledAt,
+        receivedQuantity: receivedQuantity, receipts: receipts,
+        followUpNote: note, followUpDate: date,
       );
 
   FirefaPurchaseOrder withReceipt(FirefaPurchaseReceipt receipt) {
@@ -80,6 +98,7 @@ class FirefaPurchaseOrder {
       createdAt: createdAt, receivedAt: receipt.receivedAt,
       cancelledAt: cancelledAt,
       receivedQuantity: total, receipts: [...receipts, receipt],
+      followUpNote: followUpNote, followUpDate: followUpDate,
     );
   }
 }
@@ -168,6 +187,101 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
       status: 'ordered', createdAt: DateTime.now().toIso8601String(),
       receivedAt: null,
     ));
+    notifyListeners();
+    _save();
+    return true;
+  }
+
+  bool setFollowUp({
+    required String outletId, required String orderId,
+    required String note, String? date,
+  }) {
+    if (!_initialized || note.trim().length > 200 ||
+        (date != null && (DateTime.tryParse(date) == null ||
+            !RegExp(r'^\\d{4}-\\d{2}-\\d{2}
+    if (!_initialized) {
+      return false;
+    }
+    final index = _orders.indexWhere((po) =>
+        po.outletId == outletId && po.id == orderId && (po.status == 'ordered' || po.status == 'partial'));
+    if (index < 0) {
+      return false;
+    }
+    _orders[index] = _orders[index].withStatus('cancelled', DateTime.now().toIso8601String());
+    notifyListeners();
+    _save();
+    return true;
+  }
+
+  bool receive({
+    required String outletId, required String orderId, int? quantity,
+  }) {
+    if (!_initialized) {
+      return false;
+    }
+    final index = _orders.indexWhere((po) =>
+        po.outletId == outletId && po.id == orderId &&
+        (po.status == 'ordered' || po.status == 'partial'));
+    if (index < 0) {
+      return false;
+    }
+    final order = _orders[index];
+    final amount = quantity ?? order.remainingQuantity;
+    if (amount <= 0 || amount > order.remainingQuantity) {
+      return false;
+    }
+    final inventory = FirefaInventoryStore.instance;
+    final items = inventory.forOutlet(outletId)
+        .where((item) => item.id == order.itemId);
+    if (items.isEmpty || items.first.unit != order.unit ||
+        items.first.stock + amount > 999999999) {
+      return false;
+    }
+    final receipt = FirefaPurchaseReceipt(
+      id: '${order.id}-receipt-${order.receipts.length + 1}',
+      quantity: amount, receivedAt: DateTime.now().toIso8601String(),
+    );
+    final success = inventory.adjust(
+      outletId: outletId, id: order.itemId, type: 'in',
+      amount: amount, note: 'Penerimaan PO ${order.id} / ${receipt.id}',
+    );
+    if (!success) {
+      return false;
+    }
+    _orders[index] = order.withReceipt(receipt);
+    notifyListeners();
+    _save();
+    return true;
+  }
+
+  void _save() {
+    final snapshot = jsonEncode({
+      'version': 1, 'nextId': _nextId,
+      'orders': _orders.map((po) => po.toJson()).toList(),
+    });
+    _pendingSave = _pendingSave.catchError((Object error) {
+      debugPrint('PO save sebelumnya gagal: $error');
+    }).then((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      if (!await prefs.setString(storageKey, snapshot)) {
+        throw StateError('Gagal menyimpan purchase order lokal');
+      }
+    });
+    unawaited(_pendingSave.catchError((Object error) {
+      debugPrint('PO save gagal: $error');
+    }));
+  }
+
+  Future<void> waitForPendingSave() => _pendingSave;
+}
+).hasMatch(date)))) {
+      return false;
+    }
+    final index = _orders.indexWhere((po) =>
+        po.outletId == outletId && po.id == orderId &&
+        (po.status == 'ordered' || po.status == 'partial'));
+    if (index < 0) return false;
+    _orders[index] = _orders[index].withFollowUp(note.trim(), date);
     notifyListeners();
     _save();
     return true;
