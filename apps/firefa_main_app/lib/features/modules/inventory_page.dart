@@ -150,6 +150,83 @@ class _InventoryPageState extends State<InventoryPage> {
     }
   }
 
+  Future<void> manage(FirefaInventoryItem item, String action) async {
+    if (!allowed || item.outletId != outlet.selectedOutletId) return;
+    final sourceOutlet = item.outletId;
+    if (action == 'delete') {
+      final yes = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+        title: const Text('Hapus Barang?'),
+        content: Text('Hapus ${item.name}? Riwayat stok tetap tersimpan.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Hapus')),
+        ],
+      ));
+      if (!mounted || yes != true || !allowed || sourceOutlet != outlet.selectedOutletId) return;
+      store.remove(sourceOutlet, item.id);
+      return;
+    }
+    final name = TextEditingController(text: item.name);
+    final amount = TextEditingController(text: action == 'edit' ? item.minimumStock.toString() : '');
+    final note = TextEditingController();
+    var unit = item.unit;
+    var type = 'in';
+    final result = await showDialog<({String name, String unit, String type, int amount, String note})>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, refresh) => AlertDialog(
+        title: Text(action == 'edit' ? 'Edit Barang' : 'Penyesuaian Stok'),
+        content: SizedBox(width: 390, child: SingleChildScrollView(child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (action == 'edit') ...[
+              TextField(controller: name, maxLength: 80, decoration: const InputDecoration(labelText: 'Nama barang')),
+              DropdownButtonFormField<String>(
+                initialValue: unit, isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Satuan'),
+                items: FirefaInventoryStore.units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                onChanged: (v) { if (v != null) refresh(() => unit = v); },
+              ),
+            ] else ...[
+              Text('Stok saat ini: ${item.stock} ${item.unit}'),
+              DropdownButtonFormField<String>(
+                initialValue: type, isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Jenis perubahan'),
+                items: const [
+                  DropdownMenuItem(value: 'in', child: Text('Tambah')),
+                  DropdownMenuItem(value: 'out', child: Text('Kurangi')),
+                  DropdownMenuItem(value: 'correction', child: Text('Koreksi stok akhir')),
+                ],
+                onChanged: (v) { if (v != null) refresh(() => type = v); },
+              ),
+              TextField(controller: note, maxLength: 200, decoration: const InputDecoration(labelText: 'Keterangan')),
+            ],
+            TextField(controller: amount, keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(9)],
+              decoration: InputDecoration(labelText: action == 'edit' ? 'Batas minimum' : type == 'correction' ? 'Stok akhir' : 'Jumlah'),
+            ),
+          ],
+        ))),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, (
+            name: name.text, unit: unit, type: type,
+            amount: int.tryParse(amount.text) ?? -1, note: note.text,
+          )), child: const Text('Simpan')),
+        ],
+      )),
+    );
+    name.dispose();
+    amount.dispose();
+    note.dispose();
+    if (!mounted || result == null || !allowed || sourceOutlet != outlet.selectedOutletId) return;
+    final success = action == 'edit'
+      ? store.update(outletId: sourceOutlet, id: item.id, name: result.name, unit: result.unit, minimumStock: result.amount)
+      : store.adjust(outletId: sourceOutlet, id: item.id, type: result.type, amount: result.amount, note: result.note);
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Perubahan ditolak. Periksa nilai, stok, dan nama unik.')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<void>(
@@ -164,6 +241,7 @@ class _InventoryPageState extends State<InventoryPage> {
         final items = store.forOutlet(outlet.selectedOutletId);
         final low = items.where((item) => item.isLowStock).length;
         final empty = items.where((item) => item.isOutOfStock).length;
+        final history = store.historyForOutlet(outlet.selectedOutletId);
         return LayoutBuilder(
           builder: (context, constraints) {
             final narrow = constraints.maxWidth < 520;
@@ -225,7 +303,7 @@ class _InventoryPageState extends State<InventoryPage> {
                       crossAxisCount: constraints.maxWidth >= 950 ? 4
                           : constraints.maxWidth >= 650 ? 3
                           : narrow ? 1 : 2,
-                      mainAxisExtent: 165,
+                      mainAxisExtent: 215,
                       crossAxisSpacing: 12,
                       mainAxisSpacing: 12,
                     ),
@@ -260,11 +338,31 @@ class _InventoryPageState extends State<InventoryPage> {
                             Text(status, style: TextStyle(
                               color: statusColor, fontWeight: FontWeight.w700,
                             )),
+                            if (allowed)
+                              Align(alignment: Alignment.centerRight, child: PopupMenuButton<String>(
+                                tooltip: 'Kelola ${item.name}',
+                                onSelected: (action) => manage(item, action),
+                                itemBuilder: (_) => const [
+                                  PopupMenuItem(value: 'edit', child: Text('Edit Barang')),
+                                  PopupMenuItem(value: 'adjust', child: Text('Penyesuaian Stok')),
+                                  PopupMenuItem(value: 'delete', child: Text('Hapus Barang')),
+                                ],
+                              )),
                           ],
                         ),
                       );
                     },
                   ),
+                const SizedBox(height: 24),
+                const Text('Riwayat Perubahan Stok', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                if (history.isEmpty) const Text('Belum ada pergerakan stok.', style: TextStyle(color: muted)),
+                for (final movement in history)
+                  Card(child: ListTile(
+                    title: Text('${movement.itemName} • ${movement.type == 'in' ? 'Tambah' : movement.type == 'out' ? 'Kurangi' : 'Koreksi'}'),
+                    subtitle: Text('${movement.timestamp} • ${movement.before} → ${movement.after} • ${movement.note.isEmpty ? 'Tanpa keterangan' : movement.note}'),
+                    trailing: Text('${movement.change > 0 ? '+' : ''}${movement.change}'),
+                  )),
               ],
             );
           },
