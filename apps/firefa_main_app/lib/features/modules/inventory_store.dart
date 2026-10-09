@@ -144,7 +144,9 @@ class FirefaInventoryStore extends ChangeNotifier {
     final normalized = name.trim();
     if (index < 0 || normalized.isEmpty || normalized.length > 80 || !units.contains(unit) ||
         minimumStock < 0 || minimumStock > 999999999 ||
-        _items.any((item) => item.outletId == outletId && item.id != id && item.name.toLowerCase() == normalized.toLowerCase())) return false;
+        _items.any((item) => item.outletId == outletId && item.id != id && item.name.toLowerCase() == normalized.toLowerCase())) {
+      return false;
+    }
     final old = _items[index];
     _items[index] = FirefaInventoryItem(id: old.id, outletId: old.outletId, name: normalized, unit: unit, stock: old.stock, minimumStock: minimumStock);
     notifyListeners();
