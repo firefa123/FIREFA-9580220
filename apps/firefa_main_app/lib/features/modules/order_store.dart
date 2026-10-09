@@ -52,6 +52,10 @@ class FirefaOrderStore extends ChangeNotifier {
       }
     }
 
+    // Repair missing outbox events after a prior interrupted write.
+    // Legacy local orders are also registered for future synchronization.
+    FirefaOfflineSyncQueue.instance.reconcileOrders(_orders);
+
     _initialized = true;
     notifyListeners();
   }
