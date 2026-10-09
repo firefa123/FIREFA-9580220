@@ -11,6 +11,7 @@ import '../modules/tables_page.dart';
 import '../modules/menu_page.dart';
 import '../modules/inventory_page.dart';
 import '../modules/supplier_page.dart';
+import '../modules/purchase_order_page.dart';
 import '../modules/reports_page.dart';
 import '../modules/settings_page.dart';
 import 'widgets/dashboard_sidebar.dart';
@@ -49,6 +50,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'Reports',
     'Settings',
     'Suppliers',
+    'Purchasing',
   ];
 
   static const pageDescriptions = [
@@ -61,6 +63,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'Analisis penjualan dan performa bisnis.',
     'Kelola preferensi dan konfigurasi bisnis.',
     'Kelola pemasok dan informasi kontak per outlet.',
+    'Buat PO dan terima barang ke stok inventory.',
   ];
 
   static const pagePermissions = [
@@ -72,6 +75,7 @@ class _DashboardPageState extends State<DashboardPage> {
     FirefaPermission.inventoryManage,
     FirefaPermission.reportsView,
     FirefaPermission.settingsManage,
+    FirefaPermission.inventoryManage,
     FirefaPermission.inventoryManage,
   ];
 
@@ -599,6 +603,8 @@ class _DashboardPageState extends State<DashboardPage> {
         return const SettingsPage();
       case 8:
         return const SupplierPage();
+      case 9:
+        return const PurchaseOrderPage();
       default:
         return const SizedBox.shrink();
     }
