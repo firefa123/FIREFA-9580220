@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/auth/role_permissions.dart';
+import '../../../core/navigation/app_routes.dart';
 
 class DashboardSidebar extends StatelessWidget {
   final int selectedIndex;
@@ -18,25 +19,11 @@ class DashboardSidebar extends StatelessWidget {
     this.role = FirefaRole.owner,
   });
 
-  static const List<(String, IconData, FirefaPermission)> menus = [
-    ('Dashboard', Icons.dashboard_outlined, FirefaPermission.dashboardView),
-    ('POS', Icons.point_of_sale_outlined, FirefaPermission.posAccess),
-    ('Orders', Icons.receipt_long_outlined, FirefaPermission.ordersView),
-    ('Tables', Icons.table_bar_outlined, FirefaPermission.tablesManage),
-    ('Menu', Icons.restaurant_menu_outlined, FirefaPermission.menuManage),
-    ('Inventory', Icons.inventory_2_outlined, FirefaPermission.inventoryManage),
-    ('Reports', Icons.analytics_outlined, FirefaPermission.reportsView),
-    ('Settings', Icons.settings_outlined, FirefaPermission.settingsManage),
-  ];
-
   @override
   Widget build(BuildContext context) {
     final sidebarWidth = collapsed ? 72.0 : 230.0;
 
-    final visibleMenus = [
-      for (int i = 0; i < menus.length; i++)
-        if (FirefaAccess.can(role, menus[i].$3)) i,
-    ];
+    final visibleModules = FirefaNavigation.accessibleModules(role);
 
     return SizedBox(
       width: sidebarWidth,
@@ -76,16 +63,22 @@ class DashboardSidebar extends StatelessWidget {
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
-                itemCount: visibleMenus.length,
+                itemCount: visibleModules.length,
                 itemBuilder: (context, index) {
-                  final originalIndex = visibleMenus[index];
-                  final menu = menus[originalIndex];
+                  final module = visibleModules[index];
+
+                  // Gunakan indeks asli agar DashboardPage
+                  // tetap membuka modul yang benar.
+                  final originalIndex = FirefaNavigation.modules.indexOf(
+                    module,
+                  );
+
                   final isActive = selectedIndex == originalIndex;
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 6),
                     child: Tooltip(
-                      message: collapsed ? menu.$1 : '',
+                      message: collapsed ? module.title : '',
                       child: Material(
                         color: isActive
                             ? const Color(0xFFE0F2F1)
@@ -99,7 +92,7 @@ class DashboardSidebar extends StatelessWidget {
                             child: collapsed
                                 ? Center(
                                     child: Icon(
-                                      menu.$2,
+                                      module.icon,
                                       size: 23,
                                       color: isActive
                                           ? Colors.teal.shade700
@@ -110,7 +103,7 @@ class DashboardSidebar extends StatelessWidget {
                                     children: [
                                       const SizedBox(width: 12),
                                       Icon(
-                                        menu.$2,
+                                        module.icon,
                                         size: 23,
                                         color: isActive
                                             ? Colors.teal.shade700
@@ -119,7 +112,7 @@ class DashboardSidebar extends StatelessWidget {
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: Text(
-                                          menu.$1,
+                                          module.title,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(

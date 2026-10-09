@@ -1,6 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../core/auth/role_permissions.dart';
+import '../../core/outlet/active_outlet_store.dart';
+import '../modules/pos_page.dart';
+import '../modules/orders_page.dart';
+import '../modules/tables_page.dart';
+import '../modules/menu_page.dart';
+import '../modules/inventory_page.dart';
+import '../modules/reports_page.dart';
+import '../modules/settings_page.dart';
 import 'widgets/dashboard_sidebar.dart';
 import 'widgets/stat_card.dart';
 import 'widgets/revenue_card.dart';
@@ -17,17 +25,16 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
+  static const ink = Color(0xFF172B4D);
+  static const muted = Color(0xFF64748B);
+  static const primary = Color(0xFF008F83);
+
+  final outletStore = FirefaActiveOutletStore.instance;
+
   late int selectedIndex;
   bool sidebarCollapsed = true;
-  String selectedOutlet = 'Semua Outlet';
 
-  final List<String> outlets = const [
-    'Semua Outlet',
-    'Outlet Utama',
-    'Outlet 2',
-  ];
-
-  static const List<String> pageTitles = [
+  static const pageTitles = [
     'Dashboard',
     'Point of Sale',
     'Orders',
@@ -38,7 +45,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'Settings',
   ];
 
-  static const List<String> pageDescriptions = [
+  static const pageDescriptions = [
     'Pantau performa operasional bisnis Anda.',
     'Kelola transaksi dan pembayaran pelanggan.',
     'Pantau dan kelola seluruh pesanan.',
@@ -49,18 +56,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'Kelola preferensi dan konfigurasi bisnis.',
   ];
 
-  static const List<IconData> pageIcons = [
-    Icons.dashboard_outlined,
-    Icons.point_of_sale_outlined,
-    Icons.receipt_long_outlined,
-    Icons.table_bar_outlined,
-    Icons.restaurant_menu_outlined,
-    Icons.inventory_2_outlined,
-    Icons.analytics_outlined,
-    Icons.settings_outlined,
-  ];
-
-  static const List<FirefaPermission> pagePermissions = [
+  static const pagePermissions = [
     FirefaPermission.dashboardView,
     FirefaPermission.posAccess,
     FirefaPermission.ordersView,
@@ -75,15 +71,40 @@ class _DashboardPageState extends State<DashboardPage> {
   void initState() {
     super.initState();
 
+    outletStore.initializeForRole(widget.role);
+
     selectedIndex = pagePermissions.indexWhere(
       (permission) => FirefaAccess.can(widget.role, permission),
     );
+
+    outletStore.addListener(_onOutletChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant DashboardPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.role != widget.role) {
+      outletStore.initializeForRole(widget.role);
+
+      selectedIndex = pagePermissions.indexWhere(
+        (permission) => FirefaAccess.can(widget.role, permission),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    outletStore.removeListener(_onOutletChanged);
+    super.dispose();
+  }
+
+  void _onOutletChanged() {
+    if (mounted) setState(() {});
   }
 
   void _selectPage(int index) {
-    if (index < 0 || index >= pagePermissions.length) {
-      return;
-    }
+    if (index < 0 || index >= pagePermissions.length) return;
 
     if (!FirefaAccess.can(widget.role, pagePermissions[index])) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -94,9 +115,7 @@ class _DashboardPageState extends State<DashboardPage> {
       return;
     }
 
-    setState(() {
-      selectedIndex = index;
-    });
+    setState(() => selectedIndex = index);
   }
 
   @override
@@ -110,9 +129,7 @@ class _DashboardPageState extends State<DashboardPage> {
             collapsed: sidebarCollapsed,
             role: widget.role,
             onToggle: () {
-              setState(() {
-                sidebarCollapsed = !sidebarCollapsed;
-              });
+              setState(() => sidebarCollapsed = !sidebarCollapsed);
             },
             onSelected: _selectPage,
           ),
@@ -164,13 +181,13 @@ class _DashboardPageState extends State<DashboardPage> {
               style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF172B4D),
+                color: ink,
               ),
             ),
             const SizedBox(height: 5),
-            Text(
+            const Text(
               'Kelola bisnis F&B Anda bersama FIREFA',
-              style: TextStyle(fontSize: 13, color: Colors.blueGrey.shade500),
+              style: TextStyle(fontSize: 13, color: muted),
             ),
           ],
         );
@@ -184,7 +201,7 @@ class _DashboardPageState extends State<DashboardPage> {
               child: const CircleAvatar(
                 radius: 20,
                 backgroundColor: Color(0xFFE0F2F1),
-                child: Icon(Icons.person_outline, color: Color(0xFF00897B)),
+                child: Icon(Icons.person_outline, color: primary),
               ),
             ),
           ],
@@ -193,11 +210,7 @@ class _DashboardPageState extends State<DashboardPage> {
         if (compact) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              greeting,
-              const SizedBox(height: 18),
-              SizedBox(width: double.infinity, child: actions),
-            ],
+            children: [greeting, const SizedBox(height: 18), actions],
           );
         }
 
@@ -213,6 +226,8 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildOutletSelector() {
+    final available = outletStore.accessibleOutlets;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
@@ -222,14 +237,14 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: selectedOutlet,
+          value: outletStore.selectedOutletId,
           isExpanded: true,
           icon: const Icon(Icons.keyboard_arrow_down, size: 20),
-          items: outlets.map((outlet) {
+          items: available.map((outlet) {
             return DropdownMenuItem<String>(
-              value: outlet,
+              value: outlet.id,
               child: Text(
-                outlet,
+                outlet.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 13),
@@ -237,10 +252,14 @@ class _DashboardPageState extends State<DashboardPage> {
             );
           }).toList(),
           onChanged: (value) {
-            if (value != null) {
-              setState(() {
-                selectedOutlet = value;
-              });
+            if (value == null) return;
+
+            final success = outletStore.selectOutlet(value);
+
+            if (!success) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Akses outlet tidak diizinkan.')),
+              );
             }
           },
         ),
@@ -257,14 +276,31 @@ class _DashboardPageState extends State<DashboardPage> {
           style: const TextStyle(
             fontSize: 25,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF172B4D),
+            color: ink,
           ),
         ),
         const SizedBox(height: 6),
         Text(
           pageDescriptions[selectedIndex],
-          style: const TextStyle(color: Color(0xFF64748B), fontSize: 14),
+          style: const TextStyle(color: muted, fontSize: 14),
         ),
+        if (selectedIndex == 1 || selectedIndex == 2) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(Icons.storefront_outlined, size: 16, color: primary),
+              const SizedBox(width: 6),
+              Text(
+                'Active Outlet: ${outletStore.selectedOutletName}',
+                style: const TextStyle(
+                  color: primary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -306,7 +342,7 @@ class _DashboardPageState extends State<DashboardPage> {
               height: 180,
               child: const StatCard(
                 title: "Today's Sales",
-                value: "Rp 8.500.000",
+                value: 'Rp 8.500.000',
                 icon: Icons.payments_outlined,
               ),
             ),
@@ -369,74 +405,23 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildModuleContent() {
-    return Container(
-      width: double.infinity,
-      constraints: const BoxConstraints(minHeight: 400),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE8EDF2)),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(height: 45),
-          Container(
-            width: 86,
-            height: 86,
-            decoration: BoxDecoration(
-              color: const Color(0xFFE0F2F1),
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Icon(
-              pageIcons[selectedIndex],
-              size: 42,
-              color: const Color(0xFF009688),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            pageTitles[selectedIndex],
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF172B4D),
-            ),
-          ),
-          const SizedBox(height: 10),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Text(
-              pageDescriptions[selectedIndex],
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF64748B),
-                height: 1.6,
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Text(
-              'Module UI • Coming Soon',
-              style: TextStyle(
-                color: Color(0xFF64748B),
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(height: 45),
-        ],
-      ),
-    );
+    switch (selectedIndex) {
+      case 1:
+        return const PosPage();
+      case 2:
+        return const OrdersPage();
+      case 3:
+        return const TablesPage();
+      case 4:
+        return const MenuPage();
+      case 5:
+        return const InventoryPage();
+      case 6:
+        return const ReportsPage();
+      case 7:
+        return const SettingsPage();
+      default:
+        return const SizedBox.shrink();
+    }
   }
 }
