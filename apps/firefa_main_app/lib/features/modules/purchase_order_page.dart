@@ -248,6 +248,44 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
                 Text('Nilai sisa: Rp $remainingValue'),
                 if (po.note.isNotEmpty) Text('Catatan: ${po.note}'),
                 const SizedBox(height: 12),
+                const Text('Timeline PO',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                ListTile(
+                  dense: true, contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.add_circle_outline),
+                  title: const Text('PO dibuat'),
+                  subtitle: Text(po.createdAt),
+                ),
+                for (final receipt in po.receipts)
+                  ListTile(
+                    dense: true, contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.inventory_2_outlined),
+                    title: Text('Barang diterima: +${receipt.quantity} ${po.unit}'),
+                    subtitle: Text('${receipt.receivedAt} • ${receipt.id}'),
+                  ),
+                if (po.status == 'received' && po.receipts.isEmpty)
+                  ListTile(
+                    dense: true, contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.check_circle_outline),
+                    title: const Text('Diterima penuh (data lama)'),
+                    subtitle: Text(po.receivedAt ?? 'Waktu tidak tersedia'),
+                  ),
+                if (po.status == 'cancelled')
+                  ListTile(
+                    dense: true, contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.cancel_outlined),
+                    title: const Text('Sisa PO dibatalkan'),
+                    subtitle: Text(po.cancelledAt ??
+                        'Waktu pembatalan tidak tercatat (data lama)'),
+                  ),
+                if (po.status == 'ordered' || po.status == 'partial')
+                  ListTile(
+                    dense: true, contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.pending_outlined),
+                    title: Text('Menunggu ${po.remainingQuantity} ${po.unit}'),
+                    subtitle: const Text('Sisa pesanan masih aktif'),
+                  ),
+                const Divider(),
                 const Text('Riwayat penerimaan',
                     style: TextStyle(fontWeight: FontWeight.bold)),
                 if (po.receipts.isEmpty)
