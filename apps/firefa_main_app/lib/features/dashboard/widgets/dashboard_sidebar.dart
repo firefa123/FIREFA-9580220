@@ -142,20 +142,20 @@ class DashboardSidebar extends StatelessWidget {
               child: collapsed
                   ? const Center(
                       child: Tooltip(
-                        message: 'Online (Demo)',
+                        message: 'Local Only — Cloud belum terhubung',
                         child: Icon(
-                          Icons.cloud_done_outlined,
-                          color: Colors.teal,
+                          Icons.cloud_off_outlined,
+                          color: Colors.blueGrey,
                         ),
                       ),
                     )
                   : const Row(
                       children: [
-                        Icon(Icons.cloud_done_outlined, color: Colors.teal),
+                        Icon(Icons.cloud_off_outlined, color: Colors.blueGrey),
                         SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'Online (Demo)',
+                            'Local Only — Cloud belum terhubung',
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
