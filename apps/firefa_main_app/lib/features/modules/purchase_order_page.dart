@@ -135,29 +135,43 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
       return;
     }
     final sourceOutlet = po.outletId;
-    final confirmed = await showDialog<bool>(context: context,
+    final controller = TextEditingController(
+      text: po.remainingQuantity.toString(),
+    );
+    final result = await showDialog<int>(
+      context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(receive ? 'Terima barang?' : 'Batalkan PO?'),
-        content: Text(receive
-          ? 'Terima ${po.quantity} ${po.unit} ${po.itemName} dari ${po.supplierName}? Stok inventory akan bertambah.'
-          : 'Batalkan ${po.id}? Stok tidak berubah.'),
+        title: Text(receive ? 'Terima barang' : 'Batalkan PO?'),
+        content: receive
+            ? Column(mainAxisSize: MainAxisSize.min, children: [
+                Text('Sisa pesanan: ${po.remainingQuantity} ${po.unit} ${po.itemName}'),
+                TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Jumlah diterima'),
+                ),
+              ])
+            : Text('Batalkan sisa pesanan ${po.id}? Stok yang sudah diterima tidak berubah.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false),
+          TextButton(onPressed: () => Navigator.pop(ctx),
             child: const Text('Kembali')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true),
-            child: Text(receive ? 'Terima Barang' : 'Batalkan PO')),
+          FilledButton(onPressed: () => Navigator.pop(
+            ctx, receive ? (int.tryParse(controller.text) ?? -1) : 0,
+          ), child: Text(receive ? 'Terima Barang' : 'Batalkan Sisa')),
         ],
       ),
     );
-    if (!mounted || confirmed != true || !allowed ||
+    controller.dispose();
+    if (!mounted || result == null || !allowed ||
         sourceOutlet != outlet.selectedOutletId) {
       return;
     }
     final ok = receive
-      ? orders.receive(outletId: sourceOutlet, orderId: po.id)
-      : orders.cancel(outletId: sourceOutlet, orderId: po.id);
+        ? orders.receive(
+            outletId: sourceOutlet, orderId: po.id, quantity: result)
+        : orders.cancel(outletId: sourceOutlet, orderId: po.id);
     if (!ok) {
-      _message('Operasi gagal. Periksa status PO, stok, dan satuan barang.');
+      _message('Operasi gagal. Periksa sisa pesanan, stok, dan satuan barang.');
     }
   }
 
@@ -198,6 +212,7 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
           DropdownButton<String>(value: filter, items: const [
             DropdownMenuItem(value: 'all', child: Text('Semua status')),
             DropdownMenuItem(value: 'ordered', child: Text('Dipesan')),
+            DropdownMenuItem(value: 'partial', child: Text('Diterima sebagian')),
             DropdownMenuItem(value: 'received', child: Text('Diterima')),
             DropdownMenuItem(value: 'cancelled', child: Text('Dibatalkan')),
           ], onChanged: (value) {
@@ -216,11 +231,14 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
                   Text('${po.itemName} • ${po.quantity} ${po.unit}'),
                   Text('Harga satuan Rp ${po.unitCost} • Total Rp ${po.totalCost}'),
                   Text('Status: ${po.status}'),
+                  Text('Diterima: ${po.receivedQuantity} / ${po.quantity} ${po.unit} • Sisa: ${po.remainingQuantity}'),
+                  for (final receipt in po.receipts)
+                    Text('${receipt.id}: +${receipt.quantity} ${po.unit} • ${receipt.receivedAt}'),
                   Text('Dibuat: ${po.createdAt}'),
                   if (po.receivedAt != null)
                     Text('Diterima: ${po.receivedAt}'),
                   if (po.note.isNotEmpty) Text('Catatan: ${po.note}'),
-                  if (allowed && po.status == 'ordered')
+                  if (allowed && (po.status == 'ordered' || po.status == 'partial'))
                     Wrap(spacing: 8, children: [
                       FilledButton(onPressed: () => decide(po, true),
                         child: const Text('Terima Barang')),
@@ -230,7 +248,7 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
                 ]),
             )),
           const SizedBox(height: 12),
-          const Text('Local Only • Penerimaan penuh satu kali per PO • Tidak ada sinkronisasi cloud',
+          const Text('Local Only • Mendukung penerimaan parsial • Tidak ada sinkronisasi cloud',
             style: TextStyle(color: Colors.blueGrey, fontSize: 12)),
         ]),
       );
