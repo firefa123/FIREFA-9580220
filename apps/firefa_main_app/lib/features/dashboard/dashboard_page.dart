@@ -4,6 +4,8 @@ import '../../core/auth/role_permissions.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/outlet/active_outlet_store.dart';
 import '../modules/pos_page.dart';
+import '../modules/order_models.dart';
+import '../modules/order_store.dart';
 import '../modules/orders_page.dart';
 import '../modules/tables_page.dart';
 import '../modules/menu_page.dart';
@@ -31,6 +33,7 @@ class _DashboardPageState extends State<DashboardPage> {
   static const primary = Color(0xFF008F83);
 
   final outletStore = FirefaActiveOutletStore.instance;
+  final orderStore = FirefaOrderStore.instance;
 
   late int selectedIndex;
   bool sidebarCollapsed = true;
@@ -79,6 +82,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
 
     outletStore.addListener(_onOutletChanged);
+    orderStore.addListener(_onOutletChanged);
   }
 
   @override
@@ -97,6 +101,7 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void dispose() {
     outletStore.removeListener(_onOutletChanged);
+    orderStore.removeListener(_onOutletChanged);
     super.dispose();
   }
 
@@ -447,99 +452,125 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  List<FirefaOrder> get _outletOrders =>
+      orderStore.ordersForOutlet(outletStore.selectedOutletId);
+
+  String _rupiah(int value) =>
+      'Rp ${value.toString().replaceAllMapped(RegExp(r'\\B(?=(\\d{3})+(?!\\d))'), (_) => '.')}';
+
   Widget _buildDashboardContent() {
+    final orders = _outletOrders;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildStats(),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              const Icon(Icons.storefront_outlined, color: primary, size: 18),
+              Text(
+                'Ringkasan lokal • ${outletStore.selectedOutletName}',
+                style: const TextStyle(
+                    color: muted, fontWeight: FontWeight.w600, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        _buildStats(orders),
         const SizedBox(height: 24),
         const RevenueCard(),
         const SizedBox(height: 24),
-        _buildOperationalOverview(),
+        _buildOperationalOverview(orders),
       ],
     );
   }
 
-  Widget _buildStats() {
+  Widget _buildStats(List<FirefaOrder> orders) {
+    final now = DateTime.now();
+    final today = orders.where((order) {
+      final created = order.createdAt.toLocal();
+      return created.year == now.year &&
+          created.month == now.month &&
+          created.day == now.day &&
+          order.status != FirefaOrderStatus.cancelled;
+    }).toList();
+    // Paid order totals are local records, not a settled payment report.
+    final paidToday = today.where(
+      (order) => order.paymentStatus == FirefaPaymentStatus.paid,
+    );
+    final paidTotal = paidToday.fold<int>(0, (sum, order) => sum + order.total);
+    final active = orders.where((order) =>
+        order.status != FirefaOrderStatus.completed &&
+        order.status != FirefaOrderStatus.cancelled).length;
+    final unpaid = orders.where((order) =>
+        order.paymentStatus == FirefaPaymentStatus.unpaid &&
+        order.status != FirefaOrderStatus.cancelled).length;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-
-        int columns = 1;
-
-        if (width >= 1050) {
-          columns = 4;
-        } else if (width >= 580) {
-          columns = 2;
-        }
-
+        final columns = width >= 1050 ? 4 : (width >= 580 ? 2 : 1);
         final cardWidth = (width - (columns - 1) * 16) / columns;
-
+        final cards = [
+          StatCard(
+            title: 'Paid Orders Today • Lokal',
+            value: _rupiah(paidTotal),
+            icon: Icons.payments_outlined,
+          ),
+          StatCard(
+            title: 'Orders Today',
+            value: '${today.length}',
+            icon: Icons.shopping_bag_outlined,
+          ),
+          StatCard(
+            title: 'Active Orders',
+            value: '$active',
+            icon: Icons.pending_actions_outlined,
+          ),
+          StatCard(
+            title: 'Unpaid Orders',
+            value: '$unpaid',
+            icon: Icons.receipt_long_outlined,
+          ),
+        ];
         return Wrap(
           spacing: 16,
           runSpacing: 16,
           children: [
-            SizedBox(
-              width: cardWidth,
-              height: 180,
-              child: const StatCard(
-                title: "Today's Sales",
-                value: 'Rp 8.500.000',
-                icon: Icons.payments_outlined,
+            for (final card in cards)
+              SizedBox(
+                width: cardWidth,
+                height: 180,
+                child: card,
               ),
-            ),
-            SizedBox(
-              width: cardWidth,
-              height: 180,
-              child: const StatCard(
-                title: 'Orders',
-                value: '245',
-                icon: Icons.shopping_bag_outlined,
-              ),
-            ),
-            SizedBox(
-              width: cardWidth,
-              height: 180,
-              child: const StatCard(
-                title: 'Active Tables',
-                value: '18',
-                icon: Icons.table_bar_outlined,
-              ),
-            ),
-            SizedBox(
-              width: cardWidth,
-              height: 180,
-              child: const StatCard(
-                title: 'Low Stock',
-                value: '5',
-                icon: Icons.inventory_2_outlined,
-              ),
-            ),
           ],
         );
       },
     );
   }
 
-  Widget _buildOperationalOverview() {
+  Widget _buildOperationalOverview(List<FirefaOrder> orders) {
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth < 900) {
-          return const Column(
+          return Column(
             children: [
-              RecentOrdersCard(),
-              SizedBox(height: 20),
-              TopSellingCard(),
+              RecentOrdersCard(orders: orders),
+              const SizedBox(height: 20),
+              const TopSellingCard(),
             ],
           );
         }
 
-        return const Row(
+        return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(flex: 6, child: RecentOrdersCard()),
-            SizedBox(width: 20),
-            Expanded(flex: 4, child: TopSellingCard()),
+            Expanded(flex: 6, child: RecentOrdersCard(orders: orders)),
+            const SizedBox(width: 20),
+            const Expanded(flex: 4, child: TopSellingCard()),
           ],
         );
       },
