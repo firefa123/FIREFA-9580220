@@ -571,22 +571,68 @@ class _PosPageState extends State<PosPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Checkout'),
-        content: Text(
-          'Total: ${rupiah(grandTotal)}\n'
-          'Pilih bayar sekarang atau simpan pesanan untuk dibayar nanti.',
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 390),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$outletName • ${config.orderType} • $itemCount item',
+                style: const TextStyle(fontSize: 12, color: muted),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE0F2F1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Total Tagihan',
+                        style: TextStyle(fontSize: 12, color: muted)),
+                    const SizedBox(height: 5),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        rupiah(grandTotal),
+                        style: const TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          color: primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Bayar Nanti menyimpan pesanan sebagai Unpaid. '
+                'Bayar Sekarang membuka simulasi pembayaran.',
+                style: TextStyle(fontSize: 13, color: muted),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Batal'),
           ),
-          OutlinedButton(
+          OutlinedButton.icon(
             onPressed: () => Navigator.pop(dialogContext, 'later'),
-            child: const Text('Bayar Nanti'),
+            icon: const Icon(Icons.schedule_outlined, size: 18),
+            label: const Text('Bayar Nanti'),
           ),
-          FilledButton(
+          FilledButton.icon(
             onPressed: () => Navigator.pop(dialogContext, 'now'),
-            child: const Text('Bayar Sekarang'),
+            icon: const Icon(Icons.payments_outlined, size: 18),
+            label: const Text('Bayar Sekarang'),
           ),
         ],
       ),
