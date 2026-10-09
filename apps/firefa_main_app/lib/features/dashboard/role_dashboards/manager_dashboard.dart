@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/sync_status_card.dart';
+
 class ManagerDashboard extends StatelessWidget {
   const ManagerDashboard({super.key});
 
@@ -10,6 +12,8 @@ class ManagerDashboard extends StatelessWidget {
       children: [
         Text('Manager Dashboard',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        SizedBox(height: 16),
+        SyncStatusCard(),
         SizedBox(height: 16),
         Text('Operational overview'),
         Text('• Active orders\n• Outlet activity\n• Inventory monitoring\n• Staff operations'),
