@@ -1,3 +1,5 @@
+library;
+
 /// FIREFA database schema foundation
 /// Defines initial entities for backend planning.
 
