@@ -14,12 +14,13 @@ class FirefaPurchaseOrder {
     required this.unit, required this.quantity, required this.unitCost,
     required this.note, required this.status, required this.createdAt,
     required this.receivedAt, this.receivedQuantity = 0,
-    this.receipts = const [],
+    this.receipts = const [], this.cancelledAt,
   });
   final String id, outletId, supplierId, supplierName, itemId, itemName;
   final String unit, note, status, createdAt;
   final int quantity, unitCost;
   final String? receivedAt;
+  final String? cancelledAt;
   final int receivedQuantity;
   final List<FirefaPurchaseReceipt> receipts;
   int get remainingQuantity => quantity - receivedQuantity;
@@ -30,7 +31,8 @@ class FirefaPurchaseOrder {
     'supplierName': supplierName, 'itemId': itemId, 'itemName': itemName,
     'unit': unit, 'quantity': quantity, 'unitCost': unitCost,
     'note': note, 'status': status, 'createdAt': createdAt,
-    'receivedAt': receivedAt, 'receivedQuantity': receivedQuantity,
+    'receivedAt': receivedAt, 'cancelledAt': cancelledAt,
+    'receivedQuantity': receivedQuantity,
     'receipts': receipts.map((r) => r.toJson()).toList(),
   };
 
@@ -49,6 +51,7 @@ class FirefaPurchaseOrder {
         status: json['status'] as String,
         createdAt: json['createdAt'] as String,
         receivedAt: json['receivedAt'] as String?,
+        cancelledAt: json['cancelledAt'] as String?,
         receivedQuantity: json['receivedQuantity'] as int? ??
             ((json['status'] == 'received') ? json['quantity'] as int : 0),
         receipts: (json['receipts'] as List<dynamic>? ?? [])
@@ -61,7 +64,9 @@ class FirefaPurchaseOrder {
         id: id, outletId: outletId, supplierId: supplierId,
         supplierName: supplierName, itemId: itemId, itemName: itemName,
         unit: unit, quantity: quantity, unitCost: unitCost, note: note,
-        status: next, createdAt: createdAt, receivedAt: timestamp,
+        status: next, createdAt: createdAt,
+        receivedAt: next == 'cancelled' ? receivedAt : timestamp,
+        cancelledAt: next == 'cancelled' ? timestamp : cancelledAt,
         receivedQuantity: receivedQuantity, receipts: receipts,
       );
 
@@ -73,6 +78,7 @@ class FirefaPurchaseOrder {
       unit: unit, quantity: quantity, unitCost: unitCost, note: note,
       status: total == quantity ? 'received' : 'partial',
       createdAt: createdAt, receivedAt: receipt.receivedAt,
+      cancelledAt: cancelledAt,
       receivedQuantity: total, receipts: [...receipts, receipt],
     );
   }
@@ -176,7 +182,7 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
     if (index < 0) {
       return false;
     }
-    _orders[index] = _orders[index].withStatus('cancelled', null);
+    _orders[index] = _orders[index].withStatus('cancelled', DateTime.now().toIso8601String());
     notifyListeners();
     _save();
     return true;
