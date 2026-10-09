@@ -1,9 +1,11 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../../modules/order_models.dart';
 
 class RevenueCard extends StatefulWidget {
-  const RevenueCard({super.key});
+  const RevenueCard({super.key, required this.orders});
+  final List<FirefaOrder> orders;
 
   @override
   State<RevenueCard> createState() => _RevenueCardState();
@@ -17,20 +19,29 @@ class _RevenueCardState extends State<RevenueCard> {
   static const Color dark = Color(0xFF172B4D);
   static const Color muted = Color(0xFF64748B);
 
-  final List<double> weeklySales = const [4.2, 5.8, 4.9, 7.1, 6.4, 8.5, 7.8];
-
-  final List<double> monthlySales = List.generate(
-    30,
-    (i) =>
-        3.5 + (i * 0.12) + math.sin(i * 0.8) * 1.2 + math.cos(i * 0.35) * 0.7,
-  );
-
-  List<double> get sales => selectedPeriod == 7 ? weeklySales : monthlySales;
+  List<double> get sales {
+    final now = DateTime.now();
+    final days = selectedPeriod;
+    final amounts = List<double>.filled(days, 0);
+    final start = DateUtils.dateOnly(now).subtract(Duration(days: days - 1));
+    for (final order in widget.orders) {
+      if (order.paymentStatus != FirefaPaymentStatus.paid ||
+          order.status == FirefaOrderStatus.cancelled) {
+        continue;
+      }
+      final day = DateUtils.dateOnly(order.createdAt.toLocal());
+      final index = day.difference(start).inDays;
+      if (index >= 0 && index < days) {
+        amounts[index] += order.total.toDouble();
+      }
+    }
+    return amounts;
+  }
 
   double get totalSales => sales.fold(0.0, (sum, value) => sum + value);
 
   String formatRupiah(double million) {
-    final amount = (million * 1000000).round();
+    final amount = million.round();
     final digits = amount.toString();
     final buffer = StringBuffer();
 
@@ -144,7 +155,7 @@ class _RevenueCardState extends State<RevenueCard> {
               const SizedBox(width: 6),
               const Expanded(
                 child: Text(
-                  'Data simulasi penjualan FIREFA',
+                  'Data pesanan Paid lokal • bukan settlement bank',
                   style: TextStyle(color: muted, fontSize: 12),
                 ),
               ),
@@ -165,7 +176,7 @@ class _RevenueCardState extends State<RevenueCard> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Hari ${pointIndex + 1}  •  ${formatRupiah(currentSales[pointIndex])}',
+                    '${DateUtils.dateOnly(DateTime.now()).subtract(Duration(days: selectedPeriod - 1 - pointIndex)).day}/${DateUtils.dateOnly(DateTime.now()).subtract(Duration(days: selectedPeriod - 1 - pointIndex)).month}  •  ${formatRupiah(currentSales[pointIndex])}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -320,7 +331,7 @@ class _RevenueChartPainter extends CustomPainter {
 
     final chartHeight = size.height - topPadding - bottomPadding;
 
-    final maximum = values.reduce(math.max) * 1.2;
+    final maximum = math.max(1.0, values.reduce(math.max) * 1.2);
 
     final gridPaint = Paint()
       ..color = const Color(0xFFE8EDF2)
