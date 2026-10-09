@@ -39,12 +39,12 @@ class FirefaMenuItem {
     isActive: json['isActive'] as bool,
   );
 
-  FirefaMenuItem copyWith({bool? isActive}) => FirefaMenuItem(
+  FirefaMenuItem copyWith({bool? isActive, String? name, String? category, int? price}) => FirefaMenuItem(
     id: id,
     outletId: outletId,
-    name: name,
-    category: category,
-    price: price,
+    name: name ?? this.name,
+    category: category ?? this.category,
+    price: price ?? this.price,
     isActive: isActive ?? this.isActive,
   );
 }
@@ -132,6 +132,58 @@ class FirefaMenuStore extends ChangeNotifier {
     if (index < 0) return false;
     if (_items[index].isActive == active) return true;
     _items[index] = _items[index].copyWith(isActive: active);
+    notifyListeners();
+    _save();
+    return true;
+  }
+
+  bool update({
+    required String outletId,
+    required String id,
+    required String name,
+    required String category,
+    required int price,
+  }) {
+    if (!_initialized) return false;
+    final index = _items.indexWhere(
+      (item) => item.outletId == outletId && item.id == id,
+    );
+    final normalized = name.trim();
+    if (index < 0 ||
+        normalized.isEmpty ||
+        normalized.length > 80 ||
+        !categories.contains(category) ||
+        price <= 0 ||
+        price > 999999999 ||
+        _items.any((item) =>
+            item.outletId == outletId &&
+            item.id != id &&
+            item.name.toLowerCase() == normalized.toLowerCase())) {
+      return false;
+    }
+    final current = _items[index];
+    if (current.name == normalized &&
+        current.category == category &&
+        current.price == price) {
+      return true;
+    }
+    _items[index] = current.copyWith(
+      name: normalized,
+      category: category,
+      price: price,
+    );
+    notifyListeners();
+    _save();
+    return true;
+  }
+
+  bool remove(String outletId, String id) {
+    if (!_initialized) return false;
+    final index = _items.indexWhere(
+      (item) => item.outletId == outletId && item.id == id,
+    );
+    if (index < 0) return false;
+    _items.removeAt(index);
     notifyListeners();
     _save();
     return true;
