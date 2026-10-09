@@ -1,204 +1,130 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/auth/role_permissions.dart';
 import '../../dashboard/dashboard_page.dart';
 
 class LoginForm extends StatefulWidget {
-  const LoginForm({
-    super.key,
-  });
+  const LoginForm({super.key});
 
   @override
   State<LoginForm> createState() => _LoginFormState();
 }
 
-
 class _LoginFormState extends State<LoginForm> {
-
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
 
   bool obscurePassword = true;
   bool rememberMe = false;
 
-  String selectedRole = "Owner";
+  FirefaRole selectedRole = FirefaRole.owner;
 
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
 
-  final roles = [
-    "Owner",
-    "Manager",
-    "Cashier",
-    "Kitchen / Bar",
-  ];
-
+  void _login() {
+    // Demo login: belum ada autentikasi backend.
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => DashboardPage(role: selectedRole)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-
     return Column(
       children: [
-
         TextField(
           controller: emailController,
-
+          keyboardType: TextInputType.emailAddress,
           decoration: const InputDecoration(
-            labelText: "Email",
-            prefixIcon: Icon(
-              Icons.email_outlined,
-            ),
+            labelText: 'Email',
+            prefixIcon: Icon(Icons.email_outlined),
           ),
         ),
-
-
-        const SizedBox(height:16),
-
-
+        const SizedBox(height: 16),
         TextField(
           controller: passwordController,
-
           obscureText: obscurePassword,
-
           decoration: InputDecoration(
-
-            labelText: "Password",
-
-            prefixIcon: const Icon(
-              Icons.lock_outline,
-            ),
-
-
+            labelText: 'Password',
+            prefixIcon: const Icon(Icons.lock_outline),
             suffixIcon: IconButton(
-
               icon: Icon(
                 obscurePassword
                     ? Icons.visibility_off_outlined
                     : Icons.visibility_outlined,
               ),
-
-              onPressed: (){
+              onPressed: () {
                 setState(() {
-                  obscurePassword =
-                      !obscurePassword;
+                  obscurePassword = !obscurePassword;
                 });
               },
-
             ),
           ),
         ),
-
-
-        const SizedBox(height:20),
-
-
-        DropdownButtonFormField<String>(
-
+        const SizedBox(height: 20),
+        DropdownButtonFormField<FirefaRole>(
           initialValue: selectedRole,
-
           decoration: const InputDecoration(
-            labelText:"Login as",
-            prefixIcon: Icon(
-              Icons.person_outline,
-            ),
+            labelText: 'Login as (Demo)',
+            prefixIcon: Icon(Icons.person_outline),
           ),
-
-
-          items: roles.map((role){
-
-            return DropdownMenuItem(
+          items: FirefaRole.values.map((role) {
+            return DropdownMenuItem<FirefaRole>(
               value: role,
-              child: Text(role),
+              child: Text(role.label),
             );
-
           }).toList(),
-
-
-          onChanged:(value){
-
-            setState(() {
-              selectedRole=value!;
-            });
-
+          onChanged: (value) {
+            if (value != null) {
+              setState(() {
+                selectedRole = value;
+              });
+            }
           },
-
         ),
-
-
-        const SizedBox(height:16),
-
-
+        const SizedBox(height: 16),
         Row(
-
-          children:[
-
+          children: [
             Checkbox(
-
-              value:rememberMe,
-
-              onChanged:(value){
-
+              value: rememberMe,
+              onChanged: (value) {
                 setState(() {
-                  rememberMe=value ?? false;
+                  rememberMe = value ?? false;
                 });
-
               },
-
             ),
-
-
-            const Text(
-              "Remember me",
-            ),
-
-
+            const Text('Remember me'),
             const Spacer(),
-
-
             TextButton(
-
-              onPressed:(){},
-
-              child:const Text(
-                "Forgot password?",
-              ),
-
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Reset password tersedia setelah '
+                      'autentikasi backend dibuat.',
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Forgot password?'),
             ),
-
           ],
-
         ),
-
-
-        const SizedBox(height:20),
-
-
+        const SizedBox(height: 20),
         SizedBox(
-
-          width:double.infinity,
-
-          height:52,
-
-
-          child:FilledButton(
-
-            onPressed:(){
-
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                builder: (_) => const DashboardPage(),
-                ),
-              );
-
-            },
-
-
-            child:const Text(
-              "LOGIN",
-            ),
-
+          width: double.infinity,
+          height: 52,
+          child: FilledButton(
+            onPressed: _login,
+            child: const Text('LOGIN (DEMO)'),
           ),
-
         ),
-
       ],
     );
   }

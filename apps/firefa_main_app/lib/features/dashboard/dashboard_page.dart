@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/auth/role_permissions.dart';
 import 'widgets/dashboard_sidebar.dart';
 import 'widgets/stat_card.dart';
 import 'widgets/revenue_card.dart';
@@ -7,14 +8,16 @@ import 'widgets/recent_orders_card.dart';
 import 'widgets/top_selling_card.dart';
 
 class DashboardPage extends StatefulWidget {
-  const DashboardPage({super.key});
+  final FirefaRole role;
+
+  const DashboardPage({super.key, this.role = FirefaRole.owner});
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  int selectedIndex = 0;
+  late int selectedIndex;
   bool sidebarCollapsed = true;
   String selectedOutlet = 'Semua Outlet';
 
@@ -57,6 +60,45 @@ class _DashboardPageState extends State<DashboardPage> {
     Icons.settings_outlined,
   ];
 
+  static const List<FirefaPermission> pagePermissions = [
+    FirefaPermission.dashboardView,
+    FirefaPermission.posAccess,
+    FirefaPermission.ordersView,
+    FirefaPermission.tablesManage,
+    FirefaPermission.menuManage,
+    FirefaPermission.inventoryManage,
+    FirefaPermission.reportsView,
+    FirefaPermission.settingsManage,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+
+    selectedIndex = pagePermissions.indexWhere(
+      (permission) => FirefaAccess.can(widget.role, permission),
+    );
+  }
+
+  void _selectPage(int index) {
+    if (index < 0 || index >= pagePermissions.length) {
+      return;
+    }
+
+    if (!FirefaAccess.can(widget.role, pagePermissions[index])) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Anda tidak memiliki izin mengakses modul ini.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      selectedIndex = index;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -66,18 +108,13 @@ class _DashboardPageState extends State<DashboardPage> {
           DashboardSidebar(
             selectedIndex: selectedIndex,
             collapsed: sidebarCollapsed,
+            role: widget.role,
             onToggle: () {
               setState(() {
                 sidebarCollapsed = !sidebarCollapsed;
               });
             },
-            onSelected: (index) {
-              if (index >= 0 && index < pageTitles.length) {
-                setState(() {
-                  selectedIndex = index;
-                });
-              }
-            },
+            onSelected: _selectPage,
           ),
           Expanded(
             child: SingleChildScrollView(
@@ -91,12 +128,17 @@ class _DashboardPageState extends State<DashboardPage> {
                     children: [
                       _buildTopbar(),
                       const SizedBox(height: 28),
-                      _buildPageHeading(),
-                      const SizedBox(height: 24),
-                      if (selectedIndex == 0)
-                        _buildDashboardContent()
-                      else
-                        _buildModuleContent(),
+                      if (selectedIndex >= 0) ...[
+                        _buildPageHeading(),
+                        const SizedBox(height: 24),
+                        if (selectedIndex == 0)
+                          _buildDashboardContent()
+                        else
+                          _buildModuleContent(),
+                      ] else
+                        const Center(
+                          child: Text('Tidak ada modul yang dapat diakses.'),
+                        ),
                       const SizedBox(height: 24),
                     ],
                   ),
@@ -117,9 +159,9 @@ class _DashboardPageState extends State<DashboardPage> {
         final greeting = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Welcome back, Owner',
-              style: TextStyle(
+            Text(
+              'Welcome back, ${widget.role.label}',
+              style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF172B4D),
@@ -137,10 +179,13 @@ class _DashboardPageState extends State<DashboardPage> {
           children: [
             Expanded(child: _buildOutletSelector()),
             const SizedBox(width: 12),
-            const CircleAvatar(
-              radius: 20,
-              backgroundColor: Color(0xFFE0F2F1),
-              child: Icon(Icons.person_outline, color: Color(0xFF00897B)),
+            Tooltip(
+              message: widget.role.label,
+              child: const CircleAvatar(
+                radius: 20,
+                backgroundColor: Color(0xFFE0F2F1),
+                child: Icon(Icons.person_outline, color: Color(0xFF00897B)),
+              ),
             ),
           ],
         );
@@ -269,8 +314,8 @@ class _DashboardPageState extends State<DashboardPage> {
               width: cardWidth,
               height: 180,
               child: const StatCard(
-                title: "Orders",
-                value: "245",
+                title: 'Orders',
+                value: '245',
                 icon: Icons.shopping_bag_outlined,
               ),
             ),
@@ -278,8 +323,8 @@ class _DashboardPageState extends State<DashboardPage> {
               width: cardWidth,
               height: 180,
               child: const StatCard(
-                title: "Active Tables",
-                value: "18",
+                title: 'Active Tables',
+                value: '18',
                 icon: Icons.table_bar_outlined,
               ),
             ),
@@ -287,8 +332,8 @@ class _DashboardPageState extends State<DashboardPage> {
               width: cardWidth,
               height: 180,
               child: const StatCard(
-                title: "Low Stock",
-                value: "5",
+                title: 'Low Stock',
+                value: '5',
                 icon: Icons.inventory_2_outlined,
               ),
             ),
