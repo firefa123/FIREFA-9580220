@@ -2,6 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../auth/role_permissions.dart';
 import 'app_routes.dart';
+import '../../features/dashboard/dashboard_page.dart';
+import '../../features/modules/pos_page.dart';
+import '../../features/modules/orders_page.dart';
+import '../../features/modules/tables_page.dart';
+import '../../features/modules/menu_page.dart';
+import '../../features/modules/inventory_page.dart';
+import '../../features/modules/reports_page.dart';
+import '../../features/modules/settings_page.dart';
+import '../../features/modules/supplier_page.dart';
+import '../../features/modules/purchase_order_page.dart';
 
 class FirefaMainNavigation extends StatefulWidget {
   final FirefaRole role;
@@ -15,6 +25,33 @@ class FirefaMainNavigation extends StatefulWidget {
 class _FirefaMainNavigationState extends State<FirefaMainNavigation> {
   int selectedIndex = 0;
 
+  Widget _pageForModule(String id) {
+    switch (id) {
+      case 'dashboard':
+        return DashboardPage(role: widget.role);
+      case 'pos':
+        return const PosPage();
+      case 'orders':
+        return const OrdersPage();
+      case 'tables':
+        return const TablesPage();
+      case 'menu':
+        return const MenuPage();
+      case 'inventory':
+        return const InventoryPage();
+      case 'reports':
+        return const ReportsPage();
+      case 'settings':
+        return const SettingsPage();
+      case 'suppliers':
+        return const SupplierPage();
+      case 'purchasing':
+        return const PurchaseOrderPage();
+      default:
+        return const Center(child: Text('Module belum tersedia'));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final modules = FirefaNavigation.accessibleModules(widget.role);
@@ -25,7 +62,8 @@ class _FirefaMainNavigationState extends State<FirefaMainNavigation> {
       );
     }
 
-    final selectedModule = modules[selectedIndex];
+    final safeIndex = selectedIndex >= modules.length ? 0 : selectedIndex;
+    final selectedModule = modules[safeIndex];
 
     return Scaffold(
       appBar: AppBar(
@@ -34,40 +72,14 @@ class _FirefaMainNavigationState extends State<FirefaMainNavigation> {
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Center(
-              child: Text(
-                widget.role.name.toUpperCase(),
-                style: const TextStyle(fontSize: 12),
-              ),
+              child: Text(widget.role.name.toUpperCase()),
             ),
           ),
         ],
       ),
-      body: Center(
-        child: Card(
-          margin: const EdgeInsets.all(24),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(selectedModule.icon, size: 56),
-                const SizedBox(height: 16),
-                Text(
-                  selectedModule.title,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  selectedModule.description,
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      body: _pageForModule(selectedModule.id),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: selectedIndex,
+        selectedIndex: safeIndex,
         onDestinationSelected: (index) {
           setState(() => selectedIndex = index);
         },
