@@ -1,3 +1,5 @@
+library;
+
 /// Branding state controller foundation.
 
 class BrandingStateController {
