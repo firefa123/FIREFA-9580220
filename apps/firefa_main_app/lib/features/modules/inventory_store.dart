@@ -211,10 +211,10 @@ class FirefaInventoryStore extends ChangeNotifier {
     required int physicalStock, required String note,
   }) {
     if (!_initialized || physicalStock < 0 || physicalStock > 999999999 ||
-        note.trim().length > 200) return false;
+        note.trim().length > 200) { return false; }
     final index = _index(outletId, itemId);
     if (index < 0 || _opnames.any((record) => record.outletId == outletId &&
-        record.itemId == itemId && record.status == 'pending')) return false;
+        record.itemId == itemId && record.status == 'pending')) { return false; }
     final item = _items[index];
     _opnames.add(FirefaStockOpname(
       id: 'opname-${_nextOpnameId++}', outletId: outletId,
@@ -240,7 +240,7 @@ class FirefaInventoryStore extends ChangeNotifier {
     final record = _opnames[recordIndex];
     final itemIndex = _index(outletId, record.itemId);
     if (approve && (itemIndex < 0 ||
-        _items[itemIndex].stock != record.systemStock)) return false;
+        _items[itemIndex].stock != record.systemStock)) { return false; }
     if (approve && record.difference != 0) {
       final success = adjust(
         outletId: outletId, id: record.itemId, type: 'correction',
