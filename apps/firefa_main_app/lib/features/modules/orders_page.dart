@@ -52,9 +52,13 @@ class _OrdersPageState extends State<OrdersPage> {
         return false;
       }
       if (paymentFilter == 'paid' &&
-          order.paymentStatus != FirefaPaymentStatus.paid) return false;
+          order.paymentStatus != FirefaPaymentStatus.paid) {
+        return false;
+      }
       if (paymentFilter == 'unpaid' &&
-          order.paymentStatus != FirefaPaymentStatus.unpaid) return false;
+          order.paymentStatus != FirefaPaymentStatus.unpaid) {
+        return false;
+      }
       if (dateRange != null) {
         final day = DateUtils.dateOnly(order.createdAt);
         if (day.isBefore(dateRange!.start) || day.isAfter(dateRange!.end)) {
@@ -83,9 +87,13 @@ class _OrdersPageState extends State<OrdersPage> {
 
   Future<void> _copyOrdersCsv() async {
     final selectedOutlet = outletId;
-    if (!canManage || !outletStore.canAccessOutlet(selectedOutlet)) return;
+    if (!canManage || !outletStore.canAccessOutlet(selectedOutlet)) {
+      return;
+    }
     final rows = visibleOrders;
-    if (rows.any((order) => order.outletId != selectedOutlet)) return;
+    if (rows.any((order) => order.outletId != selectedOutlet)) {
+      return;
+    }
     final csv = <String>[
       'Order ID,Outlet ID,Tanggal,Tipe,Meja,Status,Pembayaran,Item Qty,Subtotal,Diskon,Pajak,Service,Total,Produk',
       for (final order in rows)
@@ -101,7 +109,9 @@ class _OrdersPageState extends State<OrdersPage> {
     ].join('\r\n');
     await Clipboard.setData(ClipboardData(text: csv));
     if (!mounted || outletId != selectedOutlet ||
-        !canManage || !outletStore.canAccessOutlet(selectedOutlet)) return;
+        !canManage || !outletStore.canAccessOutlet(selectedOutlet)) {
+      return;
+    }
     message('CSV ${rows.length} pesanan disalin ke clipboard.');
   }
 
