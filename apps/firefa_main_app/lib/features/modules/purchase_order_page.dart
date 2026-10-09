@@ -741,7 +741,7 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
                     '\\n${po.followUpNote.isEmpty ? 'Belum ada catatan' : po.followUpNote}'
                     '\\n${po.followUpContactedAt == null ? 'Belum dihubungi' : 'Dihubungi: ${po.followUpContactedAt}'}'),
                 trailing: allowed
-                    ? Wrap(mainAxisSize: MainAxisSize.min, children: [
+                    ? Row(mainAxisSize: MainAxisSize.min, children: [
                         IconButton(
                           tooltip: po.followUpContactedAt == null
                               ? 'Tandai supplier sudah dihubungi'
