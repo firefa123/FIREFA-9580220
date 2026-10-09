@@ -5,6 +5,7 @@ import '../../core/outlet/active_outlet_store.dart';
 import 'order_models.dart';
 import 'order_store.dart';
 import 'pos_payment_dialog.dart';
+import 'persistent_cart_store.dart';
 
 class PosPage extends StatefulWidget {
   const PosPage({super.key});
@@ -25,16 +26,69 @@ class _PosPageState extends State<PosPage> {
   // Keranjang dipisahkan per outlet agar tidak tercampur.
   final Map<String, List<_CartItem>> carts = {};
   final Map<String, _OrderSettings> settings = {};
+  final persistentStore = FirefaPersistentCartStore.instance;
+
+  void _restoreOutlet(String id) {
+    if (carts.containsKey(id)) return;
+    final saved = persistentStore.getCart(id);
+    carts[id] = saved.items.map((item) {
+      final product = products.where((p) => p.id == item.productId).firstOrNull;
+      if (product == null) return null;
+      return _CartItem(
+        product: product,
+        size: item.size,
+        extras: List<String>.from(item.extras),
+        note: item.note,
+        unitPrice: item.unitPrice,
+        quantity: item.quantity,
+      );
+    }).whereType<_CartItem>().toList();
+    settings[id] = _OrderSettings()
+      ..orderType = saved.orderType
+      ..table = saved.table
+      ..discountType = saved.discountType
+      ..discountInput = saved.discountInput
+      ..taxRate = saved.taxRate
+      ..serviceRate = saved.serviceRate;
+  }
+
+  void _saveCart() {
+    final id = outletId;
+    persistentStore.saveCart(
+      id,
+      FirefaCartData(
+        items: cart.map((item) => FirefaCartItemData(
+          productId: item.product.id,
+          size: item.size,
+          extras: List<String>.from(item.extras),
+          note: item.note,
+          unitPrice: item.unitPrice,
+          quantity: item.quantity,
+        )).toList(),
+        orderType: config.orderType,
+        table: config.table,
+        discountType: config.discountType,
+        discountInput: config.discountInput,
+        taxRate: config.taxRate,
+        serviceRate: config.serviceRate,
+      ),
+    );
+  }
 
   String category = 'All';
 
   String get outletId => outletStore.selectedOutletId;
   String get outletName => outletStore.selectedOutletName;
 
-  List<_CartItem> get cart => carts.putIfAbsent(outletId, () => <_CartItem>[]);
+  List<_CartItem> get cart {
+    _restoreOutlet(outletId);
+    return carts[outletId]!;
+  }
 
-  _OrderSettings get config =>
-      settings.putIfAbsent(outletId, _OrderSettings.new);
+  _OrderSettings get config {
+    _restoreOutlet(outletId);
+    return settings[outletId]!;
+  }
 
   static const categories = [
     'All',
@@ -206,6 +260,7 @@ class _PosPageState extends State<PosPage> {
         cart.add(item);
       }
     });
+    _saveCart();
   }
 
   void changeQuantity(_CartItem item, int change) {
@@ -213,6 +268,7 @@ class _PosPageState extends State<PosPage> {
       item.quantity += change;
       if (item.quantity <= 0) cart.remove(item);
     });
+    _saveCart();
   }
 
   Future<void> configureProduct(_Product product, {_CartItem? editing}) async {
@@ -501,6 +557,7 @@ class _PosPageState extends State<PosPage> {
       config.taxRate = draftTax;
       config.serviceRate = draftService;
     });
+    _saveCart();
   }
 
   void confirmOrder() {
@@ -533,6 +590,7 @@ class _PosPageState extends State<PosPage> {
       cart.clear();
       config.resetCharges();
     });
+    _saveCart();
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('${order.id} berhasil dibuat di $outletName.')),
@@ -832,7 +890,10 @@ class _PosPageState extends State<PosPage> {
               ),
               if (cart.isNotEmpty)
                 TextButton(
-                  onPressed: () => setState(() => cart.clear()),
+                  onPressed: () {
+                    setState(() => cart.clear());
+                    _saveCart();
+                  },
                   child: const Text(
                     'Clear',
                     style: TextStyle(color: Colors.redAccent),
@@ -869,6 +930,7 @@ class _PosPageState extends State<PosPage> {
               onChanged: (value) {
                 if (value != null) {
                   setState(() => config.table = value);
+                  _saveCart();
                 }
               },
             ),
@@ -981,6 +1043,7 @@ class _PosPageState extends State<PosPage> {
     return OutlinedButton(
       onPressed: () {
         setState(() => config.orderType = value);
+        _saveCart();
       },
       style: OutlinedButton.styleFrom(
         foregroundColor: selected ? primary : muted,
@@ -1056,6 +1119,7 @@ class _PosPageState extends State<PosPage> {
                       tooltip: 'Remove',
                       onPressed: () {
                         setState(() => cart.remove(item));
+                        _saveCart();
                       },
                       icon: const Icon(
                         Icons.delete_outline,
