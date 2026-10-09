@@ -174,7 +174,7 @@ class _TablesPageState extends State<TablesPage> {
                 (occupancyFilter == 'available' && !t.occupied) ||
                 (occupancyFilter == 'occupied' && t.occupied)) &&
             (query.isEmpty || t.name.toLowerCase().contains(query))).toList()
-          ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase());
+          ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
         return LayoutBuilder(
           builder: (context, constraints) {
             final narrow = constraints.maxWidth < 540;
