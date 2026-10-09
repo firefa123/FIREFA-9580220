@@ -1,3 +1,5 @@
+library;
+
 /// Store branding UI foundation.
 ///
 /// Provides the base structure for owner customization.
