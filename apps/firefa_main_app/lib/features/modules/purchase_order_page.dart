@@ -26,6 +26,7 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
   String search = '';
   DateTimeRange? dateRange;
   bool onlyPending = false;
+  String reminderFilter = 'all';
 
   bool get allowed =>
       FirefaAccess.can(outlet.role, FirefaPermission.inventoryManage) &&
@@ -480,6 +481,7 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
         return (filter == 'all' || po.status == filter) &&
             (effectiveSupplier == 'all' || po.supplierId == effectiveSupplier) &&
             (!onlyPending || po.status == 'ordered' || po.status == 'partial') &&
+            (reminderFilter == 'all' || reminderStatus(po) == reminderFilter) &&
             (query.isEmpty || [
               po.id, po.supplierName, po.itemName, po.note,
             ].any((value) => value.toLowerCase().contains(query))) &&
