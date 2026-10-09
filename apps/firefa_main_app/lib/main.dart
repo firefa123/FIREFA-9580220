@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'core/routes/app_routes.dart';
 import 'core/theme/app_theme.dart';
-import 'features/dashboard/presentation/pages/dashboard_page.dart';
 
 void main() {
   runApp(const FirefaApp());
@@ -15,7 +15,8 @@ class FirefaApp extends StatelessWidget {
       title: 'FIREFA',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
-      home: const DashboardPage(),
+      routes: AppRoutes.routes,
+      initialRoute: AppRoutes.dashboard,
     );
   }
 }
