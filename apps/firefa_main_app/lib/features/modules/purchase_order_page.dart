@@ -253,6 +253,18 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
     }
   }
 
+  void _markContacted(FirefaPurchaseOrder po, bool contacted) {
+    if (!allowed || po.outletId != outlet.selectedOutletId) return;
+    final success = orders.setFollowUpContacted(
+      outletId: po.outletId,
+      orderId: po.id,
+      contacted: contacted,
+    );
+    _message(success
+        ? (contacted ? 'Kontak supplier dicatat.' : 'Status kontak direset.')
+        : 'Gagal memperbarui status kontak supplier.');
+  }
+
   String _csvCell(String value) {
     final safe = value.replaceAll('"', '""');
     final guarded = safe.isNotEmpty && '=+@-'.contains(safe[0]) ? "'$safe" : safe;
@@ -292,12 +304,13 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
         return byDate != 0 ? byDate : a.id.compareTo(b.id);
       });
     final lines = <String>[
-      'PO ID,Outlet ID,Supplier,Barang,Status PO,Tanggal PO,Tanggal Pengingat,Status Pengingat,Catatan Tindak Lanjut,Sisa Qty,Satuan,Nilai Sisa',
+      'PO ID,Outlet ID,Supplier,Barang,Status PO,Tanggal PO,Tanggal Pengingat,Status Pengingat,Catatan Tindak Lanjut,Waktu Dihubungi,Sisa Qty,Satuan,Nilai Sisa',
       for (final po in active)
         [
           po.id, po.outletId, po.supplierName, po.itemName,
           po.status, po.createdAt, po.followUpDate ?? '',
           reminderStatus(po), po.followUpNote,
+          po.followUpContactedAt ?? '',
           po.remainingQuantity.toString(), po.unit,
           (po.remainingQuantity * po.unitCost).toString(),
         ].map(_csvCell).join(','),
@@ -725,13 +738,26 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
                 subtitle: Text('${po.itemName} • sisa ${po.remainingQuantity} ${po.unit}'
                     '\\nPengingat: ${po.followUpDate ?? 'Belum dijadwalkan'}'
                     ' • ${reminderStatus(po)}'
-                    '\\n${po.followUpNote.isEmpty ? 'Belum ada catatan' : po.followUpNote}'),
+                    '\\n${po.followUpNote.isEmpty ? 'Belum ada catatan' : po.followUpNote}'
+                    '\\n${po.followUpContactedAt == null ? 'Belum dihubungi' : 'Dihubungi: ${po.followUpContactedAt}'}'),
                 trailing: allowed
-                    ? IconButton(
-                        tooltip: 'Perbarui tindak lanjut',
-                        icon: const Icon(Icons.edit_calendar_outlined),
-                        onPressed: () => _editFollowUp(po),
-                      )
+                    ? Wrap(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(
+                          tooltip: po.followUpContactedAt == null
+                              ? 'Tandai supplier sudah dihubungi'
+                              : 'Reset status dihubungi',
+                          icon: Icon(po.followUpContactedAt == null
+                              ? Icons.check_circle_outline
+                              : Icons.check_circle),
+                          onPressed: () => _markContacted(
+                              po, po.followUpContactedAt == null),
+                        ),
+                        IconButton(
+                          tooltip: 'Perbarui tindak lanjut',
+                          icon: const Icon(Icons.edit_calendar_outlined),
+                          onPressed: () => _editFollowUp(po),
+                        ),
+                      ])
                     : null,
                 onTap: () => _showOrderDetail(po),
               ),
