@@ -292,9 +292,11 @@ class _InventoryPageState extends State<InventoryPage> {
         sourceOutlet != outlet.selectedOutletId) { return; }
     final ok = store.createOpname(outletId: sourceOutlet,
       itemId: item.id, physicalStock: result.physical, note: result.note);
-    {if (!ok) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
       content: Text('Opname gagal: periksa jumlah atau selesaikan opname tertunda.'),
-    ));}
+      ));
+    }
   }
 
   Future<void> decideOpname(FirefaStockOpname record, bool approve) async {
@@ -316,9 +318,11 @@ class _InventoryPageState extends State<InventoryPage> {
         sourceOutlet != outlet.selectedOutletId) { return; }
     final ok = store.resolveOpname(outletId: sourceOutlet,
       opnameId: record.id, approve: approve);
-    {if (!ok) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
       content: Text('Keputusan gagal. Stok mungkin sudah berubah; buat opname baru.'),
-    ));}
+      ));
+    }
   }
 
   Widget _metric(String label, int count, Color color) {
