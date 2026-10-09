@@ -27,6 +27,7 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
   DateTimeRange? dateRange;
   bool onlyPending = false;
   String reminderFilter = 'all';
+  String workQueueFilter = 'due';
 
   bool get allowed =>
       FirefaAccess.can(outlet.role, FirefaPermission.inventoryManage) &&
@@ -537,6 +538,28 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
           final byDate = (a.followUpDate ?? '').compareTo(b.followUpDate ?? '');
           return byDate != 0 ? byDate : a.id.compareTo(b.id);
         });
+      final workQueue = activeReminders.where((po) {
+        final status = reminderStatus(po);
+        if (workQueueFilter == 'due') {
+          return status == 'overdue' || status == 'today';
+        }
+        return workQueueFilter == 'all' || status == workQueueFilter;
+      }).toList()
+        ..sort((a, b) {
+          int priority(FirefaPurchaseOrder po) {
+            switch (reminderStatus(po)) {
+              case 'overdue': return 0;
+              case 'today': return 1;
+              case 'upcoming': return 2;
+              default: return 3;
+            }
+          }
+          final byPriority = priority(a).compareTo(priority(b));
+          if (byPriority != 0) return byPriority;
+          final byDate = (a.followUpDate ?? '9999-12-31')
+              .compareTo(b.followUpDate ?? '9999-12-31');
+          return byDate != 0 ? byDate : a.id.compareTo(b.id);
+        });
       final visible = all.where((po) {
         final query = search.trim().toLowerCase();
         final date = DateTime.tryParse(po.createdAt);
@@ -665,6 +688,54 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
             icon: const Icon(Icons.copy_all_outlined),
             label: Text('Salin CSV Tindak Lanjut (${visible.where((po) => po.status == 'ordered' || po.status == 'partial').length} PO)'),
           ),
+          const SizedBox(height: 12),
+          const Text('Antrean Kerja Follow-up Supplier',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 10, runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center, children: [
+            DropdownButton<String>(
+              value: workQueueFilter,
+              items: const [
+                DropdownMenuItem(value: 'due', child: Text('Perlu tindakan')),
+                DropdownMenuItem(value: 'overdue', child: Text('Terlambat')),
+                DropdownMenuItem(value: 'today', child: Text('Hari ini')),
+                DropdownMenuItem(value: 'upcoming', child: Text('Mendatang')),
+                DropdownMenuItem(value: 'unscheduled', child: Text('Belum dijadwalkan')),
+                DropdownMenuItem(value: 'all', child: Text('Semua PO aktif')),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() => workQueueFilter = value);
+                }
+              },
+            ),
+            Text('${workQueue.length} PO dalam antrean'),
+          ]),
+          if (workQueue.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text('Tidak ada PO pada kategori antrean ini.'),
+            ),
+          for (final po in workQueue)
+            Card(
+              child: ListTile(
+                isThreeLine: true,
+                title: Text('${po.id} • ${po.supplierName}'),
+                subtitle: Text('${po.itemName} • sisa ${po.remainingQuantity} ${po.unit}'
+                    '\\nPengingat: ${po.followUpDate ?? 'Belum dijadwalkan'}'
+                    ' • ${reminderStatus(po)}'
+                    '\\n${po.followUpNote.isEmpty ? 'Belum ada catatan' : po.followUpNote}'),
+                trailing: allowed
+                    ? IconButton(
+                        tooltip: 'Perbarui tindak lanjut',
+                        icon: const Icon(Icons.edit_calendar_outlined),
+                        onPressed: () => _editFollowUp(po),
+                      )
+                    : null,
+                onTap: () => _showOrderDetail(po),
+              ),
+            ),
           const SizedBox(height: 12),
           const Text('Monitoring PO Aktif',
               style: TextStyle(fontWeight: FontWeight.bold)),
