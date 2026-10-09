@@ -215,6 +215,71 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
     }
   }
 
+  Future<void> _showOrderDetail(FirefaPurchaseOrder po) async {
+    if (!outlet.canAccessOutlet(po.outletId) ||
+        po.outletId != outlet.selectedOutletId) {
+      return;
+    }
+    final receivedValue = po.receivedQuantity * po.unitCost;
+    final remainingValue = po.remainingQuantity * po.unitCost;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Detail PO ${po.id}'),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Supplier: ${po.supplierName}'),
+                Text('Barang: ${po.itemName}'),
+                Text('Outlet: ${po.outletId}'),
+                Text('Status: ${po.status}'),
+                Text('Dibuat: ${po.createdAt}'),
+                const Divider(),
+                Text('Jumlah dipesan: ${po.quantity} ${po.unit}'),
+                Text('Jumlah diterima: ${po.receivedQuantity} ${po.unit}'),
+                Text('Sisa: ${po.remainingQuantity} ${po.unit}'),
+                Text('Harga satuan: Rp ${po.unitCost}'),
+                Text('Nilai PO: Rp ${po.totalCost}'),
+                Text('Nilai diterima: Rp $receivedValue'),
+                Text('Nilai sisa: Rp $remainingValue'),
+                if (po.note.isNotEmpty) Text('Catatan: ${po.note}'),
+                const SizedBox(height: 12),
+                const Text('Riwayat penerimaan',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                if (po.receipts.isEmpty)
+                  const Text('Belum ada penerimaan tercatat.'),
+                for (final receipt in po.receipts)
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('${receipt.id} • +${receipt.quantity} ${po.unit}'),
+                    subtitle: Text(receipt.receivedAt),
+                    trailing: Text('Rp ${receipt.quantity * po.unitCost}'),
+                  ),
+                if (po.status == 'received' && po.receipts.isEmpty)
+                  const Text(
+                    'PO lama: total penerimaan tercatat, tetapi rincian '
+                    'penerimaan historis tidak tersedia.',
+                    style: TextStyle(color: Colors.blueGrey),
+                  ),
+                if (po.status == 'cancelled' && po.remainingQuantity > 0)
+                  const Text('Sisa pesanan dibatalkan; tidak menambah stok.'),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx),
+              child: const Text('Tutup')),
+        ],
+      ),
+    );
+  }
+
   Widget _metric(String label, String value) => Container(
     constraints: const BoxConstraints(minWidth: 155),
     padding: const EdgeInsets.all(12),
@@ -379,6 +444,14 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
             Card(child: Padding(padding: const EdgeInsets.all(14),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () => _showOrderDetail(po),
+                      icon: const Icon(Icons.visibility_outlined),
+                      label: const Text('Detail & Audit'),
+                    ),
+                  ),
                   Text('${po.id} • ${po.supplierName}',
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                   Text('${po.itemName} • ${po.quantity} ${po.unit}'),
