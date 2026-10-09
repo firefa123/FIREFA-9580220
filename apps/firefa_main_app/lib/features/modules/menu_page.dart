@@ -139,6 +139,123 @@ class _MenuPageState extends State<MenuPage> {
     }
   }
 
+  Future<void> editMenu(FirefaMenuItem item) async {
+    if (!allowed || item.outletId != outlet.selectedOutletId) return;
+    final sourceOutlet = item.outletId;
+    final nameController = TextEditingController(text: item.name);
+    final priceController = TextEditingController(text: item.price.toString());
+    var category = item.category;
+    final input = await showDialog<({String name, String category, int price})>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, update) => AlertDialog(
+          title: const Text('Edit Menu'),
+          content: SizedBox(
+            width: 400,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    autofocus: true,
+                    maxLength: 80,
+                    decoration: const InputDecoration(labelText: 'Nama menu'),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: category,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Kategori'),
+                    items: FirefaMenuStore.categories
+                        .map((value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(value),
+                            ))
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) update(() => category = value);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: priceController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(9),
+                    ],
+                    decoration: const InputDecoration(labelText: 'Harga (Rp)'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Batal'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, (
+                name: nameController.text,
+                category: category,
+                price: int.tryParse(priceController.text) ?? 0,
+              )),
+              child: const Text('Simpan'),
+            ),
+          ],
+        ),
+      ),
+    );
+    nameController.dispose();
+    priceController.dispose();
+    if (!mounted || input == null) return;
+    if (!allowed || outlet.selectedOutletId != sourceOutlet) return;
+    if (!store.update(
+      outletId: sourceOutlet,
+      id: item.id,
+      name: input.name,
+      category: input.category,
+      price: input.price,
+    )) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Nama menu harus unik per outlet dan harga harus lebih dari Rp 0.'),
+      ));
+    }
+  }
+
+  Future<void> deleteMenu(FirefaMenuItem item) async {
+    if (!allowed || item.outletId != outlet.selectedOutletId) return;
+    final sourceOutlet = item.outletId;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Hapus Menu?'),
+        content: Text('Menu "${item.name}" akan dihapus dari outlet ini. '
+            'Tindakan ini tidak dapat dibatalkan. Pesanan dan keranjang POS tidak diubah.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Hapus Menu'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    if (!allowed || outlet.selectedOutletId != sourceOutlet) return;
+    if (!store.remove(sourceOutlet, item.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Menu tidak ditemukan atau tidak dapat dihapus.'),
+      ));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<void>(
@@ -219,7 +336,7 @@ class _MenuPageState extends State<MenuPage> {
                               : narrow
                                   ? 1
                                   : 2,
-                      mainAxisExtent: 174,
+                      mainAxisExtent: 184,
                       crossAxisSpacing: 12,
                       mainAxisSpacing: 12,
                     ),
@@ -268,6 +385,27 @@ class _MenuPageState extends State<MenuPage> {
                                             outlet.selectedOutletId, item.id, value,
                                           )
                                       : null,
+                                ),
+                                PopupMenuButton<String>(
+                                  tooltip: 'Kelola ${item.name}',
+                                  enabled: allowed,
+                                  onSelected: (action) {
+                                    if (action == 'edit') {
+                                      editMenu(item);
+                                    } else if (action == 'delete') {
+                                      deleteMenu(item);
+                                    }
+                                  },
+                                  itemBuilder: (_) => const [
+                                    PopupMenuItem(
+                                      value: 'edit',
+                                      child: Text('Edit Menu'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'delete',
+                                      child: Text('Hapus Menu'),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
