@@ -28,6 +28,7 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
   bool onlyPending = false;
   String reminderFilter = 'all';
   String workQueueFilter = 'due';
+  String contactFilter = 'all';
 
   bool get allowed =>
       FirefaAccess.can(outlet.role, FirefaPermission.inventoryManage) &&
@@ -304,12 +305,13 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
         return byDate != 0 ? byDate : a.id.compareTo(b.id);
       });
     final lines = <String>[
-      'PO ID,Outlet ID,Supplier,Barang,Status PO,Tanggal PO,Tanggal Pengingat,Status Pengingat,Catatan Tindak Lanjut,Waktu Dihubungi,Sisa Qty,Satuan,Nilai Sisa',
+      'PO ID,Outlet ID,Supplier,Barang,Status PO,Tanggal PO,Tanggal Pengingat,Status Pengingat,Catatan Tindak Lanjut,Status Kontak,Waktu Dihubungi,Sisa Qty,Satuan,Nilai Sisa',
       for (final po in active)
         [
           po.id, po.outletId, po.supplierName, po.itemName,
           po.status, po.createdAt, po.followUpDate ?? '',
           reminderStatus(po), po.followUpNote,
+          po.followUpContactedAt == null ? 'Belum dihubungi' : 'Sudah dihubungi',
           po.followUpContactedAt ?? '',
           po.remainingQuantity.toString(), po.unit,
           (po.remainingQuantity * po.unitCost).toString(),
@@ -551,7 +553,20 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
           final byDate = (a.followUpDate ?? '').compareTo(b.followUpDate ?? '');
           return byDate != 0 ? byDate : a.id.compareTo(b.id);
         });
+      final contactedCount = activeReminders.where((po) =>
+          po.followUpContactedAt != null).length;
+      final uncontactedCount = activeReminders.length - contactedCount;
+      final dueUncontactedCount = activeReminders.where((po) =>
+          po.followUpContactedAt == null &&
+          (reminderStatus(po) == 'overdue' ||
+              reminderStatus(po) == 'today')).length;
       final workQueue = activeReminders.where((po) {
+        if (contactFilter == 'contacted' && po.followUpContactedAt == null) {
+          return false;
+        }
+        if (contactFilter == 'uncontacted' && po.followUpContactedAt != null) {
+          return false;
+        }
         final status = reminderStatus(po);
         if (workQueueFilter == 'due') {
           return status == 'overdue' || status == 'today';
@@ -702,6 +717,15 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
             label: Text('Salin CSV Tindak Lanjut (${visible.where((po) => po.status == 'ordered' || po.status == 'partial').length} PO)'),
           ),
           const SizedBox(height: 12),
+          const Text('Monitoring Kontak Supplier',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            _metric('Sudah Dihubungi', '$contactedCount'),
+            _metric('Belum Dihubungi', '$uncontactedCount'),
+            _metric('Perlu Kontak Segera', '$dueUncontactedCount'),
+          ]),
+          const SizedBox(height: 12),
           const Text('Antrean Kerja Follow-up Supplier',
               style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
@@ -721,6 +745,17 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
                 if (value != null) {
                   setState(() => workQueueFilter = value);
                 }
+              },
+            ),
+            DropdownButton<String>(
+              value: contactFilter,
+              items: const [
+                DropdownMenuItem(value: 'all', child: Text('Semua status kontak')),
+                DropdownMenuItem(value: 'contacted', child: Text('Sudah dihubungi')),
+                DropdownMenuItem(value: 'uncontacted', child: Text('Belum dihubungi')),
+              ],
+              onChanged: (value) {
+                if (value != null) setState(() => contactFilter = value);
               },
             ),
             Text('${workQueue.length} PO dalam antrean'),
