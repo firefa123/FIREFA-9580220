@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/auth/role_permissions.dart';
 import '../../core/outlet/active_outlet_store.dart';
@@ -39,6 +40,33 @@ class _TablesPageState extends State<TablesPage> {
 
   bool get allowed => FirefaAccess.can(outlet.role, FirefaPermission.tablesManage) &&
       outlet.canAccessOutlet(outlet.selectedOutletId);
+
+  String _csvCell(String value) {
+    final escaped = value.replaceAll('"', '""');
+    final safe = escaped.isNotEmpty && '=+-@'.contains(escaped[0])
+        ? "'$escaped" : escaped;
+    return '"$safe"';
+  }
+
+  Future<void> _copyCsv(List<FirefaTable> rows) async {
+    final selectedOutlet = outlet.selectedOutletId;
+    if (!allowed || rows.any((t) => t.outletId != selectedOutlet)) {
+      return;
+    }
+    final csv = <String>[
+      'ID,Outlet ID,Nama Meja,Status',
+      for (final table in rows)
+        [table.id, table.outletId, table.name,
+         table.occupied ? 'Terisi' : 'Tersedia'].map(_csvCell).join(','),
+    ].join('\r\n');
+    await Clipboard.setData(ClipboardData(text: csv));
+    if (!mounted || !allowed || outlet.selectedOutletId != selectedOutlet) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('CSV ${rows.length} meja disalin ke clipboard.'),
+    ));
+  }
 
   Future<void> addTable() async {
     if (!allowed) return;
@@ -195,6 +223,11 @@ class _TablesPageState extends State<TablesPage> {
                     onChanged: (value) {
                       if (value != null) setState(() => occupancyFilter = value);
                     },
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: allowed ? () => _copyCsv(visible) : null,
+                    icon: const Icon(Icons.copy_all_outlined),
+                    label: Text('Salin CSV (${visible.length})'),
                   ),
                   Text('Menampilkan ${visible.length} dari ${tables.length} meja'),
                 ]),
