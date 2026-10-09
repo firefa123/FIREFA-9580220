@@ -254,6 +254,73 @@ class _InventoryPageState extends State<InventoryPage> {
     ));
   }
 
+  Future<void> startOpname(FirefaInventoryItem item) async {
+    if (!allowed || item.outletId != outlet.selectedOutletId) return;
+    final sourceOutlet = item.outletId;
+    final quantity = TextEditingController(text: item.stock.toString());
+    final note = TextEditingController();
+    final result = await showDialog<({int physical, String note})>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Stock Opname: ${item.name}'),
+        content: SizedBox(width: 380, child: Column(
+          mainAxisSize: MainAxisSize.min, children: [
+            Text('Stok sistem: ${item.stock} ${item.unit}'),
+            TextField(controller: quantity,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(9),
+              ],
+              decoration: const InputDecoration(labelText: 'Stok fisik')),
+            TextField(controller: note, maxLength: 200,
+              decoration: const InputDecoration(labelText: 'Catatan pemeriksaan')),
+          ],
+        )),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal')),
+          FilledButton(onPressed: () => Navigator.pop(ctx,
+            (physical: int.tryParse(quantity.text) ?? -1, note: note.text)),
+            child: const Text('Catat Opname')),
+        ],
+      ),
+    );
+    quantity.dispose();
+    note.dispose();
+    if (!mounted || result == null || !allowed ||
+        sourceOutlet != outlet.selectedOutletId) return;
+    final ok = store.createOpname(outletId: sourceOutlet,
+      itemId: item.id, physicalStock: result.physical, note: result.note);
+    if (!ok) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Opname gagal: periksa jumlah atau selesaikan opname tertunda.'),
+    ));
+  }
+
+  Future<void> decideOpname(FirefaStockOpname record, bool approve) async {
+    if (!allowed || record.outletId != outlet.selectedOutletId) return;
+    final sourceOutlet = record.outletId;
+    final confirmed = await showDialog<bool>(context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(approve ? 'Setujui koreksi stok?' : 'Tolak stock opname?'),
+        content: Text('${record.itemName}: sistem ${record.systemStock}, fisik ${record.physicalStock}, selisih ${record.difference}.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true),
+            child: Text(approve ? 'Setujui' : 'Tolak')),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true || !allowed ||
+        sourceOutlet != outlet.selectedOutletId) return;
+    final ok = store.resolveOpname(outletId: sourceOutlet,
+      opnameId: record.id, approve: approve);
+    if (!ok) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Keputusan gagal. Stok mungkin sudah berubah; buat opname baru.'),
+    ));
+  }
+
   Widget _metric(String label, int count, Color color) {
     return Container(
       width: 145, padding: const EdgeInsets.all(14),
@@ -280,6 +347,7 @@ class _InventoryPageState extends State<InventoryPage> {
         final low = items.where((item) => item.isLowStock).length;
         final empty = items.where((item) => item.isOutOfStock).length;
         final history = store.historyForOutlet(outlet.selectedOutletId);
+        final opnames = store.opnamesForOutlet(outlet.selectedOutletId);
         final filteredHistory = history.where((movement) {
           if (!movement.itemName.toLowerCase().contains(movementQuery.trim().toLowerCase())) return false;
           if (movementType != 'all' && movement.type != movementType) return false;
@@ -443,11 +511,13 @@ class _InventoryPageState extends State<InventoryPage> {
                             if (allowed)
                               Align(alignment: Alignment.centerRight, child: PopupMenuButton<String>(
                                 tooltip: 'Kelola ${item.name}',
-                                onSelected: (action) => manage(item, action),
+                                onSelected: (action) => action == 'opname'
+                                  ? startOpname(item) : manage(item, action),
                                 itemBuilder: (_) => const [
                                   PopupMenuItem(value: 'edit', child: Text('Edit Barang')),
                                   PopupMenuItem(value: 'adjust', child: Text('Penyesuaian Stok')),
                                   PopupMenuItem(value: 'delete', child: Text('Hapus Barang')),
+                                  PopupMenuItem(value: 'opname', child: Text('Stock Opname')),
                                 ],
                               )),
                           ],
@@ -455,6 +525,29 @@ class _InventoryPageState extends State<InventoryPage> {
                       );
                     },
                   ),
+                const SizedBox(height: 24),
+                const Text('Stock Opname & Audit Trail',
+                  style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                if (opnames.isEmpty)
+                  const Text('Belum ada stock opname.', style: TextStyle(color: muted)),
+                for (final record in opnames)
+                  Card(child: Padding(padding: const EdgeInsets.all(12),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(record.itemName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text('Sistem: ${record.systemStock} • Fisik: ${record.physicalStock} • Selisih: ${record.difference}'),
+                      Text('Status: ${record.status} • ${record.createdAt}'),
+                      if (record.note.isNotEmpty) Text('Catatan: ${record.note}'),
+                      if (record.resolvedAt != null) Text('Diputuskan: ${record.resolvedAt}'),
+                      if (allowed && record.status == 'pending')
+                        Wrap(spacing: 8, children: [
+                          TextButton(onPressed: () => decideOpname(record, false),
+                            child: const Text('Tolak')),
+                          FilledButton(onPressed: () => decideOpname(record, true),
+                            child: const Text('Setujui')),
+                        ]),
+                    ]),
+                  )),
                 const SizedBox(height: 24),
                 const Text('Riwayat Perubahan Stok', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
