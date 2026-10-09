@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/outlet/active_outlet_store.dart';
 import '../widgets/sync_status_card.dart';
 
 class ManagerDashboard extends StatelessWidget {
@@ -7,16 +8,18 @@ class ManagerDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
+    final outletId = FirefaActiveOutletStore.instance.selectedOutletId;
+
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Manager Dashboard',
+        const Text('Manager Dashboard',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-        SizedBox(height: 16),
-        SyncStatusCard(),
-        SizedBox(height: 16),
-        Text('Operational overview'),
-        Text('• Active orders\n• Outlet activity\n• Inventory monitoring\n• Staff operations'),
+        const SizedBox(height: 16),
+        SyncStatusCard(outletId: outletId),
+        const SizedBox(height: 16),
+        const Text('Operational overview'),
+        const Text('• Active orders\n• Outlet activity\n• Inventory monitoring\n• Staff operations'),
       ],
     );
   }
