@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/auth/role_permissions.dart';
 import '../../core/outlet/active_outlet_store.dart';
 import 'order_models.dart';
+import 'offline_sync_queue.dart';
 import 'order_store.dart';
 
 class OrdersPage extends StatefulWidget {
@@ -20,6 +21,8 @@ class _OrdersPageState extends State<OrdersPage> {
 
   final outletStore = FirefaActiveOutletStore.instance;
   final orderStore = FirefaOrderStore.instance;
+  final syncQueue = FirefaOfflineSyncQueue.instance;
+  bool showSyncEvents = false;
 
   String filter = 'All';
 
@@ -51,12 +54,14 @@ class _OrdersPageState extends State<OrdersPage> {
     super.initState();
     outletStore.addListener(_refresh);
     orderStore.addListener(_refresh);
+    syncQueue.addListener(_refresh);
   }
 
   @override
   void dispose() {
     outletStore.removeListener(_refresh);
     orderStore.removeListener(_refresh);
+    syncQueue.removeListener(_refresh);
     super.dispose();
   }
 
@@ -207,6 +212,8 @@ class _OrdersPageState extends State<OrdersPage> {
           },
         ),
         const SizedBox(height: 22),
+        syncMonitoringPanel(),
+        const SizedBox(height: 22),
         SizedBox(
           height: 44,
           child: ListView(
@@ -264,6 +271,118 @@ class _OrdersPageState extends State<OrdersPage> {
           ),
         for (final order in visibleOrders) orderCard(order),
       ],
+    );
+  }
+
+  Widget syncMonitoringPanel() {
+    final entries = syncQueue.entriesForOutlet(outletId).reversed.toList();
+    int count(FirefaSyncStatus status) =>
+        entries.where((entry) => entry.status == status).length;
+
+    final counters = [
+      ('Pending', count(FirefaSyncStatus.pending), Colors.orange),
+      ('Syncing', count(FirefaSyncStatus.syncing), Colors.blue),
+      ('Synced', count(FirefaSyncStatus.synced), Colors.green),
+      ('Failed', count(FirefaSyncStatus.failed), Colors.red),
+    ];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Icon(Icons.cloud_off_outlined, color: muted),
+              Text(
+                'Sync Monitoring',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: ink),
+              ),
+              Text(
+                'Local Only — Cloud belum terhubung',
+                style: TextStyle(color: muted, fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Antrean perubahan pesanan untuk $outletName. '
+            'Belum ada pengiriman ke server.',
+            style: const TextStyle(color: muted, fontSize: 12),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final counter in counters)
+                chip('${counter.$1}: ${counter.$2}', counter.$3),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextButton.icon(
+            onPressed: () => setState(() => showSyncEvents = !showSyncEvents),
+            icon: Icon(showSyncEvents ? Icons.expand_less : Icons.expand_more),
+            label: Text(showSyncEvents ? 'Tutup riwayat event' : 'Lihat riwayat event (${entries.length})'),
+          ),
+          if (showSyncEvents) ...[
+            const Divider(),
+            if (entries.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  'Belum ada event sinkronisasi untuk outlet ini.',
+                  style: TextStyle(color: muted, fontSize: 12),
+                ),
+              ),
+            for (final entry in entries.take(50))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          entry.orderId,
+                          style: const TextStyle(fontWeight: FontWeight.w600, color: ink),
+                        ),
+                        chip(entry.status.name.toUpperCase(), Colors.orange),
+                        Text(entry.eventType, style: const TextStyle(color: muted, fontSize: 12)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    SelectableText(
+                      'Event: ${entry.eventId}',
+                      style: const TextStyle(color: muted, fontSize: 11),
+                    ),
+                    Text(
+                      'Waktu: ${entry.createdAt.toLocal()}',
+                      style: const TextStyle(color: muted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+            if (entries.length > 50)
+              Text(
+                'Menampilkan 50 event terbaru dari ${entries.length} event.',
+                style: const TextStyle(color: muted, fontSize: 12),
+              ),
+          ],
+        ],
+      ),
     );
   }
 
