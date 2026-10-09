@@ -1,22 +1,40 @@
 import 'package:flutter/material.dart';
+import '../../modules/order_models.dart';
 
 class TopSellingCard extends StatelessWidget {
-  const TopSellingCard({super.key});
+  const TopSellingCard({super.key, required this.orders});
+  final List<FirefaOrder> orders;
 
   static const Color primary = Color(0xFF008F83);
   static const Color dark = Color(0xFF172B4D);
   static const Color muted = Color(0xFF64748B);
 
-  static const List<_MenuData> _items = [
-    _MenuData('Nasi Goreng Spesial', '145 terjual', 0.90),
-    _MenuData('Ayam Geprek', '118 terjual', 0.73),
-    _MenuData('Es Kopi Susu', '96 terjual', 0.60),
-    _MenuData('Mie Goreng', '82 terjual', 0.51),
-    _MenuData('Es Teh Manis', '74 terjual', 0.46),
-  ];
+  List<_MenuData> get items {
+    final quantities = <String, int>{};
+    for (final order in orders) {
+      if (order.paymentStatus != FirefaPaymentStatus.paid ||
+          order.status == FirefaOrderStatus.cancelled) {
+        continue;
+      }
+      for (final item in order.items) {
+        quantities.update(item.productName, (count) => count + item.quantity,
+            ifAbsent: () => item.quantity);
+      }
+    }
+    final sorted = quantities.entries.toList()
+      ..sort((a, b) {
+        final quantity = b.value.compareTo(a.value);
+        return quantity != 0 ? quantity : a.key.compareTo(b.key);
+      });
+    final highest = sorted.isEmpty ? 1 : sorted.first.value;
+    return sorted.take(5).map((entry) => _MenuData(
+      entry.key, '${entry.value} terjual', entry.value / highest,
+    )).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final topItems = items;
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
@@ -44,13 +62,16 @@ class TopSellingCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Data simulasi • Belum terhubung ke laporan penjualan',
+            'Produk dari pesanan Paid lokal',
             style: TextStyle(fontSize: 12, color: muted),
           ),
           const SizedBox(height: 26),
-          for (int i = 0; i < _items.length; i++) ...[
-            _buildMenuItem(i + 1, _items[i]),
-            if (i != _items.length - 1) const SizedBox(height: 25),
+          if (topItems.isEmpty)
+            const Text('Belum ada produk terjual dari pesanan Paid.',
+                style: TextStyle(color: muted)),
+          for (int i = 0; i < topItems.length; i++) ...[
+            _buildMenuItem(i + 1, topItems[i]),
+            if (i != topItems.length - 1) const SizedBox(height: 25),
           ],
         ],
       ),
