@@ -13,6 +13,7 @@ class FirefaOrderStore extends ChangeNotifier {
   static final FirefaOrderStore instance = FirefaOrderStore._();
 
   static const String _storageKey = 'firefa_orders_v1';
+  static const String _combinedKey = 'firefa_orders_outbox_v2';
 
   final List<FirefaOrder> _orders = [];
 
@@ -25,7 +26,8 @@ class FirefaOrderStore extends ChangeNotifier {
     if (_initialized) return;
 
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_storageKey);
+    final combinedRaw = prefs.getString(_combinedKey);
+    final raw = combinedRaw ?? prefs.getString(_storageKey);
 
     if (raw != null && raw.isNotEmpty) {
       try {
@@ -39,6 +41,11 @@ class FirefaOrderStore extends ChangeNotifier {
             .toList();
 
         final savedNumber = decoded['nextNumber'] as int;
+        if (combinedRaw != null) {
+          // Parse both halves before applying either one.
+          final outbox = Map<String, dynamic>.from(decoded['outbox'] as Map);
+          FirefaOfflineSyncQueue.instance.restoreCombinedSnapshot(outbox);
+        }
 
         _orders
           ..clear()
@@ -54,9 +61,12 @@ class FirefaOrderStore extends ChangeNotifier {
 
     // Repair missing outbox events after a prior interrupted write.
     // Legacy local orders are also registered for future synchronization.
-    FirefaOfflineSyncQueue.instance.reconcileOrders(_orders);
+    final repairs = FirefaOfflineSyncQueue.instance.reconcileOrders(_orders);
 
     _initialized = true;
+    if (combinedRaw == null || repairs > 0) {
+      _scheduleSave();
+    }
     notifyListeners();
   }
 
@@ -71,9 +81,10 @@ class FirefaOrderStore extends ChangeNotifier {
 
   void _scheduleSave() {
     final snapshot = jsonEncode({
-      'version': 1,
+      'version': 2,
       'nextNumber': _nextNumber,
       'orders': _orders.map((order) => order.toJson()).toList(),
+      'outbox': FirefaOfflineSyncQueue.instance.exportSnapshot(),
     });
 
     _pendingSave = _pendingSave
@@ -82,7 +93,7 @@ class FirefaOrderStore extends ChangeNotifier {
         })
         .then((_) async {
           final prefs = await SharedPreferences.getInstance();
-          final success = await prefs.setString(_storageKey, snapshot);
+          final success = await prefs.setString(_combinedKey, snapshot);
 
           if (!success) {
             throw StateError('Gagal menyimpan offline orders.');
