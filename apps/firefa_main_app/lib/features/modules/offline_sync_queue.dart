@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -62,6 +63,7 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
   final List<FirefaSyncEntry> _entries = [];
   bool _initialized = false;
   int _nextSequence = 1;
+  final Random _random = Random.secure();
   Future<void> _pendingSave = Future<void>.value();
 
   Future<void> initialize() async {
@@ -106,13 +108,15 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
       .where((entry) => entry.status == FirefaSyncStatus.pending)
       .length;
 
-  /// Event IDs are durable and unique per local installation. Backend must
-  /// enforce idempotency on eventId, scoped to tenant/outlet.
+  /// Random 128-bit event IDs avoid collisions across installations.
+  /// The future backend must still enforce idempotency on eventId.
   FirefaSyncEntry enqueueOrder(FirefaOrder order, String eventType) {
     _ensureInitialized();
     final sequence = _nextSequence++;
+    final bytes = List<int>.generate(16, (_) => _random.nextInt(256));
+    final nonce = bytes.map((value) => value.toRadixString(16).padLeft(2, '0')).join();
     final event = FirefaSyncEntry(
-      eventId: '${order.outletId}:${order.id}:$sequence',
+      eventId: 'evt-$nonce-$sequence',
       outletId: order.outletId,
       orderId: order.id,
       eventType: eventType,
@@ -123,6 +127,27 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     _scheduleSave();
     notifyListeners();
     return event;
+  }
+
+  /// Reconcile restored orders with the latest durable event snapshot.
+  /// Does not replay or send events; creates one repair event only when needed.
+  int reconcileOrders(Iterable<FirefaOrder> orders) {
+    _ensureInitialized();
+    var repaired = 0;
+    for (final order in orders) {
+      FirefaSyncEntry? latest;
+      for (final entry in _entries) {
+        if (entry.outletId == order.outletId && entry.orderId == order.id) {
+          latest = entry;
+        }
+      }
+      if (latest == null ||
+          jsonEncode(latest.orderSnapshot) != jsonEncode(order.toJson())) {
+        enqueueOrder(order, 'order.recovered');
+        repaired++;
+      }
+    }
+    return repaired;
   }
 
   void _scheduleSave() {
