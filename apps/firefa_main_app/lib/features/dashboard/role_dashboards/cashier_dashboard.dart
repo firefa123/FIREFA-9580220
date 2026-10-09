@@ -5,6 +5,15 @@ class CashierDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Text('Cashier Dashboard');
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Cashier Dashboard',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        SizedBox(height: 16),
+        Text('Transaction workspace'),
+        Text('• New order\n• Payment\n• Active transactions\n• Receipt printing'),
+      ],
+    );
   }
 }
