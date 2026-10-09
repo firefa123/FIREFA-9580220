@@ -229,6 +229,9 @@ class _OrdersPageState extends State<OrdersPage> {
         const Text('Filter status pesanan dan pembayaran • Outlet aktif',
             style: TextStyle(fontSize: 12, color: muted)),
         const SizedBox(height: 12),
+        const Text('Status order',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: muted)),
+        const SizedBox(height: 8),
         SizedBox(
           height: 44,
           child: ListView(
@@ -243,7 +246,6 @@ class _OrdersPageState extends State<OrdersPage> {
                 'Served',
                 'Completed',
                 'Cancelled',
-                'Unpaid',
               ])
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
@@ -259,6 +261,23 @@ class _OrdersPageState extends State<OrdersPage> {
                 ),
             ],
           ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            const Text('Pembayaran:',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: muted)),
+            ChoiceChip(
+              label: const Text('Unpaid'),
+              selected: filter == 'Unpaid',
+              showCheckmark: false,
+              selectedColor: const Color(0xFFE0F2F1),
+              onSelected: (_) => setState(() => filter = filter == 'Unpaid' ? 'All' : 'Unpaid'),
+            ),
+          ],
         ),
         const SizedBox(height: 18),
         if (visibleOrders.isEmpty)
