@@ -1,3 +1,5 @@
+library;
+
 /// Owner settings navigation foundation.
 
 class OwnerSettingsRoute {
