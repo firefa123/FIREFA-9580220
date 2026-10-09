@@ -49,11 +49,17 @@ class _ReportsPageState extends State<ReportsPage> {
     if (!allowed || outlet.selectedOutletId != outletId) return [];
     final result = orders.ordersForOutlet(outletId).where((order) {
       if (statusFilter == 'paid' &&
-          order.paymentStatus != FirefaPaymentStatus.paid) return false;
+          order.paymentStatus != FirefaPaymentStatus.paid) {
+        return false;
+      }
       if (statusFilter == 'unpaid' &&
-          order.paymentStatus != FirefaPaymentStatus.unpaid) return false;
+          order.paymentStatus != FirefaPaymentStatus.unpaid) {
+        return false;
+      }
       if (statusFilter == 'completed' &&
-          order.status != FirefaOrderStatus.completed) return false;
+          order.status != FirefaOrderStatus.completed) {
+        return false;
+      }
       if (dateRange != null) {
         final day = DateUtils.dateOnly(order.createdAt);
         if (day.isBefore(dateRange!.start) || day.isAfter(dateRange!.end)) {
@@ -68,7 +74,7 @@ class _ReportsPageState extends State<ReportsPage> {
   String _money(int value) {
     final digits = value.abs().toString();
     final grouped = digits.replaceAllMapped(
-        RegExp(r'\\B(?=(\\d{3})+(?!\\d))'), (match) => '.');
+        RegExp(r'\B(?=(\d{3})+(?!\d))'), (match) => '.');
     return 'Rp ${value < 0 ? '-' : ''}$grouped';
   }
 
@@ -81,7 +87,9 @@ class _ReportsPageState extends State<ReportsPage> {
 
   Future<void> _copyCsv(String outletId, List<FirefaOrder> visible) async {
     if (!allowed || outlet.selectedOutletId != outletId ||
-        visible.any((order) => order.outletId != outletId)) return;
+        visible.any((order) => order.outletId != outletId)) {
+      return;
+    }
     final csv = <String>[
       'Order ID,Outlet ID,Tanggal,Tipe,Meja,Status,Pembayaran,Item Qty,Subtotal,Diskon,Pajak,Service,Total',
       for (final order in visible)
@@ -94,9 +102,13 @@ class _ReportsPageState extends State<ReportsPage> {
           order.total.toString(),
         ].map(_csvCell).join(','),
     ].join('\r\n');
-    if (!mounted || !allowed || outlet.selectedOutletId != outletId) return;
+    if (!mounted || !allowed || outlet.selectedOutletId != outletId) {
+      return;
+    }
     await Clipboard.setData(ClipboardData(text: csv));
-    if (!mounted || !allowed || outlet.selectedOutletId != outletId) return;
+    if (!mounted || !allowed || outlet.selectedOutletId != outletId) {
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text('CSV ${visible.length} pesanan disalin ke clipboard.'),
     ));
