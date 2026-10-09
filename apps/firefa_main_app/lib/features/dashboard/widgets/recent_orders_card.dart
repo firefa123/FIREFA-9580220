@@ -1,27 +1,30 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
+import '../../modules/order_models.dart';
+
+/// Read-only, outlet-scoped view. Orders are supplied by the dashboard.
 class RecentOrdersCard extends StatelessWidget {
-  const RecentOrdersCard({super.key});
+  final List<FirefaOrder> orders;
 
-  static const Color dark = Color(0xFF172B4D);
-  static const Color muted = Color(0xFF64748B);
+  const RecentOrdersCard({super.key, this.orders = const []});
 
-  static const List<_OrderData> _orders = [
-    _OrderData('#ORD-1048', 'Meja 05', '10:42', 'Rp 185.000', 'Completed'),
-    _OrderData('#ORD-1047', 'Takeaway', '10:38', 'Rp 92.000', 'Preparing'),
-    _OrderData('#ORD-1046', 'Meja 12', '10:31', 'Rp 245.000', 'Pending'),
-    _OrderData('#ORD-1045', 'Delivery', '10:25', 'Rp 138.000', 'Completed'),
-    _OrderData('#ORD-1044', 'Meja 03', '10:18', 'Rp 76.000', 'Completed'),
-  ];
+  String _rupiah(int value) =>
+      'Rp ${value.toString().replaceAllMapped(RegExp(r'\\B(?=(\\d{3})+(?!\\d))'), (_) => '.')}';
 
   @override
   Widget build(BuildContext context) {
+    final latest = orders.toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final visible = latest.take(5).toList();
+
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE8EDF2)),
+        border: Border.all(color: AppTheme.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -34,113 +37,107 @@ class RecentOrdersCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: dark,
+                    color: AppTheme.textPrimary,
                   ),
                 ),
               ),
-              Icon(Icons.receipt_long_outlined, color: muted),
+              Icon(Icons.receipt_long_outlined,
+                  color: AppTheme.textSecondary),
             ],
           ),
           const SizedBox(height: 6),
           const Text(
-            'Aktivitas pesanan terbaru',
-            style: TextStyle(fontSize: 12, color: muted),
+            '5 pesanan terbaru dari outlet aktif • Data lokal',
+            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 20),
-          for (int i = 0; i < _orders.length; i++) ...[
-            _buildOrder(_orders[i]),
-            if (i != _orders.length - 1)
-              const Divider(height: 24, color: Color(0xFFEDF1F5)),
+          if (visible.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: Text(
+                  'Belum ada pesanan di outlet ini. Buat pesanan melalui POS.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppTheme.textSecondary),
+                ),
+              ),
+            ),
+          for (int i = 0; i < visible.length; i++) ...[
+            _buildOrder(visible[i]),
+            if (i != visible.length - 1)
+              const Divider(height: 24, color: AppTheme.border),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildOrder(_OrderData order) {
-    Color statusColor;
-    Color statusBackground;
-
-    switch (order.status) {
-      case 'Completed':
-        statusColor = const Color(0xFF047857);
-        statusBackground = const Color(0xFFD1FAE5);
-        break;
-
-      case 'Preparing':
-        statusColor = const Color(0xFFB45309);
-        statusBackground = const Color(0xFFFEF3C7);
-        break;
-
-      default:
-        statusColor = const Color(0xFF475569);
-        statusBackground = const Color(0xFFF1F5F9);
-    }
+  Widget _buildOrder(FirefaOrder order) {
+    final statusColor = switch (order.status) {
+      FirefaOrderStatus.completed => const Color(0xFF047857),
+      FirefaOrderStatus.cancelled => const Color(0xFFB91C1C),
+      FirefaOrderStatus.preparing => const Color(0xFFB45309),
+      _ => AppTheme.primary,
+    };
+    final local = order.createdAt.toLocal();
+    final time = '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+    final type = order.tableId == null
+        ? order.orderType
+        : '${order.orderType} • Meja ${order.tableId}';
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 360;
-
         final details = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              order.id,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
-                color: dark,
-              ),
-            ),
+            Text(order.id,
+                style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimary)),
             const SizedBox(height: 4),
-            Text(
-              '${order.type} • ${order.time}',
-              style: const TextStyle(color: muted, fontSize: 12),
-            ),
+            Text('$type • $time',
+                style: const TextStyle(
+                    fontSize: 12, color: AppTheme.textSecondary)),
           ],
         );
-
         final amountAndStatus = Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text(
-              order.amount,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-                color: dark,
-              ),
-            ),
+            Text(_rupiah(order.total),
+                style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary)),
             const SizedBox(height: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
               decoration: BoxDecoration(
-                color: statusBackground,
+                color: statusColor.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                order.status,
+                order.status.label,
                 style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: statusColor,
-                ),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: statusColor),
               ),
             ),
           ],
         );
-
-        if (compact) {
+        if (constraints.maxWidth < 360) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               details,
               const SizedBox(height: 10),
-              Align(alignment: Alignment.centerRight, child: amountAndStatus),
+              Align(
+                  alignment: Alignment.centerRight,
+                  child: amountAndStatus),
             ],
           );
         }
-
         return Row(
           children: [
             Expanded(child: details),
@@ -151,14 +148,4 @@ class RecentOrdersCard extends StatelessWidget {
       },
     );
   }
-}
-
-class _OrderData {
-  final String id;
-  final String type;
-  final String time;
-  final String amount;
-  final String status;
-
-  const _OrderData(this.id, this.type, this.time, this.amount, this.status);
 }
