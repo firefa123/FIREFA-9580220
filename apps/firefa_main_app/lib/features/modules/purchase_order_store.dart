@@ -109,7 +109,9 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
     final inventory = FirefaInventoryStore.instance.forOutlet(outletId);
     final matches = suppliers.where((s) => s.id == supplierId && s.isActive);
     final items = inventory.where((item) => item.id == itemId);
-    if (matches.isEmpty || items.isEmpty) return false;
+    if (matches.isEmpty || items.isEmpty) {
+      return false;
+    }
     final supplier = matches.first;
     final item = items.first;
     _orders.add(FirefaPurchaseOrder(
@@ -126,10 +128,14 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
   }
 
   bool cancel({required String outletId, required String orderId}) {
-    if (!_initialized) return false;
+    if (!_initialized) {
+      return false;
+    }
     final index = _orders.indexWhere((po) =>
         po.outletId == outletId && po.id == orderId && po.status == 'ordered');
-    if (index < 0) return false;
+    if (index < 0) {
+      return false;
+    }
     _orders[index] = _orders[index].withStatus('cancelled', null);
     notifyListeners();
     _save();
@@ -137,10 +143,14 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
   }
 
   bool receive({required String outletId, required String orderId}) {
-    if (!_initialized) return false;
+    if (!_initialized) {
+      return false;
+    }
     final index = _orders.indexWhere((po) =>
         po.outletId == outletId && po.id == orderId && po.status == 'ordered');
-    if (index < 0) return false;
+    if (index < 0) {
+      return false;
+    }
     final order = _orders[index];
     final inventory = FirefaInventoryStore.instance;
     final items = inventory.forOutlet(outletId)
@@ -153,7 +163,9 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
       outletId: outletId, id: order.itemId, type: 'in',
       amount: order.quantity, note: 'Penerimaan PO ${order.id}',
     );
-    if (!success) return false;
+    if (!success) {
+      return false;
+    }
     _orders[index] = order.withStatus(
       'received', DateTime.now().toIso8601String(),
     );
