@@ -25,7 +25,7 @@ class TablesPage extends StatelessWidget {
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                const Icon(Icons.table-restaurant, color: primary, size: 23),
+                const Icon(Icons.table_restaurant, color: primary, size: 23),
                 Text('Tables Management',
                     style: TextStyle(
                       fontSize: compact ? 20 : 24,
@@ -87,7 +87,7 @@ class TablesPage extends StatelessWidget {
                               color: const Color(0xFFE0F2F1),
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: const Icon(Icons.table-restaurant,
+                            child: const Icon(Icons.table_restaurant,
                                 color: primary, size: 34),
                           ),
                           const SizedBox(height: 18),
