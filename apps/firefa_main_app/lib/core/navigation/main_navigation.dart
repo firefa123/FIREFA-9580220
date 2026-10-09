@@ -27,39 +27,25 @@ class _FirefaMainNavigationState extends State<FirefaMainNavigation> {
 
   Widget _pageForModule(String id) {
     switch (id) {
-      case 'dashboard':
-        return DashboardPage(role: widget.role);
-      case 'pos':
-        return const PosPage();
-      case 'orders':
-        return const OrdersPage();
-      case 'tables':
-        return const TablesPage();
-      case 'menu':
-        return const MenuPage();
-      case 'inventory':
-        return const InventoryPage();
-      case 'reports':
-        return const ReportsPage();
-      case 'settings':
-        return const SettingsPage();
-      case 'suppliers':
-        return const SupplierPage();
-      case 'purchasing':
-        return const PurchaseOrderPage();
-      default:
-        return const Center(child: Text('Module belum tersedia'));
+      case 'dashboard': return DashboardPage(role: widget.role);
+      case 'pos': return const PosPage();
+      case 'orders': return const OrdersPage();
+      case 'tables': return const TablesPage();
+      case 'menu': return const MenuPage();
+      case 'inventory': return const InventoryPage();
+      case 'reports': return const ReportsPage();
+      case 'settings': return const SettingsPage();
+      case 'suppliers': return const SupplierPage();
+      case 'purchasing': return const PurchaseOrderPage();
+      default: return const Center(child: Text('Module belum tersedia'));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final modules = FirefaNavigation.accessibleModules(widget.role);
-
     if (modules.isEmpty) {
-      return const Scaffold(
-        body: Center(child: Text('Tidak ada modul tersedia')),
-      );
+      return const Scaffold(body: Center(child: Text('Tidak ada modul tersedia')));
     }
 
     final safeIndex = selectedIndex >= modules.length ? 0 : selectedIndex;
@@ -71,11 +57,30 @@ class _FirefaMainNavigationState extends State<FirefaMainNavigation> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
-            child: Center(
-              child: Text(widget.role.name.toUpperCase()),
-            ),
+            child: Center(child: Text(widget.role.name.toUpperCase())),
           ),
         ],
+      ),
+      drawer: Drawer(
+        child: SafeArea(
+          child: ListView(
+            children: [
+              const DrawerHeader(
+                child: Text('FIREFA', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+              ),
+              for (var i = 0; i < modules.length; i++)
+                ListTile(
+                  leading: Icon(modules[i].icon),
+                  title: Text(modules[i].title),
+                  selected: i == safeIndex,
+                  onTap: () {
+                    setState(() => selectedIndex = i);
+                    Navigator.pop(context);
+                  },
+                ),
+            ],
+          ),
+        ),
       ),
       body: _pageForModule(selectedModule.id),
       bottomNavigationBar: NavigationBar(
@@ -84,7 +89,7 @@ class _FirefaMainNavigationState extends State<FirefaMainNavigation> {
           setState(() => selectedIndex = index);
         },
         destinations: [
-          for (final module in modules.take(5))
+          for (final module in modules)
             NavigationDestination(
               icon: Icon(module.icon),
               label: module.title,
