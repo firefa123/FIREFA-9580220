@@ -5,6 +5,15 @@ class KitchenDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Text('Kitchen Dashboard');
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Kitchen / Bar Dashboard',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        SizedBox(height: 16),
+        Text('Kitchen queue'),
+        Text('• New orders\n• Preparing\n• Ready to serve'),
+      ],
+    );
   }
 }
