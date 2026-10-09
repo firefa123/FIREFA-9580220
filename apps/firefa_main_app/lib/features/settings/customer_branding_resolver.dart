@@ -1,3 +1,5 @@
+library;
+
 /// Customer branding resolver foundation.
 
 class CustomerBrandingResolver {
