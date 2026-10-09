@@ -489,7 +489,7 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         _buildStats(orders),
         const SizedBox(height: 24),
-        const RevenueCard(),
+        RevenueCard(orders: orders),
         const SizedBox(height: 24),
         _buildOperationalOverview(orders),
       ],
@@ -568,7 +568,7 @@ class _DashboardPageState extends State<DashboardPage> {
             children: [
               RecentOrdersCard(orders: orders),
               const SizedBox(height: 20),
-              const TopSellingCard(),
+              const TopSellingCard(orders: orders),
             ],
           );
         }
