@@ -6,6 +6,8 @@ import '../../core/outlet/active_outlet_store.dart';
 import 'order_models.dart';
 import 'offline_sync_queue.dart';
 import 'order_store.dart';
+import 'receipt_formatter.dart';
+import 'settings_store.dart';
 
 class OrdersPage extends StatefulWidget {
   const OrdersPage({super.key});
@@ -114,6 +116,40 @@ class _OrdersPageState extends State<OrdersPage> {
       return;
     }
     message('CSV ${rows.length} pesanan disalin ke clipboard.');
+  }
+
+  Future<void> _copyReceipt(FirefaOrder order) async {
+    final selectedOutlet = outletId;
+    if (!outletStore.canAccessOutlet(selectedOutlet) ||
+        order.outletId != selectedOutlet ||
+        !FirefaAccess.can(outletStore.role, FirefaPermission.ordersView)) {
+      return;
+    }
+    try {
+      final settingsStore = FirefaSettingsStore.instance;
+      await settingsStore.initialize();
+      if (!mounted || outletId != selectedOutlet ||
+          !outletStore.canAccessOutlet(selectedOutlet)) {
+        return;
+      }
+      final current = orderStore.findOrder(selectedOutlet, order.id);
+      if (current == null) return;
+      final receipt = FirefaReceiptFormatter.format(
+        order: current,
+        outletName: outletName,
+        settings: settingsStore.forOutlet(selectedOutlet),
+      );
+      await Clipboard.setData(ClipboardData(text: receipt));
+      if (!mounted || outletId != selectedOutlet ||
+          !outletStore.canAccessOutlet(selectedOutlet)) {
+        return;
+      }
+      message('Struk ${order.id} disalin ke clipboard.');
+    } catch (_) {
+      if (mounted && outletId == selectedOutlet) {
+        message('Struk tidak dapat disalin. Periksa pengaturan lokal.');
+      }
+    }
   }
 
   Future<void> _chooseDateRange() async {
@@ -771,6 +807,13 @@ class _OrdersPageState extends State<OrdersPage> {
               spacing: 8,
               runSpacing: 8,
               children: [
+                OutlinedButton.icon(
+                  onPressed: outletStore.canAccessOutlet(outletId)
+                      ? () => _copyReceipt(order)
+                      : null,
+                  icon: const Icon(Icons.receipt_long_outlined, size: 16),
+                  label: const Text('Salin Struk'),
+                ),
                 if (order.status.next != null)
                   FilledButton.icon(
                     onPressed:
