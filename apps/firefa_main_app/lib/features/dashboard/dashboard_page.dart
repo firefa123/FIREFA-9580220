@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'widgets/dashboard_sidebar.dart';
 import 'widgets/stat_card.dart';
 import 'widgets/revenue_card.dart';
-import 'widgets/dashboard_sidebar.dart';
+import 'widgets/recent_orders_card.dart';
+import 'widgets/top_selling_card.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -14,13 +16,45 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   int selectedIndex = 0;
   bool sidebarCollapsed = true;
-
   String selectedOutlet = 'Semua Outlet';
 
   final List<String> outlets = const [
     'Semua Outlet',
     'Outlet Utama',
     'Outlet 2',
+  ];
+
+  static const List<String> pageTitles = [
+    'Dashboard',
+    'Point of Sale',
+    'Orders',
+    'Tables',
+    'Menu Management',
+    'Inventory',
+    'Reports',
+    'Settings',
+  ];
+
+  static const List<String> pageDescriptions = [
+    'Pantau performa operasional bisnis Anda.',
+    'Kelola transaksi dan pembayaran pelanggan.',
+    'Pantau dan kelola seluruh pesanan.',
+    'Atur meja dan aktivitas pelayanan.',
+    'Kelola produk, kategori, dan harga menu.',
+    'Pantau stok bahan baku dan persediaan.',
+    'Analisis penjualan dan performa bisnis.',
+    'Kelola preferensi dan konfigurasi bisnis.',
+  ];
+
+  static const List<IconData> pageIcons = [
+    Icons.dashboard_outlined,
+    Icons.point_of_sale_outlined,
+    Icons.receipt_long_outlined,
+    Icons.table_bar_outlined,
+    Icons.restaurant_menu_outlined,
+    Icons.inventory_2_outlined,
+    Icons.analytics_outlined,
+    Icons.settings_outlined,
   ];
 
   @override
@@ -38,13 +72,16 @@ class _DashboardPageState extends State<DashboardPage> {
               });
             },
             onSelected: (index) {
-              setState(() {
-                selectedIndex = index;
-              });
+              if (index >= 0 && index < pageTitles.length) {
+                setState(() {
+                  selectedIndex = index;
+                });
+              }
             },
           ),
           Expanded(
             child: SingleChildScrollView(
+              key: ValueKey(selectedIndex),
               padding: const EdgeInsets.all(24),
               child: Center(
                 child: ConstrainedBox(
@@ -54,26 +91,13 @@ class _DashboardPageState extends State<DashboardPage> {
                     children: [
                       _buildTopbar(),
                       const SizedBox(height: 28),
-                      const Text(
-                        'Dashboard Overview',
-                        style: TextStyle(
-                          fontSize: 25,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF172B4D),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Pantau performa operasional bisnis Anda.',
-                        style: TextStyle(
-                          color: Color(0xFF64748B),
-                          fontSize: 14,
-                        ),
-                      ),
+                      _buildPageHeading(),
                       const SizedBox(height: 24),
-                      _buildStats(),
+                      if (selectedIndex == 0)
+                        _buildDashboardContent()
+                      else
+                        _buildModuleContent(),
                       const SizedBox(height: 24),
-                      const RevenueCard(),
                     ],
                   ),
                 ),
@@ -110,9 +134,8 @@ class _DashboardPageState extends State<DashboardPage> {
         );
 
         final actions = Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            Flexible(child: _buildOutletSelector()),
+            Expanded(child: _buildOutletSelector()),
             const SizedBox(width: 12),
             const CircleAvatar(
               radius: 20,
@@ -125,7 +148,11 @@ class _DashboardPageState extends State<DashboardPage> {
         if (compact) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [greeting, const SizedBox(height: 18), actions],
+            children: [
+              greeting,
+              const SizedBox(height: 18),
+              SizedBox(width: double.infinity, child: actions),
+            ],
           );
         }
 
@@ -133,7 +160,7 @@ class _DashboardPageState extends State<DashboardPage> {
           children: [
             Expanded(child: greeting),
             const SizedBox(width: 16),
-            Flexible(child: actions),
+            SizedBox(width: 235, child: actions),
           ],
         );
       },
@@ -176,12 +203,47 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  Widget _buildPageHeading() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          selectedIndex == 0 ? 'Dashboard Overview' : pageTitles[selectedIndex],
+          style: const TextStyle(
+            fontSize: 25,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF172B4D),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          pageDescriptions[selectedIndex],
+          style: const TextStyle(color: Color(0xFF64748B), fontSize: 14),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDashboardContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildStats(),
+        const SizedBox(height: 24),
+        const RevenueCard(),
+        const SizedBox(height: 24),
+        _buildOperationalOverview(),
+      ],
+    );
+  }
+
   Widget _buildStats() {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
 
         int columns = 1;
+
         if (width >= 1050) {
           columns = 4;
         } else if (width >= 580) {
@@ -233,6 +295,103 @@ class _DashboardPageState extends State<DashboardPage> {
           ],
         );
       },
+    );
+  }
+
+  Widget _buildOperationalOverview() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 900) {
+          return const Column(
+            children: [
+              RecentOrdersCard(),
+              SizedBox(height: 20),
+              TopSellingCard(),
+            ],
+          );
+        }
+
+        return const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(flex: 6, child: RecentOrdersCard()),
+            SizedBox(width: 20),
+            Expanded(flex: 4, child: TopSellingCard()),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildModuleContent() {
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(minHeight: 400),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE8EDF2)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(height: 45),
+          Container(
+            width: 86,
+            height: 86,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE0F2F1),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Icon(
+              pageIcons[selectedIndex],
+              size: 42,
+              color: const Color(0xFF009688),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            pageTitles[selectedIndex],
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF172B4D),
+            ),
+          ),
+          const SizedBox(height: 10),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Text(
+              pageDescriptions[selectedIndex],
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF64748B),
+                height: 1.6,
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Text(
+              'Module UI • Coming Soon',
+              style: TextStyle(
+                color: Color(0xFF64748B),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 45),
+        ],
+      ),
     );
   }
 }
