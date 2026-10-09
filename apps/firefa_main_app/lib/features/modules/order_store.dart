@@ -198,6 +198,7 @@ class FirefaOrderStore extends ChangeNotifier {
       return false;
     }
 
+    FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
     _scheduleSave();
     notifyListeners();
     return true;
@@ -210,6 +211,7 @@ class FirefaOrderStore extends ChangeNotifier {
       return false;
     }
 
+    FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
     _scheduleSave();
     notifyListeners();
     return true;
