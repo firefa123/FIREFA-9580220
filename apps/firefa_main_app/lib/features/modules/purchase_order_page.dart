@@ -475,6 +475,36 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
       final supplierIds = all.map((po) => po.supplierId).toSet();
       final effectiveSupplier = supplierIds.contains(supplierFilter)
           ? supplierFilter : 'all';
+      final today = DateUtils.dateOnly(DateTime.now());
+      String reminderStatus(FirefaPurchaseOrder po) {
+        if (po.status != 'ordered' && po.status != 'partial') {
+          return 'inactive';
+        }
+        final due = po.followUpDate == null
+            ? null : DateTime.tryParse(po.followUpDate!);
+        if (due == null) return 'unscheduled';
+        final day = DateUtils.dateOnly(due);
+        if (day.isBefore(today)) return 'overdue';
+        if (day.isAtSameMomentAs(today)) return 'today';
+        return 'upcoming';
+      }
+      final activeReminders = all.where((po) =>
+          po.status == 'ordered' || po.status == 'partial').toList();
+      final overdueReminders = activeReminders.where((po) =>
+          reminderStatus(po) == 'overdue').length;
+      final todayReminders = activeReminders.where((po) =>
+          reminderStatus(po) == 'today').length;
+      final upcomingReminders = activeReminders.where((po) =>
+          reminderStatus(po) == 'upcoming').length;
+      final unscheduledReminders = activeReminders.where((po) =>
+          reminderStatus(po) == 'unscheduled').length;
+      final reminderPriority = activeReminders.where((po) =>
+          reminderStatus(po) == 'overdue' ||
+          reminderStatus(po) == 'today').toList()
+        ..sort((a, b) {
+          final byDate = (a.followUpDate ?? '').compareTo(b.followUpDate ?? '');
+          return byDate != 0 ? byDate : a.id.compareTo(b.id);
+        });
       final visible = all.where((po) {
         final query = search.trim().toLowerCase();
         final date = DateTime.tryParse(po.createdAt);
