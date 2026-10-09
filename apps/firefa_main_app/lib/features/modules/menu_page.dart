@@ -21,6 +21,8 @@ class _MenuPageState extends State<MenuPage> {
   final outlet = FirefaActiveOutletStore.instance;
   final store = FirefaMenuStore.instance;
   late final Future<void> ready;
+  String menuSearch = '';
+  String menuStatus = 'all';
 
   @override
   void initState() {
@@ -269,6 +271,13 @@ class _MenuPageState extends State<MenuPage> {
         }
         final items = store.forOutlet(outlet.selectedOutletId);
         final active = items.where((item) => item.isActive).length;
+        final query = menuSearch.trim().toLowerCase();
+        final visible = items.where((item) =>
+            (menuStatus == 'all' ||
+                (menuStatus == 'active' && item.isActive) ||
+                (menuStatus == 'inactive' && !item.isActive)) &&
+            (query.isEmpty || item.name.toLowerCase().contains(query))).toList()
+          ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
         return LayoutBuilder(
           builder: (context, constraints) {
             final narrow = constraints.maxWidth < 520;
@@ -301,6 +310,29 @@ class _MenuPageState extends State<MenuPage> {
                   'Katalog lokal • Belum terhubung dengan produk POS, checkout, atau cloud',
                   style: TextStyle(fontSize: 12, color: muted),
                 ),
+                const SizedBox(height: 12),
+                Wrap(spacing: 10, runSpacing: 10, children: [
+                  SizedBox(width: 240, child: TextFormField(
+                    decoration: const InputDecoration(
+                      labelText: 'Cari nama menu',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) => setState(() => menuSearch = value),
+                  )),
+                  DropdownButton<String>(
+                    value: menuStatus,
+                    items: const [
+                      DropdownMenuItem(value: 'all', child: Text('Semua status')),
+                      DropdownMenuItem(value: 'active', child: Text('Aktif')),
+                      DropdownMenuItem(value: 'inactive', child: Text('Nonaktif')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) setState(() => menuStatus = value);
+                    },
+                  ),
+                  Text('Menampilkan ${visible.length} dari ${items.length} menu'),
+                ]),
                 const SizedBox(height: 18),
                 if (items.isEmpty)
                   Container(
@@ -323,11 +355,16 @@ class _MenuPageState extends State<MenuPage> {
                       ],
                     ),
                   ),
-                if (items.isNotEmpty)
+                if (items.isNotEmpty && visible.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text('Tidak ada menu yang sesuai filter.'),
+                  ),
+                if (visible.isNotEmpty)
                   GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: items.length,
+                    itemCount: visible.length,
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: constraints.maxWidth >= 950
                           ? 4
@@ -341,7 +378,7 @@ class _MenuPageState extends State<MenuPage> {
                       mainAxisSpacing: 12,
                     ),
                     itemBuilder: (context, index) {
-                      final item = items[index];
+                      final item = visible[index];
                       return Container(
                         padding: const EdgeInsets.all(15),
                         decoration: BoxDecoration(
