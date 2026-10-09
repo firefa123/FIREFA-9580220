@@ -304,7 +304,7 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
     if (!mounted || !allowed || outlet.selectedOutletId != selectedOutlet) {
       return;
     }
-    await Clipboard.setData(ClipboardData(text: lines.join('\\r\\n')));
+    await Clipboard.setData(ClipboardData(text: lines.join('\r\n')));
     _message('Laporan tindak lanjut ${active.length} PO aktif disalin sebagai CSV.');
   }
 
