@@ -64,6 +64,67 @@ class _TablesPageState extends State<TablesPage> {
     }
   }
 
+  Future<void> editTable(FirefaTable table) async {
+    if (!allowed || table.outletId != outlet.selectedOutletId) return;
+    final originalOutletId = table.outletId;
+    final controller = TextEditingController(text: table.name);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit Nama Meja'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 40,
+          decoration: const InputDecoration(labelText: 'Nama meja'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Batal')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text),
+              child: const Text('Simpan')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || name == null) return;
+    if (!allowed || outlet.selectedOutletId != originalOutletId) return;
+    if (!store.rename(originalOutletId, table.id, name)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Nama meja tidak valid atau sudah digunakan di outlet ini.'),
+      ));
+    }
+  }
+
+  Future<void> deleteTable(FirefaTable table) async {
+    if (!allowed || table.outletId != outlet.selectedOutletId) return;
+    final originalOutletId = table.outletId;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Hapus Meja?'),
+        content: Text('Meja "${table.name}" akan dihapus dari outlet ini. '
+            'Tindakan ini tidak dapat dibatalkan. Data pesanan tidak diubah.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Batal')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Hapus Meja'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    if (!allowed || outlet.selectedOutletId != originalOutletId) return;
+    if (!store.remove(originalOutletId, table.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Meja tidak ditemukan atau tidak dapat dihapus.'),
+      ));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<void>(
@@ -152,9 +213,30 @@ class _TablesPageState extends State<TablesPage> {
                             Text(table.occupied ? 'Terisi (manual)' : 'Tersedia',
                                 style: TextStyle(color: table.occupied ? Colors.deepOrange : primary, fontWeight: FontWeight.w600)),
                             const Spacer(),
-                            OutlinedButton(
-                              onPressed: allowed ? () => store.setOccupied(outlet.selectedOutletId, table.id, !table.occupied) : null,
-                              child: Text(table.occupied ? 'Tandai Tersedia' : 'Tandai Terisi'),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: allowed ? () => store.setOccupied(outlet.selectedOutletId, table.id, !table.occupied) : null,
+                                    child: Text(table.occupied ? 'Tersedia' : 'Terisi'),
+                                  ),
+                                ),
+                                PopupMenuButton<String>(
+                                  tooltip: 'Kelola ${table.name}',
+                                  enabled: allowed,
+                                  onSelected: (action) {
+                                    if (action == 'edit') {
+                                      editTable(table);
+                                    } else if (action == 'delete') {
+                                      deleteTable(table);
+                                    }
+                                  },
+                                  itemBuilder: (_) => const [
+                                    PopupMenuItem(value: 'edit', child: Text('Edit Nama')),
+                                    PopupMenuItem(value: 'delete', child: Text('Hapus Meja')),
+                                  ],
+                                ),
+                              ],
                             ),
                           ],
                         ),
