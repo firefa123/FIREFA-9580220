@@ -69,7 +69,7 @@ class _MenuPageState extends State<MenuPage> {
         [item.id, item.outletId, item.name, item.category,
          item.price.toString(), item.isActive ? 'Aktif' : 'Nonaktif']
             .map(_csvCell).join(','),
-    ].join('\\r\\n');
+    ].join('\r\n');
     await Clipboard.setData(ClipboardData(text: csv));
     if (!mounted || !allowed || outlet.selectedOutletId != selectedOutlet) {
       return;
