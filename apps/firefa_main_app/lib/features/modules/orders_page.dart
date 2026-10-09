@@ -235,6 +235,13 @@ class _OrdersPageState extends State<OrdersPage> {
           order.status != FirefaOrderStatus.cancelled;
     }).length;
 
+    final paidOrders = currentOrders.where((order) =>
+        order.paymentStatus == FirefaPaymentStatus.paid &&
+        order.status != FirefaOrderStatus.cancelled).toList();
+    final paidTotal = paidOrders.fold<int>(0, (sum, order) => sum + order.total);
+    final completed = currentOrders.where((order) =>
+        order.status == FirefaOrderStatus.completed).length;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -288,6 +295,18 @@ class _OrdersPageState extends State<OrdersPage> {
             );
           },
         ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          children: [
+            Chip(label: Text('Completed: $completed')),
+            Chip(label: Text('Paid: ${paidOrders.length}')),
+            Chip(label: Text('Total pembayaran tercatat: ${rupiah(paidTotal)}')),
+          ],
+        ),
+        const Text('Ringkasan pembayaran demo lokal, bukan settlement payment gateway.',
+            style: TextStyle(fontSize: 12, color: muted)),
         const SizedBox(height: 22),
         syncMonitoringPanel(),
         const SizedBox(height: 22),
@@ -383,6 +402,24 @@ class _OrdersPageState extends State<OrdersPage> {
             if (dateRange != null)
               TextButton(onPressed: () => setState(() => dateRange = null),
                 child: const Text('Hapus tanggal')),
+            OutlinedButton.icon(
+              onPressed: () {
+                final today = DateUtils.dateOnly(DateTime.now());
+                setState(() => dateRange = DateTimeRange(start: today, end: today));
+              },
+              icon: const Icon(Icons.today_outlined),
+              label: const Text('Hari ini'),
+            ),
+            TextButton.icon(
+              onPressed: () => setState(() {
+                filter = 'All';
+                paymentFilter = 'all';
+                searchQuery = '';
+                dateRange = null;
+              }),
+              icon: const Icon(Icons.filter_alt_off_outlined),
+              label: const Text('Reset filter'),
+            ),
             OutlinedButton.icon(
               onPressed: canManage && outletStore.canAccessOutlet(outletId)
                   ? _copyOrdersCsv : null,
