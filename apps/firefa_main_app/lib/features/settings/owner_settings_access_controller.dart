@@ -1,3 +1,5 @@
+library;
+
 /// Owner settings access controller foundation.
 
 class OwnerSettingsAccessController {
