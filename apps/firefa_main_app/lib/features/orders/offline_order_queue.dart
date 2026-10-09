@@ -14,6 +14,10 @@ class OfflineOrderQueue {
         .toList();
   }
 
+  Future<List<OfflineOrder>> getPendingOrders() async {
+    return getOrders();
+  }
+
   Future<void> add(OfflineOrder order) async {
     final orders = await getOrders();
 
