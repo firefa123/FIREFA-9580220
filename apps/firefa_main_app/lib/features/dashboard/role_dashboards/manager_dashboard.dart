@@ -5,6 +5,15 @@ class ManagerDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Text('Manager Dashboard');
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Manager Dashboard',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        SizedBox(height: 16),
+        Text('Operational overview'),
+        Text('• Active orders\n• Outlet activity\n• Inventory monitoring\n• Staff operations'),
+      ],
+    );
   }
 }
