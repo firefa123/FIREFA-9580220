@@ -53,7 +53,7 @@ class FirefaTableStore extends ChangeNotifier {
   bool add(String outletId, String name) {
     if (!_initialized) return false;
     final normalized = name.trim();
-    if (normalized.isEmpty || _tables.any((t) => t.outletId == outletId && t.name.toLowerCase() == normalized.toLowerCase())) return false;
+    if (outletId.trim().isEmpty || normalized.isEmpty || normalized.length > 40 || _tables.any((t) => t.outletId == outletId && t.name.toLowerCase() == normalized.toLowerCase())) return false;
     final id = DateTime.now().microsecondsSinceEpoch.toString();
     _tables.add(FirefaTable(id: id, outletId: outletId, name: normalized, occupied: false));
     notifyListeners();
@@ -65,6 +65,7 @@ class FirefaTableStore extends ChangeNotifier {
     if (!_initialized) return false;
     final index = _tables.indexWhere((t) => t.id == id && t.outletId == outletId);
     if (index < 0) return false;
+    if (_tables[index].occupied == occupied) return true;
     _tables[index] = _tables[index].copyWith(occupied: occupied);
     notifyListeners();
     _save();
