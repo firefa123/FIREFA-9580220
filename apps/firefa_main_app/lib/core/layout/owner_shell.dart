@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import 'owner_sidebar.dart';
 
 class OwnerShell extends StatefulWidget {
-  final Widget child;
+  final List<Widget> pages;
 
   const OwnerShell({
     super.key,
-    required this.child,
+    required this.pages,
   });
 
   @override
@@ -29,7 +29,9 @@ class _OwnerShellState extends State<OwnerShell> {
             },
           ),
           const VerticalDivider(width: 1),
-          Expanded(child: widget.child),
+          Expanded(
+            child: widget.pages[selectedIndex],
+          ),
         ],
       ),
     );
