@@ -595,6 +595,37 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
             label: Text('Salin CSV Audit (${visible.length} PO)'),
           ),
           const SizedBox(height: 12),
+          const Text('Dashboard Pengingat Tindak Lanjut',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            _metric('Terlambat', '$overdueReminders'),
+            _metric('Hari Ini', '$todayReminders'),
+            _metric('Mendatang', '$upcomingReminders'),
+            _metric('Belum Dijadwalkan', '$unscheduledReminders'),
+          ]),
+          if (reminderPriority.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text('Prioritas pengingat (tanggal terlama lebih dulu)',
+                style: TextStyle(color: Colors.blueGrey)),
+            for (final po in reminderPriority.take(5))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Wrap(spacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text('${po.followUpDate} • ${po.id} • ${po.supplierName}'
+                        ' • ${reminderStatus(po) == 'overdue' ? 'Terlambat' : 'Hari ini'}'),
+                    if (allowed)
+                      TextButton(
+                        onPressed: () => _editFollowUp(po),
+                        child: const Text('Tindak lanjuti'),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+          const SizedBox(height: 12),
           const Text('Monitoring PO Aktif',
               style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
@@ -692,6 +723,21 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
             if (value != null) setState(() => filter = value);
           }),
           ]),
+          DropdownButton<String>(
+            value: reminderFilter,
+            items: const [
+              DropdownMenuItem(value: 'all', child: Text('Semua pengingat')),
+              DropdownMenuItem(value: 'overdue', child: Text('Pengingat terlambat')),
+              DropdownMenuItem(value: 'today', child: Text('Pengingat hari ini')),
+              DropdownMenuItem(value: 'upcoming', child: Text('Pengingat mendatang')),
+              DropdownMenuItem(value: 'unscheduled', child: Text('Belum dijadwalkan')),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                setState(() => reminderFilter = value);
+              }
+            },
+          ),
           CheckboxListTile(
             contentPadding: EdgeInsets.zero,
             controlAffinity: ListTileControlAffinity.leading,
