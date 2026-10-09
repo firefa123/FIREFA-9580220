@@ -105,10 +105,11 @@ class _PosPaymentDialogState extends State<PosPaymentDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480, maxHeight: 740),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -151,12 +152,15 @@ class _PosPaymentDialogState extends State<PosPaymentDialog> {
                   children: [
                     const Text('Total Amount', style: TextStyle(color: muted)),
                     const SizedBox(height: 7),
-                    Text(
-                      rupiah(widget.total),
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: primary,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        rupiah(widget.total),
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: primary,
+                        ),
                       ),
                     ),
                   ],
