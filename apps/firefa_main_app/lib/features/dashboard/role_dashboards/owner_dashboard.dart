@@ -1,24 +1,17 @@
 import 'package:flutter/material.dart';
 
-import '../../core/outlet/active_outlet_store.dart';
-import '../widgets/sync_status_card.dart';
-
 class OwnerDashboard extends StatelessWidget {
   const OwnerDashboard({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final outletId = FirefaActiveOutletStore.instance.selectedOutletId;
-
-    return Column(
+    return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Owner Dashboard',
+        Text('Owner Dashboard',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 16),
-        SyncStatusCard(outletId: outletId),
-        const SizedBox(height: 16),
-        const Wrap(
+        SizedBox(height: 16),
+        Wrap(
           spacing: 12,
           runSpacing: 12,
           children: [
@@ -37,6 +30,7 @@ class _OwnerCard extends StatelessWidget {
   final String title;
   final IconData icon;
   const _OwnerCard({required this.title, required this.icon});
+
   @override
   Widget build(BuildContext context) => Card(
         child: SizedBox(
