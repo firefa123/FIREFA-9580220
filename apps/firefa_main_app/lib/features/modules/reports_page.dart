@@ -15,7 +15,6 @@ class ReportsPage extends StatefulWidget {
 }
 
 class _ReportsPageState extends State<ReportsPage> {
-  static const primary = Color(0xFF008F83);
   static const muted = Color(0xFF64748B);
   final outlet = FirefaActiveOutletStore.instance;
   final orders = FirefaOrderStore.instance;
