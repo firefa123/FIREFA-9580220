@@ -17,6 +17,8 @@ class _TablesPageState extends State<TablesPage> {
   final outlet = FirefaActiveOutletStore.instance;
   final store = FirefaTableStore.instance;
   late final Future<void> ready;
+  String search = '';
+  String occupancyFilter = 'all';
 
   @override
   void initState() {
@@ -138,6 +140,13 @@ class _TablesPageState extends State<TablesPage> {
         }
         final tables = store.forOutlet(outlet.selectedOutletId);
         final available = tables.where((t) => !t.occupied).length;
+        final query = search.trim().toLowerCase();
+        final visible = tables.where((t) =>
+            (occupancyFilter == 'all' ||
+                (occupancyFilter == 'available' && !t.occupied) ||
+                (occupancyFilter == 'occupied' && t.occupied)) &&
+            (query.isEmpty || t.name.toLowerCase().contains(query))).toList()
+          ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase());
         return LayoutBuilder(
           builder: (context, constraints) {
             final narrow = constraints.maxWidth < 540;
@@ -166,6 +175,29 @@ class _TablesPageState extends State<TablesPage> {
                 const SizedBox(height: 8),
                 const Text('Data lokal • Status meja diatur manual • Belum terhubung otomatis ke POS/cloud',
                     style: TextStyle(color: muted, fontSize: 12)),
+                const SizedBox(height: 12),
+                Wrap(spacing: 10, runSpacing: 10, children: [
+                  SizedBox(width: 240, child: TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Cari nama meja',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) => setState(() => search = value),
+                  )),
+                  DropdownButton<String>(
+                    value: occupancyFilter,
+                    items: const [
+                      DropdownMenuItem(value: 'all', child: Text('Semua meja')),
+                      DropdownMenuItem(value: 'available', child: Text('Tersedia')),
+                      DropdownMenuItem(value: 'occupied', child: Text('Terisi')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) setState(() => occupancyFilter = value);
+                    },
+                  ),
+                  Text('Menampilkan ${visible.length} dari ${tables.length} meja'),
+                ]),
                 const SizedBox(height: 18),
                 if (tables.isEmpty)
                   Container(
@@ -184,11 +216,16 @@ class _TablesPageState extends State<TablesPage> {
                       Text('Gunakan Tambah Meja untuk membuat data lokal.', textAlign: TextAlign.center),
                     ]),
                   ),
-                if (tables.isNotEmpty)
+                if (tables.isNotEmpty && visible.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text('Tidak ada meja yang sesuai filter.'),
+                  ),
+                if (visible.isNotEmpty)
                   GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: tables.length,
+                    itemCount: visible.length,
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: constraints.maxWidth >= 950 ? 4 : constraints.maxWidth >= 650 ? 3 : narrow ? 1 : 2,
                       mainAxisExtent: 158,
@@ -196,7 +233,7 @@ class _TablesPageState extends State<TablesPage> {
                       mainAxisSpacing: 12,
                     ),
                     itemBuilder: (context, index) {
-                      final table = tables[index];
+                      final table = visible[index];
                       return Container(
                         padding: const EdgeInsets.all(15),
                         decoration: BoxDecoration(
