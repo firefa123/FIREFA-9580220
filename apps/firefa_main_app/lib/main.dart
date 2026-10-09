@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/login_page.dart';
+import 'features/modules/persistent_cart_store.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await FirefaPersistentCartStore.instance.initialize();
   runApp(const FirefaApp());
 }
 
