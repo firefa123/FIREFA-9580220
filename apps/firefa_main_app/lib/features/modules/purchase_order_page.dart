@@ -204,6 +204,45 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
     _message('CSV ${rows.length} PO disalin. Tempel ke file .csv.');
   }
 
+  String _receiptAuditStatus(FirefaPurchaseOrder po) {
+    if (po.receipts.isEmpty && po.receivedQuantity > 0) {
+      return 'legacy_no_details';
+    }
+    final receiptTotal = po.receipts.fold<int>(
+        0, (sum, receipt) => sum + receipt.quantity);
+    if (receiptTotal != po.receivedQuantity ||
+        po.receivedQuantity < 0 || po.receivedQuantity > po.quantity ||
+        po.receipts.any((receipt) => receipt.quantity <= 0)) {
+      return 'mismatch';
+    }
+    return 'matched';
+  }
+
+  Future<void> _copyReceiptAudit(List<FirefaPurchaseOrder> rows) async {
+    if (!allowed || rows.any((po) => po.outletId != outlet.selectedOutletId)) {
+      return;
+    }
+    final lines = <String>[
+      'PO ID,Outlet ID,Supplier,Barang,Status PO,Receipt ID,Tanggal Receipt,Qty Receipt,Qty Diterima PO,Total Qty Receipt,Selisih,Status Audit',
+      for (final po in rows)
+        for (final receipt in po.receipts.isEmpty
+            ? <FirefaPurchaseReceipt?>[null]
+            : <FirefaPurchaseReceipt?>[...po.receipts])
+          [
+            po.id, po.outletId, po.supplierName, po.itemName, po.status,
+            receipt?.id ?? '', receipt?.receivedAt ?? '',
+            receipt?.quantity.toString() ?? '',
+            po.receivedQuantity.toString(),
+            po.receipts.fold<int>(0, (n, r) => n + r.quantity).toString(),
+            (po.receivedQuantity -
+                po.receipts.fold<int>(0, (n, r) => n + r.quantity)).toString(),
+            _receiptAuditStatus(po),
+          ].map(_csvCell).join(','),
+    ];
+    await Clipboard.setData(ClipboardData(text: lines.join('\r\n')));
+    _message('Audit receipt ${rows.length} PO disalin sebagai CSV.');
+  }
+
   Future<void> _pickDateRange() async {
     final picked = await showDateRangePicker(
       context: context,
@@ -248,6 +287,10 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
                 Text('Nilai diterima: Rp $receivedValue'),
                 Text('Nilai sisa: Rp $remainingValue'),
                 if (po.note.isNotEmpty) Text('Catatan: ${po.note}'),
+                const SizedBox(height: 12),
+                Text('Rekonsiliasi receipt: ${_receiptAuditStatus(po)}'),
+                Text('Total rincian receipt: ${po.receipts.fold<int>(0, (n, r) => n + r.quantity)} ${po.unit}'),
+                Text('Selisih: ${po.receivedQuantity - po.receipts.fold<int>(0, (n, r) => n + r.quantity)} ${po.unit}'),
                 const SizedBox(height: 12),
                 const Text('Timeline PO',
                     style: TextStyle(fontWeight: FontWeight.bold)),
@@ -396,6 +439,10 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
         final age = ageDays(b).compareTo(ageDays(a));
         return age != 0 ? age : a.id.compareTo(b.id);
       });
+      final auditMismatch = all.where(
+          (po) => _receiptAuditStatus(po) == 'mismatch').length;
+      final auditLegacy = all.where(
+          (po) => _receiptAuditStatus(po) == 'legacy_no_details').length;
       final statusCounts = {
         for (final status in ['ordered', 'partial', 'received', 'cancelled'])
           status: all.where((po) => po.status == status).length,
@@ -426,6 +473,20 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
             _metric('Nilai Diterima', 'Rp $totalReceived'),
             _metric('Sisa Aktif', 'Rp $outstanding'),
           ]),
+          const SizedBox(height: 12),
+          const Text('Rekonsiliasi Penerimaan',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            _metric('Selisih Receipt', '$auditMismatch'),
+            _metric('PO Lama Tanpa Detail', '$auditLegacy'),
+          ]),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: allowed ? () => _copyReceiptAudit(visible) : null,
+            icon: const Icon(Icons.copy_all_outlined),
+            label: Text('Salin CSV Audit (${visible.length} PO)'),
+          ),
           const SizedBox(height: 12),
           const Text('Monitoring PO Aktif',
               style: TextStyle(fontWeight: FontWeight.bold)),
