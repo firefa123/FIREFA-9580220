@@ -572,7 +572,7 @@ class _PosPageState extends State<PosPage> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Checkout'),
         content: Text(
-          'Total: ${rupiah(grandTotal)}\\n'
+          'Total: ${rupiah(grandTotal)}\n'
           'Pilih bayar sekarang atau simpan pesanan untuk dibayar nanti.',
         ),
         actions: [
