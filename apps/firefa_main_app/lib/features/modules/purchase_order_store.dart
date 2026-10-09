@@ -13,12 +13,16 @@ class FirefaPurchaseOrder {
     required this.supplierName, required this.itemId, required this.itemName,
     required this.unit, required this.quantity, required this.unitCost,
     required this.note, required this.status, required this.createdAt,
-    required this.receivedAt,
+    required this.receivedAt, this.receivedQuantity = 0,
+    this.receipts = const [],
   });
   final String id, outletId, supplierId, supplierName, itemId, itemName;
   final String unit, note, status, createdAt;
   final int quantity, unitCost;
   final String? receivedAt;
+  final int receivedQuantity;
+  final List<FirefaPurchaseReceipt> receipts;
+  int get remainingQuantity => quantity - receivedQuantity;
   int get totalCost => quantity * unitCost;
 
   Map<String, dynamic> toJson() => {
@@ -26,7 +30,8 @@ class FirefaPurchaseOrder {
     'supplierName': supplierName, 'itemId': itemId, 'itemName': itemName,
     'unit': unit, 'quantity': quantity, 'unitCost': unitCost,
     'note': note, 'status': status, 'createdAt': createdAt,
-    'receivedAt': receivedAt,
+    'receivedAt': receivedAt, 'receivedQuantity': receivedQuantity,
+    'receipts': receipts.map((r) => r.toJson()).toList(),
   };
 
   factory FirefaPurchaseOrder.fromJson(Map<String, dynamic> json) =>
@@ -44,6 +49,11 @@ class FirefaPurchaseOrder {
         status: json['status'] as String,
         createdAt: json['createdAt'] as String,
         receivedAt: json['receivedAt'] as String?,
+        receivedQuantity: json['receivedQuantity'] as int? ??
+            ((json['status'] == 'received') ? json['quantity'] as int : 0),
+        receipts: (json['receipts'] as List<dynamic>? ?? [])
+            .map((e) => FirefaPurchaseReceipt.fromJson(
+                Map<String, dynamic>.from(e as Map))).toList(),
       );
 
   FirefaPurchaseOrder withStatus(String next, String? timestamp) =>
@@ -52,6 +62,36 @@ class FirefaPurchaseOrder {
         supplierName: supplierName, itemId: itemId, itemName: itemName,
         unit: unit, quantity: quantity, unitCost: unitCost, note: note,
         status: next, createdAt: createdAt, receivedAt: timestamp,
+        receivedQuantity: receivedQuantity, receipts: receipts,
+      );
+
+  FirefaPurchaseOrder withReceipt(FirefaPurchaseReceipt receipt) {
+    final total = receivedQuantity + receipt.quantity;
+    return FirefaPurchaseOrder(
+      id: id, outletId: outletId, supplierId: supplierId,
+      supplierName: supplierName, itemId: itemId, itemName: itemName,
+      unit: unit, quantity: quantity, unitCost: unitCost, note: note,
+      status: total == quantity ? 'received' : 'partial',
+      createdAt: createdAt, receivedAt: receipt.receivedAt,
+      receivedQuantity: total, receipts: [...receipts, receipt],
+    );
+  }
+}
+
+class FirefaPurchaseReceipt {
+  const FirefaPurchaseReceipt({
+    required this.id, required this.quantity, required this.receivedAt,
+  });
+  final String id, receivedAt;
+  final int quantity;
+  Map<String, dynamic> toJson() => {
+    'id': id, 'quantity': quantity, 'receivedAt': receivedAt,
+  };
+  factory FirefaPurchaseReceipt.fromJson(Map<String, dynamic> json) =>
+      FirefaPurchaseReceipt(
+        id: json['id'] as String,
+        quantity: json['quantity'] as int,
+        receivedAt: json['receivedAt'] as String,
       );
 }
 
@@ -132,7 +172,7 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
       return false;
     }
     final index = _orders.indexWhere((po) =>
-        po.outletId == outletId && po.id == orderId && po.status == 'ordered');
+        po.outletId == outletId && po.id == orderId && (po.status == 'ordered' || po.status == 'partial'));
     if (index < 0) {
       return false;
     }
@@ -142,33 +182,42 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
     return true;
   }
 
-  bool receive({required String outletId, required String orderId}) {
+  bool receive({
+    required String outletId, required String orderId, int? quantity,
+  }) {
     if (!_initialized) {
       return false;
     }
     final index = _orders.indexWhere((po) =>
-        po.outletId == outletId && po.id == orderId && po.status == 'ordered');
+        po.outletId == outletId && po.id == orderId &&
+        (po.status == 'ordered' || po.status == 'partial'));
     if (index < 0) {
       return false;
     }
     final order = _orders[index];
+    final amount = quantity ?? order.remainingQuantity;
+    if (amount <= 0 || amount > order.remainingQuantity) {
+      return false;
+    }
     final inventory = FirefaInventoryStore.instance;
     final items = inventory.forOutlet(outletId)
         .where((item) => item.id == order.itemId);
     if (items.isEmpty || items.first.unit != order.unit ||
-        items.first.stock + order.quantity > 999999999) {
+        items.first.stock + amount > 999999999) {
       return false;
     }
+    final receipt = FirefaPurchaseReceipt(
+      id: '${order.id}-receipt-${order.receipts.length + 1}',
+      quantity: amount, receivedAt: DateTime.now().toIso8601String(),
+    );
     final success = inventory.adjust(
       outletId: outletId, id: order.itemId, type: 'in',
-      amount: order.quantity, note: 'Penerimaan PO ${order.id}',
+      amount: amount, note: 'Penerimaan PO ${order.id} / ${receipt.id}',
     );
     if (!success) {
       return false;
     }
-    _orders[index] = order.withStatus(
-      'received', DateTime.now().toIso8601String(),
-    );
+    _orders[index] = order.withReceipt(receipt);
     notifyListeners();
     _save();
     return true;
