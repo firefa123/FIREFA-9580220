@@ -51,6 +51,34 @@ class _MenuPageState extends State<MenuPage> {
   String rupiah(int amount) => 'Rp ${amount.toString().replaceAllMapped(
         RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.')}';
 
+  String _csvCell(String value) {
+    final escaped = value.replaceAll('"', '""');
+    final safe = escaped.isNotEmpty && '=+-@'.contains(escaped[0])
+        ? "'$escaped" : escaped;
+    return '"$safe"';
+  }
+
+  Future<void> _copyCsv(List<FirefaMenuItem> rows) async {
+    final selectedOutlet = outlet.selectedOutletId;
+    if (!allowed || rows.any((item) => item.outletId != selectedOutlet)) {
+      return;
+    }
+    final csv = <String>[
+      'ID,Outlet ID,Nama Menu,Kategori,Harga,Status',
+      for (final item in rows)
+        [item.id, item.outletId, item.name, item.category,
+         item.price.toString(), item.isActive ? 'Aktif' : 'Nonaktif']
+            .map(_csvCell).join(','),
+    ].join('\\r\\n');
+    await Clipboard.setData(ClipboardData(text: csv));
+    if (!mounted || !allowed || outlet.selectedOutletId != selectedOutlet) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('CSV ${rows.length} menu disalin ke clipboard.'),
+    ));
+  }
+
   Future<void> addMenu() async {
     if (!allowed) return;
     final sourceOutlet = outlet.selectedOutletId;
@@ -355,6 +383,11 @@ class _MenuPageState extends State<MenuPage> {
 
                   ),
 
+                  OutlinedButton.icon(
+                    onPressed: allowed ? () => _copyCsv(visible) : null,
+                    icon: const Icon(Icons.copy_all_outlined),
+                    label: Text('Salin CSV (${visible.length})'),
+                  ),
                   Text('Menampilkan ${visible.length} dari ${items.length} menu'),
                 ]),
                 const SizedBox(height: 18),
