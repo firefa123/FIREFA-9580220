@@ -77,7 +77,9 @@ class FirefaTableStore extends ChangeNotifier {
     final index = _tables.indexWhere((t) => t.id == id && t.outletId == outletId);
     if (index < 0 || normalized.isEmpty || normalized.length > 40) return false;
     if (_tables.any((t) => t.outletId == outletId && t.id != id &&
-        t.name.toLowerCase() == normalized.toLowerCase())) return false;
+        t.name.toLowerCase() == normalized.toLowerCase())) {
+      return false;
+    }
     if (_tables[index].name == normalized) return true;
     _tables[index] = _tables[index].copyWith(name: normalized);
     notifyListeners();
