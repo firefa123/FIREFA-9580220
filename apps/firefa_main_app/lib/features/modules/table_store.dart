@@ -18,8 +18,8 @@ class FirefaTable {
     name: json['name'] as String,
     occupied: json['occupied'] as bool,
   );
-  FirefaTable copyWith({bool? occupied}) => FirefaTable(
-    id: id, outletId: outletId, name: name, occupied: occupied ?? this.occupied,
+  FirefaTable copyWith({bool? occupied, String? name}) => FirefaTable(
+    id: id, outletId: outletId, name: name ?? this.name, occupied: occupied ?? this.occupied,
   );
 }
 
@@ -66,6 +66,30 @@ class FirefaTableStore extends ChangeNotifier {
     final index = _tables.indexWhere((t) => t.id == id && t.outletId == outletId);
     if (index < 0) return false;
     _tables[index] = _tables[index].copyWith(occupied: occupied);
+    notifyListeners();
+    _save();
+    return true;
+  }
+
+  bool rename(String outletId, String id, String name) {
+    if (!_initialized) return false;
+    final normalized = name.trim();
+    final index = _tables.indexWhere((t) => t.id == id && t.outletId == outletId);
+    if (index < 0 || normalized.isEmpty || normalized.length > 40) return false;
+    if (_tables.any((t) => t.outletId == outletId && t.id != id &&
+        t.name.toLowerCase() == normalized.toLowerCase())) return false;
+    if (_tables[index].name == normalized) return true;
+    _tables[index] = _tables[index].copyWith(name: normalized);
+    notifyListeners();
+    _save();
+    return true;
+  }
+
+  bool remove(String outletId, String id) {
+    if (!_initialized) return false;
+    final index = _tables.indexWhere((t) => t.id == id && t.outletId == outletId);
+    if (index < 0) return false;
+    _tables.removeAt(index);
     notifyListeners();
     _save();
     return true;
