@@ -95,7 +95,9 @@ class FirefaSupplierStore extends ChangeNotifier {
     required String contact, required String phone, required String address,
   }) {
     if (!_initialized || !_valid(outletId: outletId, name: name,
-        contact: contact, phone: phone, address: address)) return false;
+        contact: contact, phone: phone, address: address)) {
+      return false;
+    }
     _suppliers.add(FirefaSupplier(
       id: 'supplier-${_nextId++}', outletId: outletId,
       name: name.trim(), contact: contact.trim(),
@@ -111,7 +113,9 @@ class FirefaSupplierStore extends ChangeNotifier {
     required String contact, required String phone, required String address,
   }) {
     if (!_initialized || !_valid(outletId: outletId, name: name,
-        contact: contact, phone: phone, address: address, exceptId: id)) return false;
+        contact: contact, phone: phone, address: address, exceptId: id)) {
+      return false;
+    }
     final index = _suppliers.indexWhere((s) => s.outletId == outletId && s.id == id);
     if (index < 0) return false;
     final old = _suppliers[index];
