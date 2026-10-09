@@ -9,7 +9,7 @@ class TopSellingCard extends StatelessWidget {
   static const Color dark = Color(0xFF172B4D);
   static const Color muted = Color(0xFF64748B);
 
-  List<_MenuData> get items {
+  List<_MenuData> get _items {
     final quantities = <String, int>{};
     for (final order in orders) {
       if (order.paymentStatus != FirefaPaymentStatus.paid ||
@@ -34,7 +34,7 @@ class TopSellingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final topItems = items;
+    final topItems = _items;
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
