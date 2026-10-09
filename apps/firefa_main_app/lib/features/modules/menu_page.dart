@@ -25,7 +25,7 @@ class MenuPage extends StatelessWidget {
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                const Icon(Icons.restaurant-menu, color: primary, size: 23),
+                const Icon(Icons.restaurant_menu, color: primary, size: 23),
                 Text('Menu Management',
                     style: TextStyle(
                       fontSize: compact ? 20 : 24,
@@ -87,7 +87,7 @@ class MenuPage extends StatelessWidget {
                               color: const Color(0xFFE0F2F1),
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: const Icon(Icons.restaurant-menu,
+                            child: const Icon(Icons.restaurant_menu,
                                 color: primary, size: 34),
                           ),
                           const SizedBox(height: 18),
