@@ -1,121 +1,169 @@
 import 'package:flutter/material.dart';
 
+import '../../core/auth/role_permissions.dart';
 import '../../core/outlet/active_outlet_store.dart';
+import 'table_store.dart';
 
-/// UI-06: honest, read-only placeholder until this module has a real store.
-class TablesPage extends StatelessWidget {
+class TablesPage extends StatefulWidget {
   const TablesPage({super.key});
+  @override
+  State<TablesPage> createState() => _TablesPageState();
+}
 
+class _TablesPageState extends State<TablesPage> {
   static const primary = Color(0xFF008F83);
   static const ink = Color(0xFF172B4D);
   static const muted = Color(0xFF64748B);
-  static const border = Color(0xFFE2E8F0);
+  final outlet = FirefaActiveOutletStore.instance;
+  final store = FirefaTableStore.instance;
+  late final Future<void> ready;
+
+  @override
+  void initState() {
+    super.initState();
+    ready = store.initialize();
+    outlet.addListener(refresh);
+    store.addListener(refresh);
+  }
+
+  void refresh() { if (mounted) setState(() {}); }
+
+  @override
+  void dispose() {
+    outlet.removeListener(refresh);
+    store.removeListener(refresh);
+    super.dispose();
+  }
+
+  bool get allowed => FirefaAccess.can(outlet.role, FirefaPermission.tablesManage) &&
+      outlet.canAccessOutlet(outlet.selectedOutletId);
+
+  Future<void> addTable() async {
+    if (!allowed) return;
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Tambah Meja'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 40,
+          decoration: const InputDecoration(labelText: 'Nama meja', hintText: 'Contoh: Meja 01'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Batal')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text), child: const Text('Simpan')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || name == null) return;
+    if (!allowed || !store.add(outlet.selectedOutletId, name)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nama meja kosong atau sudah digunakan di outlet ini.')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final outlet = FirefaActiveOutletStore.instance;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 520;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(
-              spacing: 10,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
+    return FutureBuilder<void>(
+      future: ready,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Text('Gagal memuat meja lokal. Data lama tidak diubah.');
+        }
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final tables = store.forOutlet(outlet.selectedOutletId);
+        final available = tables.where((t) => !t.occupied).length;
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final narrow = constraints.maxWidth < 540;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.table_restaurant, color: primary, size: 23),
-                Text('Tables Management',
-                    style: TextStyle(
-                      fontSize: compact ? 20 : 24,
-                      fontWeight: FontWeight.bold,
-                      color: ink,
-                    )),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Text('Kelola meja dan area layanan',
-                style: TextStyle(color: muted, fontSize: 13)),
-            const SizedBox(height: 18),
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.all(compact ? 16 : 22),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      const Icon(Icons.storefront_outlined,
-                          size: 17, color: primary),
-                      Text(outlet.selectedOutletName,
-                          style: const TextStyle(
-                              color: ink, fontWeight: FontWeight.w600)),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text('Belum tersedia',
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: muted)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 28),
-                  Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 420),
-                      child: Column(
-                        children: [
-                          Container(
-                            width: 72,
-                            height: 72,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE0F2F1),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Icon(Icons.table_restaurant,
-                                color: primary, size: 34),
-                          ),
-                          const SizedBox(height: 18),
-                          const Text('Pengelolaan meja belum tersedia',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                  color: ink,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 10),
-                          const Text('Belum ada data meja atau status ketersediaan yang tersimpan secara lokal.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: muted, height: 1.5)),
-                          const SizedBox(height: 20),
-                          const Text(
-                            'Local Only • Tidak ada sinkronisasi cloud',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 11, color: muted),
-                          ),
-                        ],
-                      ),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 10,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    const Icon(Icons.table_restaurant, color: primary),
+                    const Text('Tables Management',
+                        style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold, color: ink)),
+                    FilledButton.icon(
+                      onPressed: allowed ? addTable : null,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Tambah Meja'),
+                      style: FilledButton.styleFrom(backgroundColor: primary),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text('${outlet.selectedOutletName} • ${tables.length} meja • $available tersedia',
+                    style: const TextStyle(color: muted)),
+                const SizedBox(height: 8),
+                const Text('Data lokal • Status meja diatur manual • Belum terhubung otomatis ke POS/cloud',
+                    style: TextStyle(color: muted, fontSize: 12)),
+                const SizedBox(height: 18),
+                if (tables.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(28),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: const Column(children: [
+                      Icon(Icons.table_restaurant_outlined, size: 40, color: muted),
+                      SizedBox(height: 12),
+                      Text('Belum ada meja di outlet ini', style: TextStyle(fontWeight: FontWeight.bold)),
+                      SizedBox(height: 6),
+                      Text('Gunakan Tambah Meja untuk membuat data lokal.', textAlign: TextAlign.center),
+                    ]),
                   ),
-                  const SizedBox(height: 22),
-                ],
-              ),
-            ),
-          ],
+                if (tables.isNotEmpty)
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: tables.length,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: constraints.maxWidth >= 950 ? 4 : constraints.maxWidth >= 650 ? 3 : narrow ? 1 : 2,
+                      mainAxisExtent: 158,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                    ),
+                    itemBuilder: (context, index) {
+                      final table = tables[index];
+                      return Container(
+                        padding: const EdgeInsets.all(15),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(table.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: ink, fontWeight: FontWeight.bold, fontSize: 16)),
+                            const SizedBox(height: 7),
+                            Text(table.occupied ? 'Terisi (manual)' : 'Tersedia',
+                                style: TextStyle(color: table.occupied ? Colors.deepOrange : primary, fontWeight: FontWeight.w600)),
+                            const Spacer(),
+                            OutlinedButton(
+                              onPressed: allowed ? () => store.setOccupied(outlet.selectedOutletId, table.id, !table.occupied) : null,
+                              child: Text(table.occupied ? 'Tandai Tersedia' : 'Tandai Terisi'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            );
+          },
         );
       },
     );
