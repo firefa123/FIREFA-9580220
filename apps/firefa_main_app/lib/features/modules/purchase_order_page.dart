@@ -21,6 +21,7 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
   final inventory = FirefaInventoryStore.instance;
   late final Future<void> ready;
   String filter = 'all';
+  String supplierFilter = 'all';
 
   bool get allowed =>
       FirefaAccess.can(outlet.role, FirefaPermission.inventoryManage) &&
@@ -175,6 +176,21 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
     }
   }
 
+  Widget _metric(String label, String value) => Container(
+    constraints: const BoxConstraints(minWidth: 155),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      border: Border.all(color: Colors.black12),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: const TextStyle(color: Colors.blueGrey)),
+      const SizedBox(height: 4),
+      Text(value, style: const TextStyle(
+          fontWeight: FontWeight.bold, fontSize: 16)),
+    ]),
+  );
+
   void _message(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -194,7 +210,29 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
         return const Center(child: CircularProgressIndicator());
       }
       final all = orders.forOutlet(outlet.selectedOutletId);
-      final visible = all.where((po) => filter == 'all' || po.status == filter);
+      final visible = all.where((po) =>
+          (filter == 'all' || po.status == filter) &&
+          (supplierFilter == 'all' || po.supplierId == supplierFilter));
+      final supplierIds = all.map((po) => po.supplierId).toSet();
+      final supplierNames = {
+        for (final po in all) po.supplierId: po.supplierName,
+      };
+      final totalOrdered = all.fold<int>(0, (sum, po) => sum + po.totalCost);
+      final totalReceived = all.fold<int>(0,
+          (sum, po) => sum + po.receivedQuantity * po.unitCost);
+      final outstanding = all.where((po) =>
+          po.status == 'ordered' || po.status == 'partial').fold<int>(
+          0, (sum, po) => sum + po.remainingQuantity * po.unitCost);
+      final statusCounts = {
+        for (final status in ['ordered', 'partial', 'received', 'cancelled'])
+          status: all.where((po) => po.status == status).length,
+      };
+      final bySupplier = <String, List<FirefaPurchaseOrder>>{};
+      for (final po in all) {
+        bySupplier.putIfAbsent(po.supplierId, () => []).add(po);
+      }
+      final supplierSummary = bySupplier.entries.toList()
+        ..sort((a, b) => a.key.compareTo(b.key));
       return Padding(padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Wrap(spacing: 12, runSpacing: 8,
@@ -209,6 +247,44 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
           Text('${outlet.selectedOutletName} • ${all.length} PO',
             style: const TextStyle(color: Colors.blueGrey)),
           const SizedBox(height: 12),
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            _metric('Total PO', '${all.length}'),
+            _metric('Nilai Pesanan', 'Rp $totalOrdered'),
+            _metric('Nilai Diterima', 'Rp $totalReceived'),
+            _metric('Sisa Aktif', 'Rp $outstanding'),
+          ]),
+          const SizedBox(height: 12),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            for (final entry in statusCounts.entries)
+              Chip(label: Text('${entry.key}: ${entry.value}')),
+          ]),
+          const SizedBox(height: 12),
+          const Text('Ringkasan Supplier',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          for (final entry in supplierSummary)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Text(
+                '${supplierNames[entry.key] ?? entry.key} • '
+                '${entry.value.length} PO • '
+                'Dipesan Rp ${entry.value.fold<int>(0, (sum, po) => sum + po.totalCost)} • '
+                'Diterima Rp ${entry.value.fold<int>(0, (sum, po) => sum + po.receivedQuantity * po.unitCost)}',
+              ),
+            ),
+          const SizedBox(height: 12),
+          Wrap(spacing: 12, runSpacing: 8, children: [
+          DropdownButton<String>(value: supplierFilter,
+            items: [
+              const DropdownMenuItem(value: 'all',
+                  child: Text('Semua supplier')),
+              for (final id in supplierIds)
+                DropdownMenuItem(value: id,
+                  child: Text(supplierNames[id] ?? id)),
+            ],
+            onChanged: (value) {
+              if (value != null) setState(() => supplierFilter = value);
+            },
+          ),
           DropdownButton<String>(value: filter, items: const [
             DropdownMenuItem(value: 'all', child: Text('Semua status')),
             DropdownMenuItem(value: 'ordered', child: Text('Dipesan')),
@@ -218,6 +294,7 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
           ], onChanged: (value) {
             if (value != null) setState(() => filter = value);
           }),
+          ]),
           const SizedBox(height: 12),
           if (visible.isEmpty)
             const Padding(padding: EdgeInsets.all(24),
