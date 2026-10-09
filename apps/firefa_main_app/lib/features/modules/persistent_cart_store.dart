@@ -5,14 +5,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class FirefaCartItemData {
   final String productId;
+  final String? productName;
   final String size;
   final List<String> extras;
   final String note;
   final int unitPrice;
   final int quantity;
-  const FirefaCartItemData({required this.productId, required this.size, required this.extras, required this.note, required this.unitPrice, required this.quantity});
-  Map<String,dynamic> toJson() => {'productId':productId,'size':size,'extras':extras,'note':note,'unitPrice':unitPrice,'quantity':quantity};
-  factory FirefaCartItemData.fromJson(Map<String,dynamic> j) => FirefaCartItemData(productId:j['productId'] as String,size:j['size'] as String,extras:List<String>.from(j['extras'] as List),note:j['note'] as String,unitPrice:j['unitPrice'] as int,quantity:j['quantity'] as int);
+  const FirefaCartItemData({required this.productId,this.productName, required this.size, required this.extras, required this.note, required this.unitPrice, required this.quantity});
+  Map<String,dynamic> toJson() => {'productId':productId,'productName':productName,'size':size,'extras':extras,'note':note,'unitPrice':unitPrice,'quantity':quantity};
+  factory FirefaCartItemData.fromJson(Map<String,dynamic> j) => FirefaCartItemData(productId:j['productId'] as String,productName:j['productName'] as String?,size:j['size'] as String,extras:List<String>.from(j['extras'] as List),note:j['note'] as String,unitPrice:j['unitPrice'] as int,quantity:j['quantity'] as int);
 }
 class FirefaCartData {
   final List<FirefaCartItemData> items;
