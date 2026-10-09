@@ -276,6 +276,38 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
     _message('CSV ${rows.length} PO disalin. Tempel ke file .csv.');
   }
 
+  Future<void> _copyFollowUpReport(List<FirefaPurchaseOrder> rows,
+      String Function(FirefaPurchaseOrder) reminderStatus) async {
+    final selectedOutlet = outlet.selectedOutletId;
+    if (!allowed || rows.any((po) => po.outletId != selectedOutlet)) {
+      return;
+    }
+    final active = rows.where((po) =>
+        po.status == 'ordered' || po.status == 'partial').toList()
+      ..sort((a, b) {
+        final first = a.followUpDate ?? '9999-12-31';
+        final second = b.followUpDate ?? '9999-12-31';
+        final byDate = first.compareTo(second);
+        return byDate != 0 ? byDate : a.id.compareTo(b.id);
+      });
+    final lines = <String>[
+      'PO ID,Outlet ID,Supplier,Barang,Status PO,Tanggal PO,Tanggal Pengingat,Status Pengingat,Catatan Tindak Lanjut,Sisa Qty,Satuan,Nilai Sisa',
+      for (final po in active)
+        [
+          po.id, po.outletId, po.supplierName, po.itemName,
+          po.status, po.createdAt, po.followUpDate ?? '',
+          reminderStatus(po), po.followUpNote,
+          po.remainingQuantity.toString(), po.unit,
+          (po.remainingQuantity * po.unitCost).toString(),
+        ].map(_csvCell).join(','),
+    ];
+    if (!mounted || !allowed || outlet.selectedOutletId != selectedOutlet) {
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: lines.join('\\r\\n')));
+    _message('Laporan tindak lanjut ${active.length} PO aktif disalin sebagai CSV.');
+  }
+
   String _receiptAuditStatus(FirefaPurchaseOrder po) {
     if (po.receipts.isEmpty && po.receivedQuantity > 0) {
       return 'legacy_no_details';
@@ -625,6 +657,14 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
                 ),
               ),
           ],
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: allowed
+                ? () => _copyFollowUpReport(visible, reminderStatus)
+                : null,
+            icon: const Icon(Icons.copy_all_outlined),
+            label: Text('Salin CSV Tindak Lanjut (${visible.where((po) => po.status == 'ordered' || po.status == 'partial').length} PO)'),
+          ),
           const SizedBox(height: 12),
           const Text('Monitoring PO Aktif',
               style: TextStyle(fontWeight: FontWeight.bold)),
