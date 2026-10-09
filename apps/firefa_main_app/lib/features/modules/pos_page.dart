@@ -101,6 +101,7 @@ class _PosPageState extends State<PosPage> {
     'Food',
     'Snacks',
     'Dessert',
+    'Other',
   ];
 
   static const products = <_Product>[
@@ -245,7 +246,9 @@ class _PosPageState extends State<PosPage> {
       return _Product(saved.productId, saved.productName!, 'Other',
           saved.unitPrice, Icons.restaurant_menu, const Color(0xFFE0F2F1));
     }
-    return null;
+    return _Product(saved.productId, 'Produk lama (${saved.productId})',
+        'Other', saved.unitPrice, Icons.restaurant_menu,
+        const Color(0xFFE0F2F1));
   }
 
   List<_Product> get catalogProducts {
@@ -290,7 +293,9 @@ class _PosPageState extends State<PosPage> {
       if (editing != null) cart.remove(editing);
 
       final index = cart.indexWhere(
-        (existing) => existing.configurationKey == item.configurationKey,
+        (existing) => existing.configurationKey == item.configurationKey &&
+            existing.unitPrice == item.unitPrice &&
+            existing.product.name == item.product.name,
       );
 
       if (index >= 0) {
@@ -331,6 +336,9 @@ class _PosPageState extends State<PosPage> {
     int quantity = editing?.quantity ?? 1;
 
     final noteController = TextEditingController(text: editing?.note ?? '');
+    final snapshotBase = editing == null ? product.price :
+        editing.unitPrice - (sizes[editing.size] ?? 0) -
+        editing.extras.fold<int>(0, (sum, name) => sum + (extras[name] ?? 0));
 
     final result = await showDialog<_CartItem>(
       context: context,
@@ -341,7 +349,7 @@ class _PosPageState extends State<PosPage> {
             (sum, name) => sum + (extras[name] ?? 0),
           );
 
-          final unitPrice = product.price + (sizes[size] ?? 0) + extrasPrice;
+          final unitPrice = snapshotBase + (sizes[size] ?? 0) + extrasPrice;
 
           return AlertDialog(
             title: Text(editing == null ? 'Customize Product' : 'Edit Item'),
@@ -485,10 +493,16 @@ class _PosPageState extends State<PosPage> {
       return;
     }
 
-    if (editing == null && !catalogProducts.any((p) => p.id == product.id)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Menu tidak aktif atau tidak tersedia.'),
-      ));
+    if (editing == null) {
+      final latest = catalogProducts.where((p) => p.id == product.id).firstOrNull;
+      if (latest == null || latest.price != product.price ||
+          latest.name != product.name || latest.category != product.category) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Katalog berubah. Pilih produk kembali untuk harga terbaru.'),
+        ));
+        return;
+      }
+    } else if (!cart.contains(editing)) {
       return;
     }
     addItem(result, editing: editing);
