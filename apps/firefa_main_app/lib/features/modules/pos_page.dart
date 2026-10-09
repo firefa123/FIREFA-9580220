@@ -665,20 +665,28 @@ class _PosPageState extends State<PosPage> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth >= 950) {
+        final width = constraints.maxWidth;
+        // Wide desktops keep the cart visible beside the catalog.
+        // Tablets and phones stack the cart below the products.
+        if (width >= 950) {
+          final cartWidth = width >= 1200 ? 370.0 : 330.0;
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(child: buildCatalog()),
               const SizedBox(width: 20),
-              SizedBox(width: 350, child: buildCart()),
+              SizedBox(width: cartWidth, child: buildCart()),
             ],
           );
         }
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [buildCatalog(), const SizedBox(height: 20), buildCart()],
+          children: [
+            buildCatalog(),
+            const SizedBox(height: 20),
+            buildCart(),
+          ],
         );
       },
     );
@@ -711,7 +719,17 @@ class _PosPageState extends State<PosPage> {
           controller: searchController,
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
-            hintText: 'Search product...',
+            hintText: 'Cari nama produk...',
+            suffixIcon: searchController.text.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Hapus pencarian',
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: () {
+                      searchController.clear();
+                      setState(() {});
+                    },
+                  ),
             prefixIcon: const Icon(Icons.search),
             filled: true,
             fillColor: Colors.white,
@@ -754,7 +772,21 @@ class _PosPageState extends State<PosPage> {
                 : 1;
 
             if (visibleProducts.isEmpty) {
-              return const Center(child: Text('Produk tidak ditemukan'));
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 36),
+                child: Center(
+                  child: Column(
+                    children: [
+                      Icon(Icons.search_off_outlined, size: 36, color: muted),
+                      SizedBox(height: 10),
+                      Text('Produk tidak ditemukan', style: TextStyle(color: ink)),
+                      SizedBox(height: 4),
+                      Text('Coba kata kunci atau kategori lain.',
+                          style: TextStyle(fontSize: 12, color: muted)),
+                    ],
+                  ),
+                ),
+              );
             }
 
             return GridView.builder(
@@ -765,7 +797,7 @@ class _PosPageState extends State<PosPage> {
                 crossAxisCount: columns,
                 mainAxisSpacing: 14,
                 crossAxisSpacing: 14,
-                mainAxisExtent: 225,
+                mainAxisExtent: width < 350 ? 235 : 225,
               ),
               itemBuilder: (context, index) {
                 final product = visibleProducts[index];
@@ -924,7 +956,10 @@ class _PosPageState extends State<PosPage> {
             '$outletName • New Order',
             style: const TextStyle(color: muted, fontSize: 12),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
+          const Text('Tipe pesanan',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: muted)),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(child: orderTypeButton('Dine In')),
@@ -987,7 +1022,13 @@ class _PosPageState extends State<PosPage> {
           summaryRow('Tax (${config.taxRate}%)', rupiah(taxAmount)),
           summaryRow('Service (${config.serviceRate}%)', rupiah(serviceAmount)),
           const Divider(height: 26),
-          Row(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE0F2F1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
             children: [
               const Expanded(
                 child: Text(
@@ -999,15 +1040,22 @@ class _PosPageState extends State<PosPage> {
                   ),
                 ),
               ),
-              Text(
-                rupiah(grandTotal),
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: primary,
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    rupiah(grandTotal),
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: primary,
+                    ),
+                  ),
                 ),
               ),
             ],
+          ),
           ),
           const SizedBox(height: 20),
           SizedBox(
