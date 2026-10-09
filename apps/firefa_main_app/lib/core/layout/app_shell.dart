@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../features/dashboard/presentation/pages/dashboard_page.dart';
 import '../../features/orders/presentation/pages/orders_page.dart';
+import '../../features/menu/presentation/pages/menu_page.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -16,7 +17,7 @@ class _AppShellState extends State<AppShell> {
   final pages = const [
     DashboardPage(),
     OrdersPage(),
-    Center(child: Text('Menu')),
+    MenuPage(),
     Center(child: Text('Outlet')),
     Center(child: Text('Profile')),
   ];
@@ -27,9 +28,7 @@ class _AppShellState extends State<AppShell> {
       body: pages[index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
-        onDestinationSelected: (value) {
-          setState(() => index = value);
-        },
+        onDestinationSelected: (value) => setState(() => index = value),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.dashboard), label: 'Dashboard'),
           NavigationDestination(icon: Icon(Icons.receipt), label: 'Order'),
