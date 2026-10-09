@@ -24,6 +24,9 @@ class _InventoryPageState extends State<InventoryPage> {
   String itemQuery = '';
   String itemStatus = 'all';
   String itemUnit = 'all';
+  String movementQuery = '';
+  String movementType = 'all';
+  DateTime? movementDate;
 
   @override
   void initState() {
@@ -256,6 +259,16 @@ class _InventoryPageState extends State<InventoryPage> {
         final low = items.where((item) => item.isLowStock).length;
         final empty = items.where((item) => item.isOutOfStock).length;
         final history = store.historyForOutlet(outlet.selectedOutletId);
+        final filteredHistory = history.where((movement) {
+          if (!movement.itemName.toLowerCase().contains(movementQuery.trim().toLowerCase())) return false;
+          if (movementType != 'all' && movement.type != movementType) return false;
+          if (movementDate != null) {
+            final date = DateTime.tryParse(movement.timestamp);
+            if (date == null || date.year != movementDate!.year ||
+                date.month != movementDate!.month || date.day != movementDate!.day) return false;
+          }
+          return true;
+        }).toList();
         final filteredItems = items.where((item) {
           if (!item.name.toLowerCase().contains(itemQuery.trim().toLowerCase())) return false;
           if (itemUnit != 'all' && item.unit != itemUnit) return false;
@@ -418,8 +431,37 @@ class _InventoryPageState extends State<InventoryPage> {
                 const SizedBox(height: 24),
                 const Text('Riwayat Perubahan Stok', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                if (history.isEmpty) const Text('Belum ada pergerakan stok.', style: TextStyle(color: muted)),
-                for (final movement in history)
+                Wrap(spacing: 12, runSpacing: 8, children: [
+                  SizedBox(width: narrow ? constraints.maxWidth : 230,
+                    child: TextField(
+                      decoration: const InputDecoration(labelText: 'Cari riwayat barang', prefixIcon: Icon(Icons.search)),
+                      onChanged: (value) => setState(() => movementQuery = value),
+                    )),
+                  DropdownButton<String>(value: movementType, items: const [
+                    DropdownMenuItem(value: 'all', child: Text('Semua pergerakan')),
+                    DropdownMenuItem(value: 'in', child: Text('Tambah')),
+                    DropdownMenuItem(value: 'out', child: Text('Kurangi')),
+                    DropdownMenuItem(value: 'correction', child: Text('Koreksi')),
+                  ], onChanged: (value) {
+                    if (value != null) setState(() => movementType = value);
+                  }),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.calendar_today),
+                    label: Text(movementDate == null ? 'Pilih tanggal' :
+                      '${movementDate!.day}/${movementDate!.month}/${movementDate!.year}'),
+                    onPressed: () async {
+                      final date = await showDatePicker(context: context,
+                        initialDate: movementDate ?? DateTime.now(),
+                        firstDate: DateTime(2020), lastDate: DateTime(2100));
+                      if (date != null && mounted) setState(() => movementDate = date);
+                    },
+                  ),
+                  if (movementDate != null)
+                    TextButton(onPressed: () => setState(() => movementDate = null), child: const Text('Hapus tanggal')),
+                ]),
+                if (filteredHistory.isEmpty)
+                  const Text('Tidak ada riwayat sesuai filter.', style: TextStyle(color: muted)),
+                for (final movement in filteredHistory)
                   Card(child: ListTile(
                     title: Text('${movement.itemName} • ${movement.type == 'in' ? 'Tambah' : movement.type == 'out' ? 'Kurangi' : 'Koreksi'}'),
                     subtitle: Text('${movement.timestamp} • ${movement.before} → ${movement.after} • ${movement.note.isEmpty ? 'Tanpa keterangan' : movement.note}'),
