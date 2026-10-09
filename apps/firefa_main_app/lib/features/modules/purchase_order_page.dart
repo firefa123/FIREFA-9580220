@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/auth/role_permissions.dart';
 import '../../core/outlet/active_outlet_store.dart';
@@ -22,6 +23,8 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
   late final Future<void> ready;
   String filter = 'all';
   String supplierFilter = 'all';
+  String search = '';
+  DateTimeRange? dateRange;
 
   bool get allowed =>
       FirefaAccess.can(outlet.role, FirefaPermission.inventoryManage) &&
@@ -176,6 +179,42 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
     }
   }
 
+  String _csvCell(String value) {
+    final safe = value.replaceAll('"', '""');
+    final guarded = RegExp(r'^[=+@\\-]').hasMatch(safe) ? "'$safe" : safe;
+    return '"$guarded"';
+  }
+
+  Future<void> _copyCsv(List<FirefaPurchaseOrder> rows) async {
+    if (!allowed) return;
+    final lines = <String>[
+      'PO ID,Outlet ID,Supplier,Barang,Satuan,Jumlah Pesan,Jumlah Diterima,Sisa,Harga Satuan,Nilai Pesanan,Nilai Diterima,Status,Tanggal PO,Terakhir Diterima,Catatan',
+      for (final po in rows)
+        [
+          po.id, po.outletId, po.supplierName, po.itemName, po.unit,
+          po.quantity.toString(), po.receivedQuantity.toString(),
+          po.remainingQuantity.toString(), po.unitCost.toString(),
+          po.totalCost.toString(),
+          (po.receivedQuantity * po.unitCost).toString(),
+          po.status, po.createdAt, po.receivedAt ?? '', po.note,
+        ].map(_csvCell).join(','),
+    ];
+    await Clipboard.setData(ClipboardData(text: lines.join('\\r\\n')));
+    _message('CSV ${rows.length} PO disalin. Tempel ke file .csv.');
+  }
+
+  Future<void> _pickDateRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      initialDateRange: dateRange,
+    );
+    if (picked != null && mounted) {
+      setState(() => dateRange = picked);
+    }
+  }
+
   Widget _metric(String label, String value) => Container(
     constraints: const BoxConstraints(minWidth: 155),
     padding: const EdgeInsets.all(12),
@@ -210,9 +249,18 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
         return const Center(child: CircularProgressIndicator());
       }
       final all = orders.forOutlet(outlet.selectedOutletId);
-      final visible = all.where((po) =>
-          (filter == 'all' || po.status == filter) &&
-          (supplierFilter == 'all' || po.supplierId == supplierFilter));
+      final visible = all.where((po) {
+        final query = search.trim().toLowerCase();
+        final date = DateTime.tryParse(po.createdAt);
+        return (filter == 'all' || po.status == filter) &&
+            (supplierFilter == 'all' || po.supplierId == supplierFilter) &&
+            (query.isEmpty || [
+              po.id, po.supplierName, po.itemName, po.note,
+            ].any((value) => value.toLowerCase().contains(query))) &&
+            (dateRange == null || (date != null &&
+                !DateUtils.dateOnly(date).isBefore(dateRange!.start) &&
+                !DateUtils.dateOnly(date).isAfter(dateRange!.end)));
+      }).toList();
       final supplierIds = all.map((po) => po.supplierId).toSet();
       final supplierNames = {
         for (final po in all) po.supplierId: po.supplierName,
@@ -294,6 +342,34 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
           ], onChanged: (value) {
             if (value != null) setState(() => filter = value);
           }),
+          ]),
+          const SizedBox(height: 12),
+          Wrap(spacing: 8, runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center, children: [
+            SizedBox(width: 270, child: TextField(
+              decoration: const InputDecoration(
+                labelText: 'Cari PO, supplier, barang, catatan',
+                prefixIcon: Icon(Icons.search),
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) => setState(() => search = value),
+            )),
+            OutlinedButton.icon(
+              onPressed: _pickDateRange,
+              icon: const Icon(Icons.date_range),
+              label: Text(dateRange == null ? 'Rentang tanggal' :
+                '${dateRange!.start.day}/${dateRange!.start.month}/${dateRange!.start.year} - '
+                '${dateRange!.end.day}/${dateRange!.end.month}/${dateRange!.end.year}'),
+            ),
+            if (dateRange != null)
+              TextButton(onPressed: () => setState(() => dateRange = null),
+                child: const Text('Hapus tanggal')),
+            OutlinedButton.icon(
+              onPressed: allowed ? () => _copyCsv(visible) : null,
+              icon: const Icon(Icons.copy),
+              label: Text('Salin CSV (${visible.length} PO)'),
+            ),
           ]),
           const SizedBox(height: 12),
           if (visible.isEmpty)
