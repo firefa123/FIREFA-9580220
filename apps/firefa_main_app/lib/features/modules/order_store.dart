@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'order_models.dart';
+import 'offline_sync_queue.dart';
 
 class FirefaOrderStore extends ChangeNotifier {
   FirefaOrderStore._();
@@ -91,7 +92,10 @@ class FirefaOrderStore extends ChangeNotifier {
     );
   }
 
-  Future<void> waitForPendingSave() => _pendingSave;
+  Future<void> waitForPendingSave() async {
+    await _pendingSave;
+    await FirefaOfflineSyncQueue.instance.waitForPendingSave();
+  }
 
   List<FirefaOrder> ordersForOutlet(String outletId) {
     _ensureInitialized();
@@ -151,6 +155,7 @@ class FirefaOrderStore extends ChangeNotifier {
 
     _orders.insert(0, order);
 
+    FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.created');
     _scheduleSave();
     notifyListeners();
 
@@ -176,6 +181,7 @@ class FirefaOrderStore extends ChangeNotifier {
       return false;
     }
 
+    FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
     _scheduleSave();
     notifyListeners();
     return true;
