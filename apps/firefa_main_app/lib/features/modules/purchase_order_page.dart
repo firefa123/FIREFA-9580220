@@ -25,6 +25,7 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
   String supplierFilter = 'all';
   String search = '';
   DateTimeRange? dateRange;
+  bool onlyPending = false;
 
   bool get allowed =>
       FirefaAccess.can(outlet.role, FirefaPermission.inventoryManage) &&
@@ -352,11 +353,15 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
         return const Center(child: CircularProgressIndicator());
       }
       final all = orders.forOutlet(outlet.selectedOutletId);
+      final supplierIds = all.map((po) => po.supplierId).toSet();
+      final effectiveSupplier = supplierIds.contains(supplierFilter)
+          ? supplierFilter : 'all';
       final visible = all.where((po) {
         final query = search.trim().toLowerCase();
         final date = DateTime.tryParse(po.createdAt);
         return (filter == 'all' || po.status == filter) &&
-            (supplierFilter == 'all' || po.supplierId == supplierFilter) &&
+            (effectiveSupplier == 'all' || po.supplierId == effectiveSupplier) &&
+            (!onlyPending || po.status == 'ordered' || po.status == 'partial') &&
             (query.isEmpty || [
               po.id, po.supplierName, po.itemName, po.note,
             ].any((value) => value.toLowerCase().contains(query))) &&
@@ -364,7 +369,6 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
                 !DateUtils.dateOnly(date).isBefore(dateRange!.start) &&
                 !DateUtils.dateOnly(date).isAfter(dateRange!.end)));
       }).toList();
-      final supplierIds = all.map((po) => po.supplierId).toSet();
       final supplierNames = {
         for (final po in all) po.supplierId: po.supplierName,
       };
@@ -374,6 +378,24 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
       final outstanding = all.where((po) =>
           po.status == 'ordered' || po.status == 'partial').fold<int>(
           0, (sum, po) => sum + po.remainingQuantity * po.unitCost);
+      final pending = all.where((po) =>
+          po.status == 'ordered' || po.status == 'partial').toList();
+      final now = DateTime.now();
+      int ageDays(FirefaPurchaseOrder po) {
+        final created = DateTime.tryParse(po.createdAt);
+        if (created == null) return 0;
+        final days = DateUtils.dateOnly(now).difference(
+            DateUtils.dateOnly(created)).inDays;
+        return days < 0 ? 0 : days;
+      }
+      final pendingOver7 = pending.where((po) => ageDays(po) >= 7).length;
+      final pendingOver30 = pending.where((po) => ageDays(po) >= 30).length;
+      final oldestPending = pending.isEmpty ? 0 :
+          pending.map(ageDays).reduce((a, b) => a > b ? a : b);
+      final followUp = [...pending]..sort((a, b) {
+        final age = ageDays(b).compareTo(ageDays(a));
+        return age != 0 ? age : a.id.compareTo(b.id);
+      });
       final statusCounts = {
         for (final status in ['ordered', 'partial', 'received', 'cancelled'])
           status: all.where((po) => po.status == status).length,
@@ -405,6 +427,28 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
             _metric('Sisa Aktif', 'Rp $outstanding'),
           ]),
           const SizedBox(height: 12),
+          const Text('Monitoring PO Aktif',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            _metric('PO Menunggu', '${pending.length}'),
+            _metric('Umur ≥7 Hari', '$pendingOver7'),
+            _metric('Umur ≥30 Hari', '$pendingOver30'),
+            _metric('Tertua', '$oldestPending hari'),
+          ]),
+          if (followUp.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text('Prioritas tindak lanjut (PO tertua lebih dulu)',
+                style: TextStyle(color: Colors.blueGrey)),
+            for (final po in followUp.take(5))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Text('${po.id} • ${po.supplierName} • '
+                    '${ageDays(po)} hari • sisa ${po.remainingQuantity} '
+                    '${po.unit} • Rp ${po.remainingQuantity * po.unitCost}'),
+              ),
+          ],
+          const SizedBox(height: 12),
           Wrap(spacing: 8, runSpacing: 8, children: [
             for (final entry in statusCounts.entries)
               Chip(label: Text('${entry.key}: ${entry.value}')),
@@ -424,7 +468,7 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
             ),
           const SizedBox(height: 12),
           Wrap(spacing: 12, runSpacing: 8, children: [
-          DropdownButton<String>(value: supplierFilter,
+          DropdownButton<String>(value: effectiveSupplier,
             items: [
               const DropdownMenuItem(value: 'all',
                   child: Text('Semua supplier')),
@@ -446,6 +490,13 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
             if (value != null) setState(() => filter = value);
           }),
           ]),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: const Text('Tampilkan hanya PO yang masih aktif'),
+            value: onlyPending,
+            onChanged: (value) => setState(() => onlyPending = value ?? false),
+          ),
           const SizedBox(height: 12),
           Wrap(spacing: 8, runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center, children: [
