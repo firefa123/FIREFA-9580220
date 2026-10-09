@@ -1,122 +1,190 @@
 import 'package:flutter/material.dart';
 
+import '../../core/auth/role_permissions.dart';
 import '../../core/outlet/active_outlet_store.dart';
+import 'settings_store.dart';
 
-/// UI-06: honest, read-only placeholder until this module has a real store.
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
   static const primary = Color(0xFF008F83);
-  static const ink = Color(0xFF172B4D);
   static const muted = Color(0xFF64748B);
-  static const border = Color(0xFFE2E8F0);
+  final outlet = FirefaActiveOutletStore.instance;
+  final store = FirefaSettingsStore.instance;
+  final footer = TextEditingController();
+  final contact = TextEditingController();
+  final address = TextEditingController();
+  late final Future<void> ready;
+  String? loadedOutlet;
+  bool showTax = true;
+  bool saving = false;
+
+  bool get allowed => FirefaAccess.can(outlet.role, FirefaPermission.settingsManage) &&
+      outlet.canAccessOutlet(outlet.selectedOutletId);
+
+  @override
+  void initState() {
+    super.initState();
+    ready = store.initialize();
+    outlet.addListener(_refresh);
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
+  void _load(String id) {
+    if (loadedOutlet == id) return;
+    final value = store.forOutlet(id);
+    loadedOutlet = id;
+    footer.text = value.receiptFooter;
+    contact.text = value.contact;
+    address.text = value.address;
+    showTax = value.showTaxOnReceipt;
+  }
+
+  @override
+  void dispose() {
+    outlet.removeListener(_refresh);
+    footer.dispose();
+    contact.dispose();
+    address.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (saving || !allowed) return;
+    final id = outlet.selectedOutletId;
+    final value = FirefaOutletSettings(
+      outletId: id,
+      receiptFooter: footer.text.trim(),
+      contact: contact.text.trim(),
+      address: address.text.trim(),
+      showTaxOnReceipt: showTax,
+    );
+    if (!store.update(id, value)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Periksa panjang input pengaturan.'),
+      ));
+      return;
+    }
+    setState(() => saving = true);
+    try {
+      await store.waitForPendingSave();
+      if (!mounted || !allowed || outlet.selectedOutletId != id) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Pengaturan outlet tersimpan secara lokal.'),
+      ));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Gagal menyimpan pengaturan lokal.'),
+      ));
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final outlet = FirefaActiveOutletStore.instance;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 520;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(
-              spacing: 10,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                const Icon(Icons.settings, color: primary, size: 23),
-                Text('Settings',
-                    style: TextStyle(
-                      fontSize: compact ? 20 : 24,
-                      fontWeight: FontWeight.bold,
-                      color: ink,
-                    )),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Text('Konfigurasi aplikasi dan outlet',
-                style: TextStyle(color: muted, fontSize: 13)),
-            const SizedBox(height: 18),
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.all(compact ? 16 : 22),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+    return FutureBuilder<void>(
+      future: ready,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Text('Gagal memuat pengaturan lokal. Data tidak ditimpa.');
+        }
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (!allowed) {
+          return const Text('Anda tidak memiliki akses mengubah Settings.');
+        }
+        final id = outlet.selectedOutletId;
+        _load(id);
+        return LayoutBuilder(builder: (context, constraints) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Settings & Konfigurasi Outlet',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text('${outlet.selectedOutletName} • ${outlet.role.label}',
+                  style: const TextStyle(color: muted)),
+              const SizedBox(height: 6),
+              const Text('Pengaturan tersimpan di perangkat ini. Belum tersinkronisasi cloud. '
+                  'Detail ini belum otomatis diterapkan ke struk POS.',
+                  style: TextStyle(color: muted, fontSize: 12)),
+              const SizedBox(height: 18),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 760),
+                child: Container(
+                  padding: EdgeInsets.all(constraints.maxWidth < 500 ? 16 : 24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.storefront_outlined,
-                          size: 17, color: primary),
-                      Text(outlet.selectedOutletName,
-                          style: const TextStyle(
-                              color: ink, fontWeight: FontWeight.w600)),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(20),
+                      const Text('Informasi Outlet & Preferensi Struk',
+                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 18),
+                      TextField(
+                        controller: contact,
+                        maxLength: 80,
+                        decoration: const InputDecoration(
+                          labelText: 'Kontak outlet',
+                          border: OutlineInputBorder(),
                         ),
-                        child: const Text('Belum tersedia',
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: muted)),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: address,
+                        maxLength: 240,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          labelText: 'Alamat outlet',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: footer,
+                        maxLength: 160,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          labelText: 'Pesan penutup struk',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Tampilkan informasi pajak pada struk'),
+                        subtitle: const Text('Preferensi tampilan saja; tidak mengubah perhitungan POS.'),
+                        value: showTax,
+                        activeThumbColor: primary,
+                        onChanged: (value) => setState(() => showTax = value),
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: saving ? null : _save,
+                        style: FilledButton.styleFrom(backgroundColor: primary),
+                        icon: const Icon(Icons.save_outlined),
+                        label: Text(saving ? 'Menyimpan...' : 'Simpan Pengaturan'),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 28),
-                  Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 420),
-                      child: Column(
-                        children: [
-                          Container(
-                            width: 72,
-                            height: 72,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE0F2F1),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Icon(Icons.settings,
-                                color: primary, size: 34),
-                          ),
-                          const SizedBox(height: 18),
-                          const Text('Pengaturan lanjutan belum tersedia',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                  color: ink,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 10),
-                          const Text('Pemilihan outlet dan permission sudah berjalan pada navigasi. Formulir konfigurasi belum diimplementasikan.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: muted, height: 1.5)),
-                          const SizedBox(height: 20),
-                          const Text(
-                            'Local Only • Tidak ada sinkronisasi cloud',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 11, color: muted),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 22),
-                ],
+                ),
               ),
-            ),
-          ],
-        );
+            ],
+          );
+        });
       },
     );
   }
