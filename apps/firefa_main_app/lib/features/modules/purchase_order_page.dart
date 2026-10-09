@@ -180,6 +180,71 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
     }
   }
 
+  Future<void> _editFollowUp(FirefaPurchaseOrder po) async {
+    if (!allowed || po.outletId != outlet.selectedOutletId ||
+        (po.status != 'ordered' && po.status != 'partial')) return;
+    final sourceOutlet = po.outletId;
+    final controller = TextEditingController(text: po.followUpNote);
+    DateTime? selected = po.followUpDate == null
+        ? null : DateTime.tryParse(po.followUpDate!);
+    final result = await showDialog<({String note, String? date})>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, update) => AlertDialog(
+          title: Text('Tindak lanjut ${po.id}'),
+          content: SizedBox(width: 420, child: Column(
+            mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                controller: controller,
+                maxLength: 200,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                    labelText: 'Catatan tindak lanjut supplier'),
+              ),
+              Wrap(spacing: 8, children: [
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                      context: ctx,
+                      initialDate: selected ?? DateTime.now(),
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2100),
+                    );
+                    if (picked != null) update(() => selected = picked);
+                  },
+                  icon: const Icon(Icons.event_outlined),
+                  label: Text(selected == null ? 'Pilih tanggal pengingat'
+                      : '${selected!.day}/${selected!.month}/${selected!.year}'),
+                ),
+                if (selected != null)
+                  TextButton(onPressed: () => update(() => selected = null),
+                      child: const Text('Hapus tanggal')),
+              ]),
+            ],
+          )),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx),
+                child: const Text('Batal')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, (
+              note: controller.text,
+              date: selected == null ? null :
+                  '${selected!.year.toString().padLeft(4, '0')}-'
+                  '${selected!.month.toString().padLeft(2, '0')}-'
+                  '${selected!.day.toString().padLeft(2, '0')}',
+            )), child: const Text('Simpan')),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    if (!mounted || result == null || !allowed ||
+        outlet.selectedOutletId != sourceOutlet) return;
+    if (!orders.setFollowUp(
+      outletId: sourceOutlet, orderId: po.id,
+      note: result.note, date: result.date,
+    )) _message('Gagal menyimpan tindak lanjut PO.');
+  }
+
   String _csvCell(String value) {
     final safe = value.replaceAll('"', '""');
     final guarded = safe.isNotEmpty && '=+@-'.contains(safe[0]) ? "'$safe" : safe;
@@ -287,6 +352,10 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
                 Text('Nilai diterima: Rp $receivedValue'),
                 Text('Nilai sisa: Rp $remainingValue'),
                 if (po.note.isNotEmpty) Text('Catatan: ${po.note}'),
+                if (po.followUpNote.isNotEmpty)
+                  Text('Tindak lanjut: ${po.followUpNote}'),
+                if (po.followUpDate != null)
+                  Text('Tanggal pengingat: ${po.followUpDate}'),
                 const SizedBox(height: 12),
                 Text('Rekonsiliasi receipt: ${_receiptAuditStatus(po)}'),
                 Text('Total rincian receipt: ${po.receipts.fold<int>(0, (n, r) => n + r.quantity)} ${po.unit}'),
@@ -648,6 +717,16 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
                   if (po.receivedAt != null)
                     Text('Diterima: ${po.receivedAt}'),
                   if (po.note.isNotEmpty) Text('Catatan: ${po.note}'),
+                  if (po.followUpNote.isNotEmpty)
+                    Text('Tindak lanjut: ${po.followUpNote}'),
+                  if (po.followUpDate != null)
+                    Text('Pengingat: ${po.followUpDate}'),
+                  if (allowed && (po.status == 'ordered' || po.status == 'partial'))
+                    TextButton.icon(
+                      onPressed: () => _editFollowUp(po),
+                      icon: const Icon(Icons.edit_note_outlined),
+                      label: const Text('Atur Tindak Lanjut'),
+                    ),
                   if (allowed && (po.status == 'ordered' || po.status == 'partial'))
                     Wrap(spacing: 8, children: [
                       FilledButton(onPressed: () => decide(po, true),
