@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/auth/role_permissions.dart';
-import '../../dashboard/dashboard_page.dart';
+import '../../../core/navigation/main_navigation.dart';
 
 class LoginForm extends StatefulWidget {
   const LoginForm({super.key});
@@ -27,10 +27,11 @@ class _LoginFormState extends State<LoginForm> {
   }
 
   void _login() {
-    // Demo login: belum ada autentikasi backend.
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => DashboardPage(role: selectedRole)),
+      MaterialPageRoute(
+        builder: (_) => FirefaMainNavigation(role: selectedRole),
+      ),
     );
   }
 
@@ -54,15 +55,11 @@ class _LoginFormState extends State<LoginForm> {
             labelText: 'Password',
             prefixIcon: const Icon(Icons.lock_outline),
             suffixIcon: IconButton(
-              icon: Icon(
-                obscurePassword
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-              ),
+              icon: Icon(obscurePassword
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined),
               onPressed: () {
-                setState(() {
-                  obscurePassword = !obscurePassword;
-                });
+                setState(() => obscurePassword = !obscurePassword);
               },
             ),
           ),
@@ -75,16 +72,14 @@ class _LoginFormState extends State<LoginForm> {
             prefixIcon: Icon(Icons.person_outline),
           ),
           items: FirefaRole.values.map((role) {
-            return DropdownMenuItem<FirefaRole>(
+            return DropdownMenuItem(
               value: role,
               child: Text(role.label),
             );
           }).toList(),
           onChanged: (value) {
             if (value != null) {
-              setState(() {
-                selectedRole = value;
-              });
+              setState(() => selectedRole = value);
             }
           },
         ),
@@ -94,24 +89,13 @@ class _LoginFormState extends State<LoginForm> {
             Checkbox(
               value: rememberMe,
               onChanged: (value) {
-                setState(() {
-                  rememberMe = value ?? false;
-                });
+                setState(() => rememberMe = value ?? false);
               },
             ),
             const Text('Remember me'),
             const Spacer(),
             TextButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Reset password tersedia setelah '
-                      'autentikasi backend dibuat.',
-                    ),
-                  ),
-                );
-              },
+              onPressed: () {},
               child: const Text('Forgot password?'),
             ),
           ],
