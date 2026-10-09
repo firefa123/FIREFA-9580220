@@ -457,15 +457,49 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
           const Text('Ringkasan Supplier',
               style: TextStyle(fontWeight: FontWeight.bold)),
           for (final entry in supplierSummary)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Text(
-                '${supplierNames[entry.key] ?? entry.key} • '
-                '${entry.value.length} PO • '
-                'Dipesan Rp ${entry.value.fold<int>(0, (sum, po) => sum + po.totalCost)} • '
-                'Diterima Rp ${entry.value.fold<int>(0, (sum, po) => sum + po.receivedQuantity * po.unitCost)}',
-              ),
-            ),
+            Builder(builder: (context) {
+              final rows = entry.value;
+              final ordered = rows.fold<int>(0, (n, po) => n + po.totalCost);
+              final received = rows.fold<int>(0,
+                  (n, po) => n + po.receivedQuantity * po.unitCost);
+              final active = rows.where((po) =>
+                  po.status == 'ordered' || po.status == 'partial').toList();
+              final outstanding = active.fold<int>(0,
+                  (n, po) => n + po.remainingQuantity * po.unitCost);
+              final completed = rows.where((po) =>
+                  po.status == 'received').length;
+              final cancelled = rows.where((po) =>
+                  po.status == 'cancelled').length;
+              final ratio = ordered == 0 ? 0.0 : received / ordered;
+              return Card(child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(supplierNames[entry.key] ?? entry.key,
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      _metric('Total PO', '${rows.length}'),
+                      _metric('PO Aktif', '${active.length}'),
+                      _metric('Selesai', '$completed'),
+                      _metric('Dibatalkan', '$cancelled'),
+                      _metric('Dipesan', 'Rp $ordered'),
+                      _metric('Diterima', 'Rp $received'),
+                      _metric('Outstanding', 'Rp $outstanding'),
+                      _metric('Rasio Penerimaan',
+                          '${(ratio * 100).toStringAsFixed(1)}%'),
+                    ]),
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(value: ratio.clamp(0.0, 1.0)),
+                    TextButton.icon(
+                      onPressed: () => setState(() => supplierFilter = entry.key),
+                      icon: const Icon(Icons.filter_alt_outlined),
+                      label: const Text('Filter PO supplier ini'),
+                    ),
+                  ],
+                ),
+              ));
+            }),
           const SizedBox(height: 12),
           Wrap(spacing: 12, runSpacing: 8, children: [
           DropdownButton<String>(value: effectiveSupplier,
