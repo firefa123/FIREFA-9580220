@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 class TopSellingCard extends StatelessWidget {
   const TopSellingCard({super.key});
 
-  static const Color primary = Color(0xFF009688);
+  static const Color primary = Color(0xFF008F83);
   static const Color dark = Color(0xFF172B4D);
   static const Color muted = Color(0xFF64748B);
 
@@ -44,7 +44,7 @@ class TopSellingCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Menu dengan penjualan tertinggi',
+            'Data simulasi • Belum terhubung ke laporan penjualan',
             style: TextStyle(fontSize: 12, color: muted),
           ),
           const SizedBox(height: 26),
