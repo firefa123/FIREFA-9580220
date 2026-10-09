@@ -1,3 +1,5 @@
+library;
+
 /// Owner dashboard branding binding foundation.
 
 class OwnerDashboardBrandingBinding {
