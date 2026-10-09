@@ -85,6 +85,13 @@ class FirefaNavigation {
       icon: Icons.local_shipping_outlined,
       permission: FirefaPermission.inventoryManage,
     ),
+    FirefaModule(
+      id: 'purchasing',
+      title: 'Purchasing',
+      description: 'Purchase order dan penerimaan barang.',
+      icon: Icons.shopping_cart_checkout_outlined,
+      permission: FirefaPermission.inventoryManage,
+    ),
   ];
 
   static List<FirefaModule> accessibleModules(FirefaRole role) {
