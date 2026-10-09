@@ -560,86 +560,105 @@ class _PosPageState extends State<PosPage> {
     _saveCart();
   }
 
-  void confirmOrder() {
-    if (cart.isEmpty || !outletStore.canAccessOutlet(outletId)) {
+  bool _checkoutBusy = false;
+
+  Future<void> checkout() async {
+    if (_checkoutBusy || cart.isEmpty || !outletStore.canAccessOutlet(outletId)) {
       return;
     }
-
-    final order = FirefaOrderStore.instance.createOrder(
-      outletId: outletId,
-      orderType: config.orderType,
-      tableId: config.orderType == 'Dine In' ? config.table : null,
-      items: cart
-          .map(
-            (item) => FirefaOrderItem(
-              productName: item.product.name,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              details: item.details,
-            ),
-          )
-          .toList(),
-      subtotal: subtotal,
-      discount: discountAmount,
-      tax: taxAmount,
-      service: serviceAmount,
-      total: grandTotal,
-    );
-
-    setState(() {
-      cart.clear();
-      config.resetCharges();
-    });
-    _saveCart();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${order.id} berhasil dibuat di $outletName.')),
-    );
-  }
-
-  Future<void> showCheckoutDemo() async {
-    if (cart.isEmpty || grandTotal <= 0) return;
-
     final sourceOutlet = outletId;
-    final result = await showDialog<PosPaymentResult>(
+    final choice = await showDialog<String>(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => PosPaymentDialog(
-        total: grandTotal,
-        orderType: config.orderType,
-        table: config.orderType == 'Dine In' ? config.table : null,
-        itemCount: itemCount,
-      ),
-    );
-
-    if (!mounted || result == null) return;
-
-    if (sourceOutlet != outletId) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Outlet berubah. Simulasi dibatalkan.')),
-      );
-      return;
-    }
-
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Payment Simulated'),
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Checkout'),
         content: Text(
-          'Outlet: $outletName\n'
-          'Method: ${result.method}\n'
-          'Total: ${rupiah(result.total)}\n'
-          'Change: ${rupiah(result.change)}\n\n'
-          'Belum ada pembayaran nyata atau transaksi tersimpan.',
+          'Total: ${rupiah(grandTotal)}\\n'
+          'Pilih bayar sekarang atau simpan pesanan untuk dibayar nanti.',
         ),
         actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Batal'),
+          ),
+          OutlinedButton(
+            onPressed: () => Navigator.pop(dialogContext, 'later'),
+            child: const Text('Bayar Nanti'),
+          ),
           FilledButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            onPressed: () => Navigator.pop(dialogContext, 'now'),
+            child: const Text('Bayar Sekarang'),
           ),
         ],
       ),
     );
+    if (!mounted || choice == null || sourceOutlet != outletId) return;
+
+    PosPaymentResult? payment;
+    if (choice == 'now') {
+      if (grandTotal <= 0) return;
+      payment = await showDialog<PosPaymentResult>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => PosPaymentDialog(
+          total: grandTotal,
+          orderType: config.orderType,
+          table: config.orderType == 'Dine In' ? config.table : null,
+          itemCount: itemCount,
+        ),
+      );
+      if (!mounted || payment == null || sourceOutlet != outletId) return;
+    }
+
+    if (_checkoutBusy || cart.isEmpty || !outletStore.canAccessOutlet(sourceOutlet)) {
+      return;
+    }
+    setState(() => _checkoutBusy = true);
+    try {
+      final store = FirefaOrderStore.instance;
+      final order = store.createOrder(
+        outletId: sourceOutlet,
+        orderType: config.orderType,
+        tableId: config.orderType == 'Dine In' ? config.table : null,
+        items: cart.map((item) => FirefaOrderItem(
+          productName: item.product.name,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          details: item.details,
+        )).toList(),
+        subtotal: subtotal,
+        discount: discountAmount,
+        tax: taxAmount,
+        service: serviceAmount,
+        total: grandTotal,
+      );
+      if (payment != null) {
+        if (!store.markPaid(sourceOutlet, order.id)) {
+          throw StateError('Status pembayaran tidak dapat diperbarui.');
+        }
+      }
+      await store.waitForPendingSave();
+      if (!mounted) return;
+      setState(() {
+        cart.clear();
+        config.resetCharges();
+      });
+      _saveCart();
+      await persistentStore.waitForPendingSave();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(
+          '${order.id} tersimpan — ${payment == null ? 'Unpaid' : 'Paid (simulasi)'}.',
+        )),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Checkout gagal: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _checkoutBusy = false);
+    }
   }
 
   @override
@@ -993,30 +1012,11 @@ class _PosPageState extends State<PosPage> {
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
-            height: 48,
-            child: OutlinedButton.icon(
-              onPressed: cart.isEmpty ? null : confirmOrder,
-              icon: const Icon(Icons.restaurant_outlined),
-              label: const Text('Confirm & Send Order'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: primary,
-                side: const BorderSide(color: primary),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
             height: 50,
             child: FilledButton.icon(
-              onPressed: cart.isEmpty || grandTotal <= 0
-                  ? null
-                  : showCheckoutDemo,
-              icon: const Icon(Icons.arrow_forward, size: 18),
-              label: const Text('Continue to Payment'),
+              onPressed: cart.isEmpty || _checkoutBusy ? null : checkout,
+              icon: const Icon(Icons.shopping_cart_checkout, size: 18),
+              label: const Text('Checkout'),
               style: FilledButton.styleFrom(
                 backgroundColor: primary,
                 shape: RoundedRectangleBorder(
