@@ -15,7 +15,7 @@ class FirefaPurchaseOrder {
     required this.note, required this.status, required this.createdAt,
     required this.receivedAt, this.receivedQuantity = 0,
     this.receipts = const [], this.cancelledAt,
-    this.followUpNote = '', this.followUpDate,
+    this.followUpNote = '', this.followUpDate, this.followUpContactedAt,
   });
   final String id, outletId, supplierId, supplierName, itemId, itemName;
   final String unit, note, status, createdAt;
@@ -24,6 +24,7 @@ class FirefaPurchaseOrder {
   final String? cancelledAt;
   final String followUpNote;
   final String? followUpDate;
+  final String? followUpContactedAt;
   final int receivedQuantity;
   final List<FirefaPurchaseReceipt> receipts;
   int get remainingQuantity => quantity - receivedQuantity;
@@ -36,6 +37,7 @@ class FirefaPurchaseOrder {
     'note': note, 'status': status, 'createdAt': createdAt,
     'receivedAt': receivedAt, 'cancelledAt': cancelledAt,
     'followUpNote': followUpNote, 'followUpDate': followUpDate,
+    'followUpContactedAt': followUpContactedAt,
     'receivedQuantity': receivedQuantity,
     'receipts': receipts.map((r) => r.toJson()).toList(),
   };
@@ -58,6 +60,7 @@ class FirefaPurchaseOrder {
         cancelledAt: json['cancelledAt'] as String?,
         followUpNote: json['followUpNote'] as String? ?? '',
         followUpDate: json['followUpDate'] as String?,
+        followUpContactedAt: json['followUpContactedAt'] as String?,
         receivedQuantity: json['receivedQuantity'] as int? ??
             ((json['status'] == 'received') ? json['quantity'] as int : 0),
         receipts: (json['receipts'] as List<dynamic>? ?? [])
@@ -75,6 +78,7 @@ class FirefaPurchaseOrder {
         cancelledAt: next == 'cancelled' ? timestamp : cancelledAt,
         receivedQuantity: receivedQuantity, receipts: receipts,
         followUpNote: followUpNote, followUpDate: followUpDate,
+        followUpContactedAt: followUpContactedAt,
       );
 
   FirefaPurchaseOrder withFollowUp(String note, String? date) =>
@@ -86,6 +90,19 @@ class FirefaPurchaseOrder {
         receivedAt: receivedAt, cancelledAt: cancelledAt,
         receivedQuantity: receivedQuantity, receipts: receipts,
         followUpNote: note, followUpDate: date,
+        followUpContactedAt: null,
+      );
+
+  FirefaPurchaseOrder withContactedAt(String? timestamp) =>
+      FirefaPurchaseOrder(
+        id: id, outletId: outletId, supplierId: supplierId,
+        supplierName: supplierName, itemId: itemId, itemName: itemName,
+        unit: unit, quantity: quantity, unitCost: unitCost,
+        note: note, status: status, createdAt: createdAt,
+        receivedAt: receivedAt, cancelledAt: cancelledAt,
+        receivedQuantity: receivedQuantity, receipts: receipts,
+        followUpNote: followUpNote, followUpDate: followUpDate,
+        followUpContactedAt: timestamp,
       );
 
   FirefaPurchaseOrder withReceipt(FirefaPurchaseReceipt receipt) {
@@ -99,6 +116,7 @@ class FirefaPurchaseOrder {
       cancelledAt: cancelledAt,
       receivedQuantity: total, receipts: [...receipts, receipt],
       followUpNote: followUpNote, followUpDate: followUpDate,
+        followUpContactedAt: followUpContactedAt,
     );
   }
 }
@@ -215,6 +233,22 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
       return false;
     }
     _orders[index] = _orders[index].withFollowUp(note.trim(), date);
+    notifyListeners();
+    _save();
+    return true;
+  }
+
+  bool setFollowUpContacted({
+    required String outletId, required String orderId,
+    required bool contacted,
+  }) {
+    if (!_initialized) return false;
+    final index = _orders.indexWhere((po) =>
+        po.outletId == outletId && po.id == orderId &&
+        (po.status == 'ordered' || po.status == 'partial'));
+    if (index < 0) return false;
+    _orders[index] = _orders[index].withContactedAt(
+        contacted ? DateTime.now().toIso8601String() : null);
     notifyListeners();
     _save();
     return true;
