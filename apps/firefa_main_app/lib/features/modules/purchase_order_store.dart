@@ -196,91 +196,24 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
     required String outletId, required String orderId,
     required String note, String? date,
   }) {
-    if (!_initialized || note.trim().length > 200 ||
-        (date != null && (DateTime.tryParse(date) == null ||
-            !RegExp(r'^\\d{4}-\\d{2}-\\d{2}
-    if (!_initialized) {
+    if (!_initialized || note.trim().length > 200) {
       return false;
     }
-    final index = _orders.indexWhere((po) =>
-        po.outletId == outletId && po.id == orderId && (po.status == 'ordered' || po.status == 'partial'));
-    if (index < 0) {
-      return false;
-    }
-    _orders[index] = _orders[index].withStatus('cancelled', DateTime.now().toIso8601String());
-    notifyListeners();
-    _save();
-    return true;
-  }
-
-  bool receive({
-    required String outletId, required String orderId, int? quantity,
-  }) {
-    if (!_initialized) {
-      return false;
-    }
-    final index = _orders.indexWhere((po) =>
-        po.outletId == outletId && po.id == orderId &&
-        (po.status == 'ordered' || po.status == 'partial'));
-    if (index < 0) {
-      return false;
-    }
-    final order = _orders[index];
-    final amount = quantity ?? order.remainingQuantity;
-    if (amount <= 0 || amount > order.remainingQuantity) {
-      return false;
-    }
-    final inventory = FirefaInventoryStore.instance;
-    final items = inventory.forOutlet(outletId)
-        .where((item) => item.id == order.itemId);
-    if (items.isEmpty || items.first.unit != order.unit ||
-        items.first.stock + amount > 999999999) {
-      return false;
-    }
-    final receipt = FirefaPurchaseReceipt(
-      id: '${order.id}-receipt-${order.receipts.length + 1}',
-      quantity: amount, receivedAt: DateTime.now().toIso8601String(),
-    );
-    final success = inventory.adjust(
-      outletId: outletId, id: order.itemId, type: 'in',
-      amount: amount, note: 'Penerimaan PO ${order.id} / ${receipt.id}',
-    );
-    if (!success) {
-      return false;
-    }
-    _orders[index] = order.withReceipt(receipt);
-    notifyListeners();
-    _save();
-    return true;
-  }
-
-  void _save() {
-    final snapshot = jsonEncode({
-      'version': 1, 'nextId': _nextId,
-      'orders': _orders.map((po) => po.toJson()).toList(),
-    });
-    _pendingSave = _pendingSave.catchError((Object error) {
-      debugPrint('PO save sebelumnya gagal: $error');
-    }).then((_) async {
-      final prefs = await SharedPreferences.getInstance();
-      if (!await prefs.setString(storageKey, snapshot)) {
-        throw StateError('Gagal menyimpan purchase order lokal');
+    if (date != null) {
+      final parsed = DateTime.tryParse(date);
+      if (parsed == null || !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(date) ||
+          parsed.year.toString().padLeft(4, '0') != date.substring(0, 4) ||
+          parsed.month.toString().padLeft(2, '0') != date.substring(5, 7) ||
+          parsed.day.toString().padLeft(2, '0') != date.substring(8, 10)) {
+        return false;
       }
-    });
-    unawaited(_pendingSave.catchError((Object error) {
-      debugPrint('PO save gagal: $error');
-    }));
-  }
-
-  Future<void> waitForPendingSave() => _pendingSave;
-}
-).hasMatch(date)))) {
-      return false;
     }
     final index = _orders.indexWhere((po) =>
         po.outletId == outletId && po.id == orderId &&
         (po.status == 'ordered' || po.status == 'partial'));
-    if (index < 0) return false;
+    if (index < 0) {
+      return false;
+    }
     _orders[index] = _orders[index].withFollowUp(note.trim(), date);
     notifyListeners();
     _save();
