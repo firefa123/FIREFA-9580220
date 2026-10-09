@@ -1,3 +1,5 @@
+library;
+
 /// Staff branding resolver foundation.
 
 class StaffBrandingResolver {
