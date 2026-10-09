@@ -232,7 +232,12 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
     if (index < 0) {
       return false;
     }
-    _orders[index] = _orders[index].withFollowUp(note.trim(), date);
+    final current = _orders[index];
+    final normalizedNote = note.trim();
+    if (current.followUpNote == normalizedNote && current.followUpDate == date) {
+      return true;
+    }
+    _orders[index] = current.withFollowUp(normalizedNote, date);
     notifyListeners();
     _save();
     return true;
@@ -247,7 +252,9 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
         po.outletId == outletId && po.id == orderId &&
         (po.status == 'ordered' || po.status == 'partial'));
     if (index < 0) return false;
-    _orders[index] = _orders[index].withContactedAt(
+    final current = _orders[index];
+    if ((current.followUpContactedAt != null) == contacted) return true;
+    _orders[index] = current.withContactedAt(
         contacted ? DateTime.now().toIso8601String() : null);
     notifyListeners();
     _save();
