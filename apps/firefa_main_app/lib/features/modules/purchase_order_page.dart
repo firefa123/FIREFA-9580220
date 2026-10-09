@@ -48,7 +48,9 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
   }
 
   Future<void> createOrder() async {
-    if (!allowed) return;
+    if (!allowed) {
+      return;
+    }
     final sourceOutlet = outlet.selectedOutletId;
     final supplierOptions = suppliers.forOutlet(sourceOutlet)
         .where((supplier) => supplier.isActive).toList();
@@ -129,7 +131,9 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
   }
 
   Future<void> decide(FirefaPurchaseOrder po, bool receive) async {
-    if (!allowed || po.outletId != outlet.selectedOutletId) return;
+    if (!allowed || po.outletId != outlet.selectedOutletId) {
+      return;
+    }
     final sourceOutlet = po.outletId;
     final confirmed = await showDialog<bool>(context: context,
       builder: (ctx) => AlertDialog(
@@ -152,7 +156,9 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
     final ok = receive
       ? orders.receive(outletId: sourceOutlet, orderId: po.id)
       : orders.cancel(outletId: sourceOutlet, orderId: po.id);
-    if (!ok) _message('Operasi gagal. Periksa status PO, stok, dan satuan barang.');
+    if (!ok) {
+      _message('Operasi gagal. Periksa status PO, stok, dan satuan barang.');
+    }
   }
 
   void _message(String message) {
