@@ -163,13 +163,16 @@ class _SettingsPageState extends State<SettingsPage> {
                           border: OutlineInputBorder(),
                         ),
                       ),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Tampilkan informasi pajak pada struk'),
-                        subtitle: const Text('Preferensi tampilan saja; tidak mengubah perhitungan POS.'),
-                        value: showTax,
-                        activeThumbColor: primary,
-                        onChanged: (value) => setState(() => showTax = value),
+                      Material(
+                        color: Colors.transparent,
+                        child: SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Tampilkan informasi pajak pada struk'),
+                          subtitle: const Text('Preferensi tampilan saja; tidak mengubah perhitungan POS.'),
+                          value: showTax,
+                          activeThumbColor: primary,
+                          onChanged: (value) => setState(() => showTax = value),
+                        ),
                       ),
                       const SizedBox(height: 12),
                       FilledButton.icon(
