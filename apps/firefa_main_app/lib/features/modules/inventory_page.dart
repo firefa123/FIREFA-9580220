@@ -21,6 +21,9 @@ class _InventoryPageState extends State<InventoryPage> {
   final outlet = FirefaActiveOutletStore.instance;
   final store = FirefaInventoryStore.instance;
   late final Future<void> ready;
+  String itemQuery = '';
+  String itemStatus = 'all';
+  String itemUnit = 'all';
 
   @override
   void initState() {
@@ -227,6 +230,17 @@ class _InventoryPageState extends State<InventoryPage> {
     }
   }
 
+  Widget _metric(String label, int count, Color color) {
+    return Container(
+      width: 145, padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: border), borderRadius: BorderRadius.circular(12)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: const TextStyle(color: muted, fontSize: 12)),
+        Text('$count', style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 24)),
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<void>(
@@ -242,6 +256,14 @@ class _InventoryPageState extends State<InventoryPage> {
         final low = items.where((item) => item.isLowStock).length;
         final empty = items.where((item) => item.isOutOfStock).length;
         final history = store.historyForOutlet(outlet.selectedOutletId);
+        final filteredItems = items.where((item) {
+          if (!item.name.toLowerCase().contains(itemQuery.trim().toLowerCase())) return false;
+          if (itemUnit != 'all' && item.unit != itemUnit) return false;
+          if (itemStatus == 'empty' && !item.isOutOfStock) return false;
+          if (itemStatus == 'low' && !item.isLowStock) return false;
+          if (itemStatus == 'safe' && (item.isLowStock || item.isOutOfStock)) return false;
+          return true;
+        }).toList();
         return LayoutBuilder(
           builder: (context, constraints) {
             final narrow = constraints.maxWidth < 520;
@@ -273,6 +295,46 @@ class _InventoryPageState extends State<InventoryPage> {
                 const Text('Inventory lokal • Belum terhubung ke POS, resep, atau cloud',
                     style: TextStyle(color: muted, fontSize: 12)),
                 const SizedBox(height: 18),
+                Wrap(spacing: 12, runSpacing: 10, children: [
+                  _metric('Total Barang', items.length, primary),
+                  _metric('Stok Aman', items.length - low - empty, primary),
+                  _metric('Stok Rendah', low, Colors.orange),
+                  _metric('Stok Habis', empty, Colors.red),
+                ]),
+                const SizedBox(height: 14),
+                Wrap(spacing: 12, runSpacing: 8, children: [
+                  SizedBox(width: narrow ? constraints.maxWidth : 230,
+                    child: TextField(
+                      decoration: const InputDecoration(labelText: 'Cari barang', prefixIcon: Icon(Icons.search)),
+                      onChanged: (value) => setState(() => itemQuery = value),
+                    )),
+                  DropdownButton<String>(
+                    value: itemStatus,
+                    items: const [
+                      DropdownMenuItem(value: 'all', child: Text('Semua status')),
+                      DropdownMenuItem(value: 'safe', child: Text('Aman')),
+                      DropdownMenuItem(value: 'low', child: Text('Stok Rendah')),
+                      DropdownMenuItem(value: 'empty', child: Text('Habis')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) setState(() => itemStatus = value);
+                    },
+                  ),
+                  DropdownButton<String>(
+                    value: itemUnit,
+                    items: [
+                      const DropdownMenuItem(value: 'all', child: Text('Semua satuan')),
+                      ...FirefaInventoryStore.units.map((unit) =>
+                        DropdownMenuItem(value: unit, child: Text(unit))),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) setState(() => itemUnit = value);
+                    },
+                  ),
+                ]),
+                const SizedBox(height: 14),
+                if (items.isNotEmpty && filteredItems.isEmpty)
+                  const Padding(padding: EdgeInsets.all(12), child: Text('Tidak ada barang sesuai filter.')),
                 if (items.isEmpty)
                   Container(
                     width: double.infinity,
@@ -294,11 +356,11 @@ class _InventoryPageState extends State<InventoryPage> {
                       ],
                     ),
                   ),
-                if (items.isNotEmpty)
+                if (filteredItems.isNotEmpty)
                   GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: items.length,
+                    itemCount: filteredItems.length,
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: constraints.maxWidth >= 950 ? 4
                           : constraints.maxWidth >= 650 ? 3
@@ -308,7 +370,7 @@ class _InventoryPageState extends State<InventoryPage> {
                       mainAxisSpacing: 12,
                     ),
                     itemBuilder: (context, index) {
-                      final item = items[index];
+                      final item = filteredItems[index];
                       final status = item.isOutOfStock ? 'Habis'
                           : item.isLowStock ? 'Stok Rendah' : 'Aman';
                       final statusColor = item.isOutOfStock ? Colors.red
