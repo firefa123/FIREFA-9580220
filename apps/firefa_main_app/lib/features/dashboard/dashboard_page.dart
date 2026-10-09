@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/auth/role_permissions.dart';
+import '../../core/navigation/app_routes.dart';
 import '../../core/outlet/active_outlet_store.dart';
 import '../modules/pos_page.dart';
 import '../modules/orders_page.dart';
@@ -118,53 +119,194 @@ class _DashboardPageState extends State<DashboardPage> {
     setState(() => selectedIndex = index);
   }
 
+  // Desktop keeps the existing sidebar; smaller screens use a drawer.
+  // All navigation surfaces use the same permission-filtered module list.
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-      body: Row(
-        children: [
-          DashboardSidebar(
-            selectedIndex: selectedIndex,
-            collapsed: sidebarCollapsed,
-            role: widget.role,
-            onToggle: () {
-              setState(() => sidebarCollapsed = !sidebarCollapsed);
-            },
-            onSelected: _selectPage,
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              key: ValueKey(selectedIndex),
-              padding: const EdgeInsets.all(24),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1440),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildTopbar(),
-                      const SizedBox(height: 28),
-                      if (selectedIndex >= 0) ...[
-                        _buildPageHeading(),
-                        const SizedBox(height: 24),
-                        if (selectedIndex == 0)
-                          _buildDashboardContent()
-                        else
-                          _buildModuleContent(),
-                      ] else
-                        const Center(
-                          child: Text('Tidak ada modul yang dapat diakses.'),
+    return LayoutBuilder(
+      builder: (context, viewport) {
+        final isCompact = viewport.maxWidth < 900;
+        final isPhone = viewport.maxWidth < 600;
+        final modules = FirefaNavigation.accessibleModules(widget.role);
+        final quickModules = modules.take(3).toList();
+
+        return Scaffold(
+          backgroundColor: const Color(0xFFF5F7FA),
+          drawer: isCompact
+              ? Drawer(
+                  child: SafeArea(
+                    child: Column(
+                      children: [
+                        const ListTile(
+                          title: Text('FIREFA',
+                              style: TextStyle(
+                                fontSize: 23,
+                                fontWeight: FontWeight.bold,
+                                color: ink,
+                              )),
+                          subtitle: Text('Navigasi Main App'),
                         ),
-                      const SizedBox(height: 24),
-                    ],
+                        const Divider(height: 1),
+                        Expanded(
+                          child: ListView(
+                            children: [
+                              for (final module in modules)
+                                ListTile(
+                                  key: ValueKey('drawer-${module.id}'),
+                                  leading: Icon(module.icon),
+                                  title: Text(module.title),
+                                  selected: selectedIndex ==
+                                      FirefaNavigation.modules.indexOf(module),
+                                  selectedColor: primary,
+                                  onTap: () {
+                                    Navigator.of(context).pop();
+                                    _selectPage(
+                                      FirefaNavigation.modules.indexOf(module),
+                                    );
+                                  },
+                                ),
+                            ],
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        const ListTile(
+                          leading: Icon(Icons.cloud_off_outlined),
+                          title: Text('Local Only'),
+                          subtitle: Text('Cloud belum terhubung'),
+                        ),
+                      ],
+                    ),
                   ),
+                )
+              : null,
+          bottomNavigationBar: isPhone && quickModules.isNotEmpty
+              ? Builder(
+                  builder: (context) {
+                    final quickIndices = quickModules
+                        .map((module) =>
+                            FirefaNavigation.modules.indexOf(module))
+                        .toList();
+                    final activePosition = quickIndices.indexOf(selectedIndex);
+                    return NavigationBar(
+                      selectedIndex:
+                          activePosition < 0 ? quickIndices.length : activePosition,
+                      onDestinationSelected: (position) {
+                        if (position == quickIndices.length) {
+                          Scaffold.of(context).openDrawer();
+                        } else {
+                          _selectPage(quickIndices[position]);
+                        }
+                      },
+                      destinations: [
+                        for (final module in quickModules)
+                          NavigationDestination(
+                            icon: Icon(module.icon),
+                            label: module.title,
+                          ),
+                        const NavigationDestination(
+                          icon: Icon(Icons.menu),
+                          label: 'Lainnya',
+                        ),
+                      ],
+                    );
+                  },
+                )
+              : null,
+          body: Row(
+            children: [
+              if (!isCompact)
+                DashboardSidebar(
+                  selectedIndex: selectedIndex,
+                  collapsed: sidebarCollapsed,
+                  role: widget.role,
+                  onToggle: () {
+                    setState(() => sidebarCollapsed = !sidebarCollapsed);
+                  },
+                  onSelected: _selectPage,
+                ),
+              Expanded(
+                child: Column(
+                  children: [
+                    if (isCompact)
+                      Builder(
+                        builder: (scaffoldContext) => Material(
+                          color: Colors.white,
+                          child: SafeArea(
+                            bottom: false,
+                            child: SizedBox(
+                              height: 56,
+                              child: Row(
+                                children: [
+                                  IconButton(
+                                    tooltip: 'Buka semua modul',
+                                    icon: const Icon(Icons.menu),
+                                    onPressed: () =>
+                                        Scaffold.of(scaffoldContext).openDrawer(),
+                                  ),
+                                  const Text(
+                                    'FIREFA',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                      color: ink,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  const Padding(
+                                    padding: EdgeInsets.only(right: 16),
+                                    child: Tooltip(
+                                      message: 'Local Only — Cloud belum terhubung',
+                                      child: Icon(
+                                        Icons.cloud_off_outlined,
+                                        color: muted,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        key: ValueKey(selectedIndex),
+                        padding: EdgeInsets.all(isPhone ? 16 : 24),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 1440),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildTopbar(),
+                                const SizedBox(height: 28),
+                                if (selectedIndex >= 0) ...[
+                                  _buildPageHeading(),
+                                  const SizedBox(height: 24),
+                                  if (selectedIndex == 0)
+                                    _buildDashboardContent()
+                                  else
+                                    _buildModuleContent(),
+                                ] else
+                                  const Center(
+                                    child: Text(
+                                      'Tidak ada modul yang dapat diakses.',
+                                    ),
+                                  ),
+                                const SizedBox(height: 24),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
