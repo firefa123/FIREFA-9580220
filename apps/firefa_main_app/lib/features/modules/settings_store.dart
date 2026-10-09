@@ -92,7 +92,9 @@ class FirefaSettingsStore extends ChangeNotifier {
         value.outletId != outletId ||
         value.receiptFooter.length > 160 ||
         value.contact.length > 80 ||
-        value.address.length > 240) return false;
+        value.address.length > 240) {
+      return false;
+    }
     _values[outletId] = value;
     notifyListeners();
     final snapshot = jsonEncode(_values.map(
