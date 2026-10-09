@@ -757,6 +757,21 @@ class _PosPageState extends State<PosPage> {
 
   @override
   Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: menuReady,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Text('Gagal memuat katalog menu lokal. Keranjang lama tidak diubah.');
+        }
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return _buildReadyPos(context);
+      },
+    );
+  }
+
+  Widget _buildReadyPos(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
