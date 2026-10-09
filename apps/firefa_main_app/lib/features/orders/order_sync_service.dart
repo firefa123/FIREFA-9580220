@@ -14,7 +14,7 @@ class OrderSyncService {
     for (final order in orders) {
       // API sync handler will be connected here.
       // Pending orders remain stored until successful sync.
-      await Future<void>.value(order.orderId);
+      order.orderId;
     }
   }
 
