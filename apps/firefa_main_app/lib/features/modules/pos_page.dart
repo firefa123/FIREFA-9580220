@@ -633,6 +633,18 @@ class _PosPageState extends State<PosPage> {
       return;
     }
     final sourceOutlet = outletId;
+    if (config.orderType == 'Dine In') {
+      final tables = tableStore.forOutlet(sourceOutlet);
+      final valid = tables.isEmpty
+          ? const ['A01', 'A02', 'A03', 'B01'].contains(config.table)
+          : tables.any((table) => table.name == config.table);
+      if (!valid) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pilih meja yang tersedia di daftar outlet sebelum checkout.')),
+        );
+        return;
+      }
+    }
     final choice = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
