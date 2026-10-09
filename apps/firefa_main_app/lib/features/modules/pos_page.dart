@@ -7,6 +7,7 @@ import 'order_models.dart';
 import 'order_store.dart';
 import 'pos_payment_dialog.dart';
 import 'persistent_cart_store.dart';
+import 'table_store.dart';
 
 class PosPage extends StatefulWidget {
   const PosPage({super.key});
@@ -29,6 +30,7 @@ class _PosPageState extends State<PosPage> {
   final Map<String, _OrderSettings> settings = {};
   final persistentStore = FirefaPersistentCartStore.instance;
   final menuStore = FirefaMenuStore.instance;
+  final tableStore = FirefaTableStore.instance;
   late final Future<void> menuReady;
 
   void _restoreOutlet(String id) {
@@ -206,7 +208,8 @@ class _PosPageState extends State<PosPage> {
   @override
   void initState() {
     super.initState();
-    menuReady = menuStore.initialize();
+    menuReady = Future.wait([menuStore.initialize(), tableStore.initialize()]).then((_) {});
+    tableStore.addListener(_onOutletChanged);
     menuStore.addListener(_onOutletChanged);
     outletStore.addListener(_onOutletChanged);
   }
@@ -219,6 +222,7 @@ class _PosPageState extends State<PosPage> {
   void dispose() {
     outletStore.removeListener(_onOutletChanged);
     menuStore.removeListener(_onOutletChanged);
+    tableStore.removeListener(_onOutletChanged);
     searchController.dispose();
     super.dispose();
   }
@@ -1102,25 +1106,38 @@ class _PosPageState extends State<PosPage> {
           ),
           if (config.orderType == 'Dine In') ...[
             const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              initialValue: config.table,
-              decoration: const InputDecoration(
-                labelText: 'Select Table',
-                border: OutlineInputBorder(),
-              ),
-              items: const ['A01', 'A02', 'A03', 'B01']
-                  .map(
-                    (id) =>
-                        DropdownMenuItem(value: id, child: Text('Table $id')),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() => config.table = value);
-                  _saveCart();
-                }
-              },
-            ),
+            Builder(builder: (context) {
+              final tables = tableStore.forOutlet(outletId);
+              final names = tables.isEmpty
+                  ? const ['A01', 'A02', 'A03', 'B01']
+                  : tables.map((table) => table.name).toList();
+              final selected = names.contains(config.table)
+                  ? config.table
+                  : null;
+              return DropdownButtonFormField<String>(
+                key: ValueKey('table-$outletId-$selected-${names.join("|")}'),
+                initialValue: selected,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Select Table',
+                  border: OutlineInputBorder(),
+                ),
+                hint: const Text('Pilih meja'),
+                items: [
+                  for (final name in names)
+                    DropdownMenuItem(
+                      value: name,
+                      child: Text(name, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => config.table = value);
+                    _saveCart();
+                  }
+                },
+              );
+            }),
           ],
           const SizedBox(height: 20),
           const Divider(),
