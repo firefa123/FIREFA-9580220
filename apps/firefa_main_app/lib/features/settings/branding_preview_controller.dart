@@ -1,3 +1,5 @@
+library;
+
 /// Branding preview controller foundation.
 
 class BrandingPreviewController {
