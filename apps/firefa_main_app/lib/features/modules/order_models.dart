@@ -66,6 +66,22 @@ class FirefaOrderItem {
   });
 
   int get total => quantity * unitPrice;
+
+  Map<String, dynamic> toJson() => {
+    'productName': productName,
+    'quantity': quantity,
+    'unitPrice': unitPrice,
+    'details': details,
+  };
+
+  factory FirefaOrderItem.fromJson(Map<String, dynamic> json) {
+    return FirefaOrderItem(
+      productName: json['productName'] as String,
+      quantity: json['quantity'] as int,
+      unitPrice: json['unitPrice'] as int,
+      details: json['details'] as String? ?? '',
+    );
+  }
 }
 
 class FirefaOrder {
@@ -123,6 +139,7 @@ class FirefaOrder {
     if (!status.canCancel || paymentStatus == FirefaPaymentStatus.paid) {
       return false;
     }
+
     status = FirefaOrderStatus.cancelled;
     return true;
   }
@@ -133,7 +150,49 @@ class FirefaOrder {
         paymentStatus == FirefaPaymentStatus.paid) {
       return false;
     }
+
     paymentStatus = FirefaPaymentStatus.paid;
     return true;
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'outletId': outletId,
+    'orderType': orderType,
+    'tableId': tableId,
+    'createdAt': createdAt.toIso8601String(),
+    'items': items.map((item) => item.toJson()).toList(),
+    'subtotal': subtotal,
+    'discount': discount,
+    'tax': tax,
+    'service': service,
+    'total': total,
+    'status': status.name,
+    'paymentStatus': paymentStatus.name,
+  };
+
+  factory FirefaOrder.fromJson(Map<String, dynamic> json) {
+    return FirefaOrder(
+      id: json['id'] as String,
+      outletId: json['outletId'] as String,
+      orderType: json['orderType'] as String,
+      tableId: json['tableId'] as String?,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      items: List.unmodifiable(
+        (json['items'] as List).map(
+          (item) =>
+              FirefaOrderItem.fromJson(Map<String, dynamic>.from(item as Map)),
+        ),
+      ),
+      subtotal: json['subtotal'] as int,
+      discount: json['discount'] as int,
+      tax: json['tax'] as int,
+      service: json['service'] as int,
+      total: json['total'] as int,
+      status: FirefaOrderStatus.values.byName(json['status'] as String),
+      paymentStatus: FirefaPaymentStatus.values.byName(
+        json['paymentStatus'] as String,
+      ),
+    );
   }
 }
