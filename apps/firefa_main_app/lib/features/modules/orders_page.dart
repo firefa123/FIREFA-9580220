@@ -25,6 +25,7 @@ class _OrdersPageState extends State<OrdersPage> {
   bool showSyncEvents = false;
 
   String filter = 'All';
+  final Set<String> expandedOrders = <String>{};
 
   String get outletId => outletStore.selectedOutletId;
   String get outletName => outletStore.selectedOutletName;
@@ -214,6 +215,20 @@ class _OrdersPageState extends State<OrdersPage> {
         const SizedBox(height: 22),
         syncMonitoringPanel(),
         const SizedBox(height: 22),
+        Row(
+          children: [
+            const Expanded(
+              child: Text('Daftar Pesanan',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: ink)),
+            ),
+            Text('${visibleOrders.length} pesanan',
+                style: const TextStyle(fontSize: 12, color: muted)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        const Text('Filter status pesanan dan pembayaran • Outlet aktif',
+            style: TextStyle(fontSize: 12, color: muted)),
+        const SizedBox(height: 12),
         SizedBox(
           height: 44,
           child: ListView(
@@ -255,14 +270,14 @@ class _OrdersPageState extends State<OrdersPage> {
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: border),
             ),
-            child: const Column(
+            child: Column(
               children: [
-                Icon(Icons.receipt_long_outlined, size: 44, color: muted),
-                SizedBox(height: 12),
-                Text('Belum ada pesanan'),
-                SizedBox(height: 6),
-                Text(
-                  'Buat pesanan melalui POS di outlet ini.',
+                const Icon(Icons.receipt_long_outlined, size: 44, color: muted),
+                const SizedBox(height: 12),
+                Text(filter == 'All' ? 'Belum ada pesanan' : 'Tidak ada hasil untuk filter $filter'),
+                const SizedBox(height: 6),
+                const Text(
+                  'Coba filter lain atau buat pesanan melalui POS.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: muted, fontSize: 12),
                 ),
@@ -359,7 +374,12 @@ class _OrdersPageState extends State<OrdersPage> {
                           entry.orderId,
                           style: const TextStyle(fontWeight: FontWeight.w600, color: ink),
                         ),
-                        chip(entry.status.name.toUpperCase(), Colors.orange),
+                        chip(entry.status.name.toUpperCase(), switch (entry.status) {
+                          FirefaSyncStatus.pending => Colors.orange,
+                          FirefaSyncStatus.syncing => Colors.blue,
+                          FirefaSyncStatus.synced => Colors.green,
+                          FirefaSyncStatus.failed => Colors.red,
+                        }),
                         Text(entry.eventType, style: const TextStyle(color: muted, fontSize: 12)),
                       ],
                     ),
@@ -461,6 +481,7 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Widget orderCard(FirefaOrder order) {
+    final expanded = expandedOrders.contains(order.id);
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(18),
@@ -503,6 +524,34 @@ class _OrdersPageState extends State<OrdersPage> {
             ' • ${order.itemCount} items',
             style: const TextStyle(color: muted, fontSize: 12),
           ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  rupiah(order.total),
+                  style: const TextStyle(
+                    color: primary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                key: ValueKey('details-${order.id}'),
+                onPressed: () => setState(() {
+                  if (expanded) {
+                    expandedOrders.remove(order.id);
+                  } else {
+                    expandedOrders.add(order.id);
+                  }
+                }),
+                icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
+                label: Text(expanded ? 'Tutup Detail' : 'Lihat Detail'),
+              ),
+            ],
+          ),
+          if (expanded) ...[
           const SizedBox(height: 16),
           for (final item in order.items)
             Padding(
@@ -543,6 +592,7 @@ class _OrdersPageState extends State<OrdersPage> {
           if (order.service > 0) amountRow('Service', order.service),
           const Divider(height: 20),
           amountRow('Grand Total', order.total, bold: true),
+          ],
           if (canManage) ...[
             const SizedBox(height: 14),
             Wrap(
