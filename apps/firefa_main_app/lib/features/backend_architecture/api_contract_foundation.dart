@@ -1,3 +1,5 @@
+library;
+
 /// FIREFA API contract foundation
 /// Placeholder contracts for future backend integration.
 
