@@ -23,6 +23,7 @@ class _MenuPageState extends State<MenuPage> {
   late final Future<void> ready;
   String menuSearch = '';
   String menuStatus = 'all';
+  String menuCategory = 'all';
 
   @override
   void initState() {
@@ -273,6 +274,7 @@ class _MenuPageState extends State<MenuPage> {
         final active = items.where((item) => item.isActive).length;
         final query = menuSearch.trim().toLowerCase();
         final visible = items.where((item) =>
+            (menuCategory == 'all' || item.category == menuCategory) &&
             (menuStatus == 'all' ||
                 (menuStatus == 'active' && item.isActive) ||
                 (menuStatus == 'inactive' && !item.isActive)) &&
@@ -307,7 +309,7 @@ class _MenuPageState extends State<MenuPage> {
                     style: const TextStyle(color: muted)),
                 const SizedBox(height: 8),
                 const Text(
-                  'Katalog lokal • Belum terhubung dengan produk POS, checkout, atau cloud',
+                  'Katalog lokal per outlet • Menu aktif tersedia di POS • Belum sinkron cloud',
                   style: TextStyle(fontSize: 12, color: muted),
                 ),
                 const SizedBox(height: 12),
@@ -331,6 +333,28 @@ class _MenuPageState extends State<MenuPage> {
                       if (value != null) setState(() => menuStatus = value);
                     },
                   ),
+                  DropdownButton<String>(
+
+                    value: menuCategory,
+
+                    items: [
+
+                      const DropdownMenuItem(value: 'all', child: Text('Semua kategori')),
+
+                      for (final category in FirefaMenuStore.categories)
+
+                        DropdownMenuItem(value: category, child: Text(category)),
+
+                    ],
+
+                    onChanged: (value) {
+
+                      if (value != null) setState(() => menuCategory = value);
+
+                    },
+
+                  ),
+
                   Text('Menampilkan ${visible.length} dari ${items.length} menu'),
                 ]),
                 const SizedBox(height: 18),
@@ -350,7 +374,7 @@ class _MenuPageState extends State<MenuPage> {
                         Text('Belum ada menu lokal',
                             style: TextStyle(fontWeight: FontWeight.bold)),
                         SizedBox(height: 6),
-                        Text('Tambahkan menu untuk outlet ini. Produk contoh POS tetap terpisah.',
+                        Text('Tambahkan menu untuk outlet ini. Menu aktif akan tersedia di POS outlet ini.',
                             textAlign: TextAlign.center),
                       ],
                     ),
