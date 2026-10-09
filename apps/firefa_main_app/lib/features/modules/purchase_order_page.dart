@@ -182,7 +182,9 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
 
   Future<void> _editFollowUp(FirefaPurchaseOrder po) async {
     if (!allowed || po.outletId != outlet.selectedOutletId ||
-        (po.status != 'ordered' && po.status != 'partial')) return;
+        (po.status != 'ordered' && po.status != 'partial')) {
+      return;
+    }
     final sourceOutlet = po.outletId;
     final controller = TextEditingController(text: po.followUpNote);
     DateTime? selected = po.followUpDate == null
@@ -238,11 +240,15 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
     );
     controller.dispose();
     if (!mounted || result == null || !allowed ||
-        outlet.selectedOutletId != sourceOutlet) return;
+        outlet.selectedOutletId != sourceOutlet) {
+      return;
+    }
     if (!orders.setFollowUp(
       outletId: sourceOutlet, orderId: po.id,
       note: result.note, date: result.date,
-    )) _message('Gagal menyimpan tindak lanjut PO.');
+    )) {
+      _message('Gagal menyimpan tindak lanjut PO.');
+    }
   }
 
   String _csvCell(String value) {
