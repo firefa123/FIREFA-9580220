@@ -759,13 +759,15 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
               },
             ),
             Text('${workQueue.length} PO dalam antrean'),
+            if (workQueue.length > 30)
+              const Text('Menampilkan 30 teratas; gunakan filter untuk mempersempit.'),
           ]),
           if (workQueue.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
               child: Text('Tidak ada PO pada kategori antrean ini.'),
             ),
-          for (final po in workQueue)
+          for (final po in workQueue.take(30))
             Card(
               child: ListTile(
                 isThreeLine: true,
