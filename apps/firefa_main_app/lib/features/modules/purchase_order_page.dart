@@ -182,7 +182,7 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
 
   String _csvCell(String value) {
     final safe = value.replaceAll('"', '""');
-    final guarded = RegExp(r'^[=+@\\-]').hasMatch(safe) ? "'$safe" : safe;
+    final guarded = safe.isNotEmpty && '=+@-'.contains(safe[0]) ? "'$safe" : safe;
     return '"$guarded"';
   }
 
@@ -200,7 +200,7 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
           po.status, po.createdAt, po.receivedAt ?? '', po.note,
         ].map(_csvCell).join(','),
     ];
-    await Clipboard.setData(ClipboardData(text: lines.join('\\r\\n')));
+    await Clipboard.setData(ClipboardData(text: lines.join('\r\n')));
     _message('CSV ${rows.length} PO disalin. Tempel ke file .csv.');
   }
 
