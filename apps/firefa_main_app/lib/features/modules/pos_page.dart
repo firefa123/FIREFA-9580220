@@ -878,24 +878,19 @@ class _PosPageState extends State<PosPage> {
           ),
         ),
         const SizedBox(height: 16),
-        SizedBox(
-          height: 44,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              for (final value in categories)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(value),
-                    selected: category == value,
-                    showCheckmark: false,
-                    selectedColor: const Color(0xFFE0F2F1),
-                    onSelected: (_) => setState(() => category = value),
-                  ),
-                ),
-            ],
-          ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final value in categories)
+              ChoiceChip(
+                label: Text(value),
+                selected: category == value,
+                showCheckmark: false,
+                selectedColor: const Color(0xFFE0F2F1),
+                onSelected: (_) => setState(() => category = value),
+              ),
+          ],
         ),
         const SizedBox(height: 20),
         LayoutBuilder(
