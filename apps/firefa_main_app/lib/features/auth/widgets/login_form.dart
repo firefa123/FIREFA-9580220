@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/auth/role_permissions.dart';
-import '../../../core/navigation/main_navigation.dart';
+import '../../dashboard/dashboard_page.dart';
 
 class LoginForm extends StatefulWidget {
   const LoginForm({super.key});
@@ -30,7 +30,7 @@ class _LoginFormState extends State<LoginForm> {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (_) => FirefaMainNavigation(role: selectedRole),
+        builder: (_) => DashboardPage(role: selectedRole),
       ),
     );
   }
