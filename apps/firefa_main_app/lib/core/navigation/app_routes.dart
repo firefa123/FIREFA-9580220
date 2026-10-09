@@ -78,6 +78,13 @@ class FirefaNavigation {
       icon: Icons.settings_outlined,
       permission: FirefaPermission.settingsManage,
     ),
+    FirefaModule(
+      id: 'suppliers',
+      title: 'Suppliers',
+      description: 'Kelola daftar pemasok per outlet.',
+      icon: Icons.local_shipping_outlined,
+      permission: FirefaPermission.inventoryManage,
+    ),
   ];
 
   static List<FirefaModule> accessibleModules(FirefaRole role) {
