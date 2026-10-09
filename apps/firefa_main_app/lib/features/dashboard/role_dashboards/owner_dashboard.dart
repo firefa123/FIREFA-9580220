@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/sync_status_card.dart';
+
 class OwnerDashboard extends StatelessWidget {
   const OwnerDashboard({super.key});
 
@@ -12,6 +14,8 @@ class OwnerDashboard extends StatelessWidget {
           'Owner Dashboard',
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
+        SizedBox(height: 16),
+        SyncStatusCard(),
         SizedBox(height: 16),
         Wrap(
           spacing: 12,
