@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-
 import '../../../../shared/widgets/stat_card.dart';
-import '../../../orders/presentation/pages/pos_page.dart';
 
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
@@ -72,11 +70,7 @@ class DashboardPage extends StatelessWidget {
               spacing: 10,
               children: [
                 _action(Icons.add_box, 'Tambah Menu'),
-                _action(
-                  Icons.point_of_sale,
-                  'Kasir',
-                  onPressed: () => _openPos(context),
-                ),
+                _action(Icons.point_of_sale, 'Kasir'),
                 _action(Icons.people, 'Customer'),
               ],
             )
@@ -86,23 +80,11 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  Widget _action(
-    IconData icon,
-    String label, {
-    VoidCallback? onPressed,
-  }) {
+  Widget _action(IconData icon, String label) {
     return ActionChip(
       avatar: Icon(icon, size: 18),
       label: Text(label),
-      onPressed: onPressed ?? () {},
-    );
-  }
-
-  void _openPos(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const PosPage(),
-      ),
+      onPressed: () {},
     );
   }
 }
