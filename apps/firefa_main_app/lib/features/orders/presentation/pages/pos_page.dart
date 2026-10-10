@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../controllers/pos_controller.dart';
+
 class PosPage extends StatefulWidget {
   const PosPage({super.key});
 
@@ -8,20 +10,14 @@ class PosPage extends StatefulWidget {
 }
 
 class _PosPageState extends State<PosPage> {
+  final controller = PosController();
+
   final products = const [
     {'name': 'Nasi Goreng', 'price': 20000},
     {'name': 'Burger', 'price': 25000},
     {'name': 'Coffee', 'price': 15000},
     {'name': 'Tea', 'price': 10000},
   ];
-
-  final cart = <Map<String, dynamic>>[];
-
-  int get total => cart.fold(0, (sum, item) => sum + (item['price'] as int));
-
-  void addProduct(Map<String, dynamic> product) {
-    setState(() => cart.add(product));
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,15 +29,22 @@ class _PosPageState extends State<PosPage> {
             flex: 2,
             child: GridView.builder(
               padding: const EdgeInsets.all(16),
+              itemCount: products.length,
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
               ),
-              itemCount: products.length,
               itemBuilder: (context, index) {
                 final product = products[index];
                 return Card(
                   child: InkWell(
-                    onTap: () => addProduct(product),
+                    onTap: () {
+                      setState(() {
+                        controller.addItem(
+                          product['name'] as String,
+                          product['price'] as int,
+                        );
+                      });
+                    },
                     child: Center(
                       child: Text('${product['name']}\nRp ${product['price']}'),
                     ),
@@ -56,15 +59,17 @@ class _PosPageState extends State<PosPage> {
                 children: [
                   const Text('Cart'),
                   Expanded(
-                    child: ListView.builder(
-                      itemCount: cart.length,
-                      itemBuilder: (context, index) => ListTile(
-                        title: Text(cart[index]['name']),
-                        subtitle: Text('Rp ${cart[index]['price']}'),
-                      ),
+                    child: ListView(
+                      children: controller.cart
+                          .map((item) => ListTile(
+                                title: Text(item.name),
+                                subtitle: Text('Qty ${item.quantity}'),
+                                trailing: Text('Rp ${item.subtotal}'),
+                              ))
+                          .toList(),
                     ),
                   ),
-                  Text('Total: Rp $total'),
+                  Text('Total: Rp ${controller.total}'),
                 ],
               ),
             ),
