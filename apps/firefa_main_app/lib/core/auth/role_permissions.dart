@@ -51,7 +51,6 @@ class FirefaAccess {
 
       case FirefaRole.cashier:
         return {
-          FirefaPermission.dashboardView,
           FirefaPermission.posAccess,
           FirefaPermission.ordersView,
           FirefaPermission.ordersManage,
