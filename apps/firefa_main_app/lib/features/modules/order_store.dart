@@ -112,6 +112,54 @@ class FirefaOrderStore extends ChangeNotifier {
     await FirefaOfflineSyncQueue.instance.waitForPendingSave();
   }
 
+  Map<String, dynamic> exportLocalSnapshot() {
+    _ensureInitialized();
+
+    return {
+      'version': 2,
+      'nextNumber': _nextNumber,
+      'orders': _orders.map((order) => order.toJson()).toList(),
+      'outbox': FirefaOfflineSyncQueue.instance.exportSnapshot(),
+    };
+  }
+
+  void restoreLocalSnapshot(Map<String, dynamic> snapshot) {
+    _ensureInitialized();
+
+    if (snapshot['version'] != 2) {
+      throw const FormatException('Versi backup tidak didukung.');
+    }
+
+    final nextNumber = snapshot['nextNumber'];
+    final rawOrders = snapshot['orders'];
+    final rawOutbox = snapshot['outbox'];
+
+    if (nextNumber is! int || rawOrders is! List || rawOutbox is! Map) {
+      throw const FormatException('Struktur backup FIREFA tidak valid.');
+    }
+
+    final restoredOrders = rawOrders
+        .map(
+          (entry) =>
+              FirefaOrder.fromJson(Map<String, dynamic>.from(entry as Map)),
+        )
+        .toList();
+
+    final restoredOutbox = Map<String, dynamic>.from(rawOutbox);
+
+    // Parse both sides completely before mutating active local state.
+    FirefaOfflineSyncQueue.instance.restoreCombinedSnapshot(restoredOutbox);
+
+    _orders
+      ..clear()
+      ..addAll(restoredOrders);
+    _nextNumber = nextNumber;
+
+    FirefaOfflineSyncQueue.instance.reconcileOrders(_orders);
+    _scheduleSave();
+    notifyListeners();
+  }
+
   List<FirefaOrder> ordersForOutlet(String outletId) {
     _ensureInitialized();
 
