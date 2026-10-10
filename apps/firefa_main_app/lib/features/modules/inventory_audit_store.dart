@@ -14,6 +14,9 @@ class InventoryAuditEntry {
   });
 }
 
+/// Compatibility model for dashboard audit summaries.
+typedef InventoryAuditRecord = InventoryAuditEntry;
+
 /// Read-oriented audit history for inventory conflict resolutions.
 class InventoryAuditStore extends ChangeNotifier {
   final List<InventoryAuditEntry> _entries = [];
