@@ -1,4 +1,4 @@
-/// FIREFA owner permission controller foundation.
+// FIREFA owner permission controller foundation.
 
 class OwnerPermissionController {
   bool canManageStaff(String role) {
