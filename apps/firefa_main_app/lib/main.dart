@@ -5,16 +5,12 @@ import 'features/auth/login_page.dart';
 import 'features/modules/order_store.dart';
 import 'features/modules/offline_sync_queue.dart';
 import 'features/modules/persistent_cart_store.dart';
-import 'features/sync/hybrid_sync_status.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Tahap 7I: Pulihkan outbox sebelum transaksi baru dapat dibuat.
   await FirefaOfflineSyncQueue.instance.initialize();
-
-  // Status hybrid dimulai aman pada Local/Offline mode hingga cloud siap.
-  await FirefaHybridSyncStatus.instance.initialize();
 
   // Tahap 7H-A: Memuat pesanan yang tersimpan.
   await FirefaOrderStore.instance.initialize();
