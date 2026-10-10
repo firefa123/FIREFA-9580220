@@ -7,6 +7,7 @@ import '../../controllers/receipt_controller.dart';
 import '../../models/payment_model.dart';
 import '../../models/receipt_model.dart';
 import '../../models/transaction_model.dart';
+import '../../repositories/in_memory_order_repository.dart';
 
 class PosPage extends StatefulWidget {
   const PosPage({super.key});
@@ -20,6 +21,7 @@ class _PosPageState extends State<PosPage> {
   final checkoutController = CheckoutController();
   final paymentController = PaymentController();
   final receiptController = ReceiptController();
+  final orderRepository = InMemoryOrderRepository();
 
   final products = const [
     {'name': 'Nasi Goreng', 'price': 20000},
@@ -197,9 +199,15 @@ class _PosPageState extends State<PosPage> {
     );
   }
 
-  void _checkout() {
+  Future<void> _checkout() async {
     final created = checkoutController.checkout(posController.cart);
     if (created == null) {
+      return;
+    }
+
+    await orderRepository.saveTransaction(created);
+
+    if (!mounted) {
       return;
     }
 
@@ -210,22 +218,30 @@ class _PosPageState extends State<PosPage> {
     });
   }
 
-  void _createPayment(PaymentMethod method) {
+  Future<void> _createPayment(PaymentMethod method) async {
     final currentTransaction = transaction;
     if (currentTransaction == null) {
       return;
     }
 
+    final createdPayment = paymentController.createPayment(
+      transaction: currentTransaction,
+      method: method,
+    );
+
+    await orderRepository.savePayment(createdPayment);
+
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
-      payment = paymentController.createPayment(
-        transaction: currentTransaction,
-        method: method,
-      );
+      payment = createdPayment;
       receipt = null;
     });
   }
 
-  void _markPaymentPaid() {
+  Future<void> _markPaymentPaid() async {
     final currentPayment = payment;
     final currentTransaction = transaction;
     if (currentPayment == null || currentTransaction == null) {
@@ -239,9 +255,18 @@ class _PosPageState extends State<PosPage> {
       payment: paidPayment,
     );
 
+    final completedTransaction = checkoutController.complete(paidTransaction);
+
+    await orderRepository.savePayment(paidPayment);
+    await orderRepository.saveTransaction(completedTransaction);
+
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
       payment = paidPayment;
-      transaction = checkoutController.complete(paidTransaction);
+      transaction = completedTransaction;
       receipt = generatedReceipt;
     });
   }
