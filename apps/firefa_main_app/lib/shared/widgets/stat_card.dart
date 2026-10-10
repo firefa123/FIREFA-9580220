@@ -25,9 +25,12 @@ class StatCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title),
-                Text(value, style: Theme.of(context).textTheme.titleLarge),
+                Text(
+                  value,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
               ],
-            )
+            ),
           ],
         ),
       ),
