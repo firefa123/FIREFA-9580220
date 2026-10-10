@@ -1,4 +1,4 @@
-/// FIREFA store settings page foundation
+// FIREFA store settings page foundation.
 
 class StoreSettingsPageFoundation {
   final String title;
