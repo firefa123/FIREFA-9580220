@@ -92,6 +92,13 @@ class FirefaNavigation {
       icon: Icons.shopping_cart_checkout_outlined,
       permission: FirefaPermission.inventoryManage,
     ),
+    FirefaModule(
+      id: 'printers',
+      title: 'Printers',
+      description: 'Kelola printer kasir, kitchen, dan bar.',
+      icon: Icons.print_outlined,
+      permission: FirefaPermission.printerManage,
+    ),
   ];
 
   static List<FirefaModule> accessibleModules(FirefaRole role) {

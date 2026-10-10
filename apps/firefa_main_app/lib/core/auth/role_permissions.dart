@@ -12,6 +12,7 @@ enum FirefaPermission {
   inventoryManage,
   reportsView,
   settingsManage,
+  printerManage,
 }
 
 extension FirefaRoleDetails on FirefaRole {
@@ -47,6 +48,7 @@ class FirefaAccess {
           FirefaPermission.menuManage,
           FirefaPermission.inventoryManage,
           FirefaPermission.reportsView,
+          FirefaPermission.printerManage,
         };
 
       case FirefaRole.cashier:

@@ -14,6 +14,7 @@ import '../modules/supplier_page.dart';
 import '../modules/purchase_order_page.dart';
 import '../modules/reports_page.dart';
 import '../modules/settings_page.dart';
+import '../modules/printer_page.dart';
 import 'widgets/dashboard_sidebar.dart';
 import 'widgets/stat_card.dart';
 import 'widgets/revenue_card.dart';
@@ -51,6 +52,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'Settings',
     'Suppliers',
     'Purchasing',
+    'Printer Management',
   ];
 
   static const pageDescriptions = [
@@ -64,6 +66,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'Kelola preferensi dan konfigurasi bisnis.',
     'Kelola pemasok dan informasi kontak per outlet.',
     'Buat PO dan terima barang ke stok inventory.',
+    'Kelola printer kasir, kitchen, dan bar.',
   ];
 
   static const pagePermissions = [
@@ -77,6 +80,7 @@ class _DashboardPageState extends State<DashboardPage> {
     FirefaPermission.settingsManage,
     FirefaPermission.inventoryManage,
     FirefaPermission.inventoryManage,
+    FirefaPermission.printerManage,
   ];
 
   @override
@@ -605,6 +609,8 @@ class _DashboardPageState extends State<DashboardPage> {
         return const SupplierPage();
       case 9:
         return const PurchaseOrderPage();
+      case 10:
+        return const PrinterPage();
       default:
         return const SizedBox.shrink();
     }
