@@ -8,7 +8,13 @@ class PosController {
     if (existing.isNotEmpty) {
       existing.first.quantity++;
     } else {
-      cart.add(CartItemModel(name: name, price: price));
+      cart.add(
+        CartItemModel(
+          id: _generateCartItemId(name),
+          name: name,
+          price: price,
+        ),
+      );
     }
   }
 
@@ -16,5 +22,14 @@ class PosController {
     cart.removeWhere((item) => item.name == name);
   }
 
+  void clearCart() {
+    cart.clear();
+  }
+
   int get total => cart.fold(0, (sum, item) => sum + item.subtotal);
+
+  String _generateCartItemId(String name) {
+    final normalizedName = name.toLowerCase().replaceAll(' ', '-');
+    return '$normalizedName-${DateTime.now().microsecondsSinceEpoch}';
+  }
 }
