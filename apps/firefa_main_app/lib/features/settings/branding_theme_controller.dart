@@ -1,4 +1,4 @@
-/// FIREFA branding and theme controller foundation
+// FIREFA branding and theme controller foundation.
 
 class BrandingThemeController {
   String themeMode = 'system';
