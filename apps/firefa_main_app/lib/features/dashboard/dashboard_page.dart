@@ -19,6 +19,8 @@ import 'widgets/stat_card.dart';
 import 'widgets/revenue_card.dart';
 import 'widgets/recent_orders_card.dart';
 import 'widgets/top_selling_card.dart';
+import 'widgets/sync_status_card.dart';
+import 'widgets/hybrid_status_badge.dart';
 
 class DashboardPage extends StatefulWidget {
   final FirefaRole role;
@@ -267,13 +269,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                   const Spacer(),
                                   const Padding(
                                     padding: EdgeInsets.only(right: 16),
-                                    child: Tooltip(
-                                      message: 'Local Only — Cloud belum terhubung',
-                                      child: Icon(
-                                        Icons.cloud_off_outlined,
-                                        color: muted,
-                                      ),
-                                    ),
+                                    child: HybridStatusBadge(compact: true),
                                   ),
                                 ],
                               ),
@@ -350,6 +346,8 @@ class _DashboardPageState extends State<DashboardPage> {
         final actions = Row(
           children: [
             Expanded(child: _buildOutletSelector()),
+            const SizedBox(width: 12),
+            const HybridStatusBadge(),
             const SizedBox(width: 12),
             Tooltip(
               message: widget.role.label,
@@ -488,6 +486,8 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ),
         _buildStats(orders),
+        const SizedBox(height: 24),
+        SyncStatusCard(outletId: outletStore.selectedOutletId),
         const SizedBox(height: 24),
         RevenueCard(orders: orders),
         const SizedBox(height: 24),
