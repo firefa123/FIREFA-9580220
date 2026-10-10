@@ -27,6 +27,10 @@ class FirefaInventorySyncRecord {
   bool get hasStockDifference => localStock != serverStock;
 }
 
+/// Compatibility names used by dashboard and review modules.
+typedef InventoryHybridSyncRecord = FirefaInventorySyncRecord;
+typedef InventoryConflictRecord = FirefaInventorySyncRecord;
+
 class FirefaInventoryReconciliation {
   const FirefaInventoryReconciliation();
 
