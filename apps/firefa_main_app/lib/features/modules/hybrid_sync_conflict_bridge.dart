@@ -1,7 +1,9 @@
 import 'conflict_management.dart';
 import 'conflict_store.dart';
+import 'offline_sync_queue.dart';
 
 /// Bridge between hybrid sync events and conflict management.
+///
 /// This layer only routes conflict events. It does not mutate business data.
 class FirefaHybridSyncConflictBridge {
   final FirefaConflictManager manager;
