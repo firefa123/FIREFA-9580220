@@ -347,12 +347,10 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
       ..clear()
       ..addAll(restored);
     _nextSequence = sequence;
-    var recoveredInterruptedSend = false;
     for (final entry in _entries) {
       if (entry.status == FirefaSyncStatus.syncing) {
         entry.status = FirefaSyncStatus.pending;
         entry.nextAttemptAt = null;
-        recoveredInterruptedSend = true;
       }
     }
     _scheduleSave();
