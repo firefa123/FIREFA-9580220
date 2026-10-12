@@ -145,6 +145,13 @@ void main() {
     expect(await store.consumeOrderStock(orderId: 'POS-ORDER-1', outletId: 'LEGACY-A', menuLines: [(menuId: 'menu-latte', quantity: 2)]), isFalse);
     expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == coffee.id).stock, 64);
     expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == milk.id).stock, 100);
+    // A wrong outlet must not restore stock or mark this order as reversed.
+    await expectLater(
+      store.restoreCancelledOrderStock(orderId: 'POS-ORDER-1', outletId: 'LEGACY-B'),
+      throwsStateError,
+    );
+    expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == coffee.id).stock, 64);
+    expect(store.isOrderStockReversed('POS-ORDER-1'), isFalse);
     expect(await store.restoreCancelledOrderStock(orderId: 'POS-ORDER-1', outletId: 'LEGACY-A'), isTrue);
     expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == coffee.id).stock, 100);
     expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == milk.id).stock, 300);
