@@ -54,4 +54,43 @@ void main() {
     expect(store.lowStockItems('A').map((i) => i.id), ['cups']);
     expect(store.lowStockItems('B'), isEmpty);
   });
+  test('order consumption validates all ingredients and is idempotent', () async {
+    final store = InventoryStore();
+    await store.initialize();
+    await store.addItem(const InventoryCatalogItem(id: 'coffee', name: 'Coffee', unit: 'g'));
+    await store.addItem(const InventoryCatalogItem(id: 'milk', name: 'Milk', unit: 'ml'));
+    await store.receiveStock(outletId: 'A', itemId: 'coffee', quantity: 100);
+    await store.receiveStock(outletId: 'A', itemId: 'milk', quantity: 200);
+
+    await expectLater(
+      store.consumeOrderIngredients(
+        orderId: 'ORDER-1', outletId: 'A',
+        ingredientQuantities: {'coffee': 10, 'milk': 300},
+      ),
+      throwsStateError,
+    );
+    expect(store.stockFor('A', 'coffee'), 100);
+    expect(store.stockFor('A', 'milk'), 200);
+
+    expect(await store.consumeOrderIngredients(
+      orderId: 'ORDER-1', outletId: 'A',
+      ingredientQuantities: {'coffee': 10, 'milk': 50},
+    ), isTrue);
+    expect(await store.consumeOrderIngredients(
+      orderId: 'ORDER-1', outletId: 'A',
+      ingredientQuantities: {'coffee': 10, 'milk': 50},
+    ), isFalse);
+    expect(store.stockFor('A', 'coffee'), 90);
+    expect(store.stockFor('A', 'milk'), 150);
+    expect(store.movementsForOutlet('A').where((m) => m.referenceOrderId == 'ORDER-1'), hasLength(2));
+
+    final restored = InventoryStore();
+    await restored.initialize();
+    expect(restored.isOrderProcessed('ORDER-1'), isTrue);
+    expect(await restored.consumeOrderIngredients(
+      orderId: 'ORDER-1', outletId: 'A',
+      ingredientQuantities: {'coffee': 10, 'milk': 50},
+    ), isFalse);
+    expect(restored.stockFor('A', 'coffee'), 90);
+  });
 }

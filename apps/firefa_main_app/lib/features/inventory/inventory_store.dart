@@ -13,21 +13,86 @@ class InventoryCatalogItem {
     id: json['id'] as String, name: json['name'] as String, unit: json['unit'] as String,
     minimumStock: (json['minimumStock'] as num?)?.toDouble() ?? 0,
   );
+
+  /// Deducts a complete recipe requirement set once per order ID.
+  /// All quantities are validated before any stock is changed.
+  Future<bool> consumeOrderIngredients({
+    required String orderId,
+    required String outletId,
+    required Map<String, double> ingredientQuantities,
+  }) async {
+    _ready();
+    if (orderId.trim().isEmpty || outletId.trim().isEmpty) {
+      throw ArgumentError('Order ID dan outlet wajib diisi.');
+    }
+    if (_processedOrderIds.contains(orderId)) return false;
+    if (ingredientQuantities.isEmpty) {
+      throw ArgumentError('Kebutuhan bahan pesanan tidak boleh kosong.');
+    }
+    final requirements = <String, double>{};
+    for (final entry in ingredientQuantities.entries) {
+      _validateMovement(outletId, entry.key, entry.value);
+      requirements[entry.key] = (requirements[entry.key] ?? 0) + entry.value;
+    }
+    for (final entry in requirements.entries) {
+      if (stockFor(outletId, entry.key) < entry.value) {
+        throw StateError('Stok tidak mencukupi untuk item ${entry.key}.');
+      }
+    }
+    final oldNext = _nextMovementId;
+    final oldStock = <String, double>{};
+    final created = <InventoryMovement>[];
+    final now = DateTime.now().toUtc();
+    for (final entry in requirements.entries) {
+      final key = _key(outletId, entry.key);
+      oldStock[key] = _stock[key] ?? 0;
+      _stock[key] = oldStock[key]! - entry.value;
+      created.add(InventoryMovement(
+        id: 'INV-' + (_nextMovementId++).toString(),
+        outletId: outletId,
+        itemId: entry.key,
+        type: 'order_consumption',
+        quantity: entry.value,
+        referenceOrderId: orderId,
+        createdAt: now,
+      ));
+    }
+    _movements.addAll(created);
+    _processedOrderIds.add(orderId);
+    try {
+      await _persist();
+    } catch (_) {
+      oldStock.forEach((key, value) => _stock[key] = value);
+      _movements.removeWhere((movement) => created.contains(movement));
+      _processedOrderIds.remove(orderId);
+      _nextMovementId = oldNext;
+      rethrow;
+    }
+    notifyListeners();
+    return true;
+  }
+
+  bool isOrderProcessed(String orderId) {
+    _ready();
+    return _processedOrderIds.contains(orderId);
+  }
+
 }
 
 class InventoryMovement {
   final String id, outletId, itemId, type;
   final double quantity;
   final String? referenceOutletId;
+  final String? referenceOrderId;
   final DateTime createdAt;
   const InventoryMovement({required this.id, required this.outletId, required this.itemId, required this.type,
-    required this.quantity, required this.createdAt, this.referenceOutletId});
+    required this.quantity, required this.createdAt, this.referenceOutletId, this.referenceOrderId});
   Map<String, dynamic> toJson() => {'id': id, 'outletId': outletId, 'itemId': itemId, 'type': type,
-    'quantity': quantity, 'referenceOutletId': referenceOutletId, 'createdAt': createdAt.toUtc().toIso8601String()};
+    'quantity': quantity, 'referenceOutletId': referenceOutletId, 'referenceOrderId': referenceOrderId, 'createdAt': createdAt.toUtc().toIso8601String()};
   factory InventoryMovement.fromJson(Map<String, dynamic> json) => InventoryMovement(
     id: json['id'] as String, outletId: json['outletId'] as String, itemId: json['itemId'] as String,
     type: json['type'] as String, quantity: (json['quantity'] as num).toDouble(),
-    referenceOutletId: json['referenceOutletId'] as String?,
+    referenceOutletId: json['referenceOutletId'] as String?, referenceOrderId: json['referenceOrderId'] as String?,
     createdAt: DateTime.parse(json['createdAt'] as String));
 }
 
@@ -38,6 +103,7 @@ class InventoryStore extends ChangeNotifier {
   final Map<String, InventoryCatalogItem> _items = {};
   final Map<String, double> _stock = {};
   final List<InventoryMovement> _movements = [];
+  final Set<String> _processedOrderIds = {};
   bool _initialized = false;
   int _nextMovementId = 1;
 
@@ -62,6 +128,7 @@ class InventoryStore extends ChangeNotifier {
         _stock[entry.key] = quantity;
       }
       _movements.addAll(movements);
+      _processedOrderIds.addAll((data['processedOrderIds'] as List? ?? const []).cast<String>());
       _nextMovementId = data['nextMovementId'] as int;
     }
     _initialized = true;
@@ -83,7 +150,7 @@ class InventoryStore extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final raw = jsonEncode({'version': 1, 'nextMovementId': _nextMovementId,
       'items': _items.values.map((v) => v.toJson()).toList(), 'stock': _stock,
-      'movements': _movements.map((v) => v.toJson()).toList()});
+      'movements': _movements.map((v) => v.toJson()).toList(), 'processedOrderIds': _processedOrderIds.toList()});
     if (!await prefs.setString(storageKey, raw)) throw StateError('Gagal menyimpan inventory.');
   }
   List<InventoryCatalogItem> get items { _ready(); return List.unmodifiable(_items.values); }
