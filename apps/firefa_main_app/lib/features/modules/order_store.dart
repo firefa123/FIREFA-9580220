@@ -404,7 +404,7 @@ class FirefaOrderStore extends ChangeNotifier {
   }
 
   String _orderKey(String outletId, String orderId) =>
-      '${outletId}\u0000${orderId}';
+      '$outletId\u0000$orderId';
 
   bool advance(String outletId, String orderId) {
     final order = findOrder(outletId, orderId);
