@@ -187,8 +187,8 @@ void main() {
         const FirefaOrderItem(productName: 'Rice', quantity: -1, unitPrice: 1500).toJson(),
       ]
       ..['status'] = 'preparing';
-    expect(
-      () => store.reconcileConflict(
+    await expectLater(
+      store.reconcileConflict(
         eventId: entry.eventId,
         outletId: outletId,
         orderId: order.id,
