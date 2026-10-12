@@ -46,6 +46,10 @@ class FirefaOrderStore extends ChangeNotifier {
             .toList();
 
         final savedNumber = decoded['nextNumber'] as int;
+        _validateRestoredOrders(restoredOrders);
+        if (savedNumber < 1) {
+          throw const FormatException('Nomor urut order tidak valid.');
+        }
         if (combinedRaw != null) {
           // Parse both halves before applying either one.
           final outbox = Map<String, dynamic>.from(decoded['outbox'] as Map);
@@ -73,6 +77,45 @@ class FirefaOrderStore extends ChangeNotifier {
       _scheduleSave();
     }
     notifyListeners();
+  }
+
+  void _validateRestoredOrders(List<FirefaOrder> orders) {
+    final identities = <String>{};
+    for (final order in orders) {
+      if (order.id.trim().isEmpty || order.outletId.trim().isEmpty) {
+        throw const FormatException(
+          'ID order dan outlet wajib terisi pada backup.',
+        );
+      }
+      final identity = '${order.outletId}\u0000${order.id}';
+      if (!identities.add(identity)) {
+        throw const FormatException(
+          'Backup berisi ID order duplikat dalam outlet yang sama.',
+        );
+      }
+      if (order.items.isEmpty ||
+          order.items.any((item) =>
+              item.productName.trim().isEmpty ||
+              item.quantity <= 0 ||
+              item.unitPrice < 0)) {
+        throw const FormatException(
+          'Backup berisi detail item order yang tidak valid.',
+        );
+      }
+      final calculatedSubtotal =
+          order.items.fold<int>(0, (sum, item) => sum + item.total);
+      if (order.subtotal != calculatedSubtotal ||
+          order.discount < 0 ||
+          order.tax < 0 ||
+          order.service < 0 ||
+          order.discount > order.subtotal ||
+          order.total !=
+              order.subtotal - order.discount + order.tax + order.service) {
+        throw const FormatException(
+          'Backup berisi snapshot keuangan order yang tidak konsisten.',
+        );
+      }
+    }
   }
 
   void _ensureInitialized() {
@@ -151,6 +194,10 @@ class FirefaOrderStore extends ChangeNotifier {
         .toList();
 
     final restoredOutbox = Map<String, dynamic>.from(rawOutbox);
+    _validateRestoredOrders(restoredOrders);
+    if (nextNumber < 1) {
+      throw const FormatException('Nomor urut order tidak valid.');
+    }
 
     // Parse both sides completely before mutating active local state.
     FirefaOfflineSyncQueue.instance.restoreCombinedSnapshot(restoredOutbox);
