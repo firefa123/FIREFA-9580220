@@ -210,8 +210,14 @@ class FirefaInventoryStore extends ChangeNotifier {
     if (!_initialized) throw StateError('Inventory belum diinisialisasi');
     final recipes = _recipes.where((line) => line.outletId == outletId).toList();
     if (recipes.isEmpty) return false;
+    if (menuLines.isEmpty) {
+      throw StateError('Pesanan tidak memiliki item menu untuk validasi stok.');
+    }
     final requiredQuantities = <String, int>{};
     for (final menu in menuLines) {
+      if (menu.menuId.trim().isEmpty) {
+        throw StateError('ID menu wajib diisi untuk validasi stok.');
+      }
       if (menu.quantity <= 0 || menu.quantity > 999999999) {
         throw StateError('Kuantitas pesanan tidak valid.');
       }
