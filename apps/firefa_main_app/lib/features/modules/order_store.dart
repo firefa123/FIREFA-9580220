@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'order_models.dart';
 import 'offline_sync_queue.dart';
+import 'inventory_store.dart';
 
 class FirefaOrderStore extends ChangeNotifier {
   FirefaOrderStore._();
@@ -339,6 +340,34 @@ class FirefaOrderStore extends ChangeNotifier {
 
     FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
     _scheduleSave();
+    notifyListeners();
+    return true;
+  }
+
+  /// Cancels an unpaid order and restores ingredients previously deducted by POS.
+  /// The local order and inventory stores persist separately, so this remains a
+  /// local-first best effort rather than a crash-atomic cross-store transaction.
+  Future<bool> cancelAndRestoreStock(String outletId, String orderId) async {
+    final order = findOrder(outletId, orderId);
+    if (order == null || !order.status.canCancel ||
+        order.paymentStatus == FirefaPaymentStatus.paid) {
+      return false;
+    }
+
+    final inventory = FirefaInventoryStore.instance;
+    await inventory.initialize();
+    if (inventory.isOrderStockProcessed(orderId) &&
+        !inventory.isOrderStockReversed(orderId)) {
+      await inventory.restoreCancelledOrderStock(
+        orderId: orderId,
+        outletId: outletId,
+      );
+    }
+
+    if (!order.cancel()) return false;
+    FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
+    _scheduleSave();
+    await waitForPendingSave();
     notifyListeners();
     return true;
   }
