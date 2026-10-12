@@ -116,14 +116,14 @@ class _ConflictCenterPageState extends State<ConflictCenterPage> {
                   const Text('Snapshot server'),
                   SelectableText(current.serverSnapshot.toString()),
                   const SizedBox(height: 12),
-                  const Text('Tindakan mencatat keputusan lokal; tidak mengubah order, stok, pembayaran, atau server.'),
+                  const Text('Keep Local mempertahankan order lokal dan menjadwalkan ulang event. Accept Server menerapkan snapshot tervalidasi ke order lokal; keduanya tidak mengubah server secara langsung.'),
                   Wrap(spacing: 8, children: [
                     OutlinedButton(onPressed: saving ? null : () => decide(current, FirefaResolutionAction.manualReview), child: const Text('Manual Review')),
                     OutlinedButton(onPressed: saving ? null : () => decide(current, FirefaResolutionAction.keepLocal), child: const Text('Keep Local')),
                     FilledButton(onPressed: saving ? null : () async {
                       final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
                         title: const Text('Catat Accept Server?'),
-                        content: const Text('Keputusan dicatat, tetapi snapshot bisnis tidak diubah.'),
+                        content: const Text('Snapshot server yang ditampilkan akan divalidasi dan diterapkan ke order lokal. Ini tidak menulis ke server cloud.'),
                         actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Lanjut'))],
                       ));
                       if (ok == true) await decide(current, FirefaResolutionAction.acceptServer);
