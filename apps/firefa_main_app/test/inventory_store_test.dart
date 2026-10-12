@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firefa_main_app/features/inventory/inventory_store.dart';
+import 'package:firefa_main_app/features/inventory/order_inventory_service.dart';
+import 'package:firefa_main_app/features/inventory/recipe_ingredient_model.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -93,4 +95,29 @@ void main() {
     ), isFalse);
     expect(restored.stockFor('A', 'coffee'), 90);
   });
+
+  test('order service calculates recipe consumption and rejects missing recipe', () async {
+    final store = InventoryStore();
+    await store.initialize();
+    await store.addItem(const InventoryCatalogItem(id: 'coffee', name: 'Coffee', unit: 'g'));
+    await store.addItem(const InventoryCatalogItem(id: 'milk', name: 'Milk', unit: 'ml'));
+    await store.receiveStock(outletId: 'A', itemId: 'coffee', quantity: 100);
+    await store.receiveStock(outletId: 'A', itemId: 'milk', quantity: 500);
+    final service = OrderInventoryService(inventory: store);
+    final recipes = [
+      const RecipeIngredient(menuId: 'latte', ingredientId: 'coffee', quantity: 18),
+      const RecipeIngredient(menuId: 'latte', ingredientId: 'milk', quantity: 200),
+    ];
+    await expectLater(
+      service.consumeOrder(orderId: 'ORDER-X', outletId: 'A',
+        menuLines: [const OrderMenuQuantity(menuId: 'unknown', quantity: 1)], recipes: recipes),
+      throwsStateError,
+    );
+    expect(store.stockFor('A', 'coffee'), 100);
+    expect(await service.consumeOrder(orderId: 'ORDER-2', outletId: 'A',
+      menuLines: [const OrderMenuQuantity(menuId: 'latte', quantity: 2)], recipes: recipes), isTrue);
+    expect(store.stockFor('A', 'coffee'), 64);
+    expect(store.stockFor('A', 'milk'), 100);
+  });
+
 }
