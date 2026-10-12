@@ -12,6 +12,7 @@ class FirefaSyncEngine {
     required FirefaOfflineSyncQueue queue,
     required String outletId,
     int limit = 25,
+    DateTime? now,
   }) {
     if (outletId.trim().isEmpty) {
       throw ArgumentError.value(outletId, 'outletId', 'Outlet wajib dipilih');
@@ -19,8 +20,12 @@ class FirefaSyncEngine {
     if (limit < 1 || limit > 100) {
       throw RangeError.range(limit, 1, 100, 'limit');
     }
+    final currentTime = (now ?? DateTime.now()).toUtc();
     final entries = queue.entriesForOutlet(outletId)
-        .where((entry) => entry.status == FirefaSyncStatus.pending)
+        .where((entry) =>
+            entry.status == FirefaSyncStatus.pending &&
+            (entry.nextAttemptAt == null ||
+                !entry.nextAttemptAt!.toUtc().isAfter(currentTime)))
         .toList()
       ..sort((a, b) {
         final byTime = a.createdAt.compareTo(b.createdAt);
