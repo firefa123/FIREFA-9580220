@@ -120,4 +120,10 @@ void main() {
     expect(store.stockFor('A', 'milk'), 100);
   });
 
+
+  test('domain inventory uses a separate storage key from the legacy UI store', () {
+    expect(InventoryStore().storageKey, 'firefa_inventory_domain_v1');
+    expect(InventoryStore().storageKey, isNot('firefa_inventory_v1'));
+  });
+
 }

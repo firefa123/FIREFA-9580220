@@ -36,7 +36,7 @@ class InventoryMovement {
 
 /// Local-first inventory ledger with outlet-scoped quantities and persisted movements.
 class InventoryStore extends ChangeNotifier {
-  InventoryStore({this.storageKey = 'firefa_inventory_v1'});
+  InventoryStore({this.storageKey = 'firefa_inventory_domain_v1'});
   final String storageKey;
   final Map<String, InventoryCatalogItem> _items = {};
   final Map<String, double> _stock = {};
