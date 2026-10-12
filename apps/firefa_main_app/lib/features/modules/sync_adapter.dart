@@ -1,4 +1,5 @@
 import 'offline_sync_queue.dart';
+import 'conflict_management.dart';
 
 /// Immutable payload sent to the future FIREFA backend.
 /// eventId is the idempotency key; orderId is only unique within the local
@@ -43,6 +44,7 @@ class FirefaSyncEnvelope {
 
 enum FirefaSyncOutcome {
   acknowledged,
+  conflict,
   retryableFailure,
   permanentFailure,
 }
@@ -55,12 +57,20 @@ class FirefaSyncReceipt {
   final FirefaSyncOutcome outcome;
   final String? serverReference;
   final String? message;
+  final String? serverOutletId;
+  final String? serverOrderId;
+  final Map<String, dynamic>? serverSnapshot;
+  final FirefaConflictKind? conflictKind;
 
   const FirefaSyncReceipt({
     required this.eventId,
     required this.outcome,
     this.serverReference,
     this.message,
+    this.serverOutletId,
+    this.serverOrderId,
+    this.serverSnapshot,
+    this.conflictKind,
   });
 
   bool acknowledges(FirefaSyncEnvelope event) =>
