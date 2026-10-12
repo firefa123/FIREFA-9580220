@@ -320,6 +320,46 @@ void main() {
     await store.waitForPendingSave();
   });
 
+  test('Accept Server rejects invalid totals without mutating local order or outbox', () async {
+    final store = FirefaOrderStore.instance;
+    const outletId = 'invalid-server-snapshot';
+    final order = store.createOrder(
+      outletId: outletId,
+      orderType: 'Take Away',
+      tableId: null,
+      items: const [
+        FirefaOrderItem(productName: 'Tea', quantity: 1, unitPrice: 1000),
+      ],
+      subtotal: 1000,
+      discount: 0,
+      tax: 0,
+      service: 0,
+      total: 1000,
+    );
+    await store.waitForPendingSave();
+    final event = queue.entriesForOutlet(outletId).last;
+    final invalidSnapshot = Map<String, dynamic>.from(order.toJson())
+      ..['total'] = 500;
+
+    await expectLater(
+      store.reconcileConflict(
+        eventId: event.eventId,
+        outletId: outletId,
+        orderId: order.id,
+        acceptServer: true,
+        serverSnapshot: invalidSnapshot,
+      ),
+      throwsFormatException,
+    );
+
+    expect(store.findOrder(outletId, order.id)!.total, 1000);
+    expect(queue.findEvent(event.eventId), isNotNull);
+    expect(queue.findEvent(event.eventId)!.status, FirefaSyncStatus.pending);
+
+    await queue.removeEvent(event.eventId);
+    await store.waitForPendingSave();
+  });
+
   test('outbox rejects illegal terminal state transitions', () async {
     final event = queue.enqueueOrder(
       makeOrder('ILLEGAL-TRANSITION', 'transition-test-outlet'),
