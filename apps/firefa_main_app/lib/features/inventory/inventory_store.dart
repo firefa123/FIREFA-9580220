@@ -73,8 +73,12 @@ class InventoryStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _ready() { if (!_initialized) throw StateError('InventoryStore belum diinisialisasi.'); }
-  String _key(String outlet, String item) => outlet + '::' + item;
+  void _ready() {
+    if (!_initialized) {
+      throw StateError('InventoryStore belum diinisialisasi.');
+    }
+  }
+  String _key(String outlet, String item) => '${outlet}::${item}';
   void _validateItem(InventoryCatalogItem item) {
     if (item.id.trim().isEmpty || item.name.trim().isEmpty || item.unit.trim().isEmpty ||
         !item.minimumStock.isFinite || item.minimumStock < 0) throw ArgumentError('Data item inventory tidak valid.');
@@ -111,7 +115,7 @@ class InventoryStore extends ChangeNotifier {
   Future<void> receiveStock({required String outletId, required String itemId, required double quantity}) async {
     _ready(); _validateMovement(outletId, itemId, quantity);
     final key = _key(outletId, itemId), old = _stock[_key(outletId, itemId)] ?? 0, next = _nextMovementId;
-    final movement = InventoryMovement(id: 'INV-' + (_nextMovementId++).toString(), outletId: outletId, itemId: itemId,
+    final movement = InventoryMovement(id: 'INV-${_nextMovementId++}', outletId: outletId, itemId: itemId,
       type: 'stock_in', quantity: quantity, createdAt: DateTime.now().toUtc());
     _stock[key] = old + quantity; _movements.add(movement);
     try { await _persist(); } catch (_) { _stock[key] = old; _movements.remove(movement); _nextMovementId = next; rethrow; }
