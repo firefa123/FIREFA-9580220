@@ -4,14 +4,16 @@ import 'conflict_resolution_model.dart';
 
 /// Local decision history for owner-approved conflict resolutions.
 ///
-/// This layer intentionally stores decisions separately from detection so
-/// conflict discovery and resolution remain independently testable.
+/// Detection and resolution remain separate so each layer can be tested
+/// independently. A recorded decision is an audit entry; it does not mutate
+/// orders, payments, or inventory by itself.
 class ConflictResolutionStore extends ChangeNotifier {
-  final List<ConflictResolutionRecord> _records = [];
+  final List<FirefaConflictResolution> _records = [];
 
-  List<ConflictResolutionRecord> get records => List.unmodifiable(_records);
+  List<FirefaConflictResolution> get records =>
+      List.unmodifiable(_records);
 
-  List<ConflictResolutionRecord> byConflictId(String conflictId) {
+  List<FirefaConflictResolution> byConflictId(String conflictId) {
     return _records
         .where((record) => record.conflictId == conflictId)
         .toList(growable: false);
@@ -19,14 +21,14 @@ class ConflictResolutionStore extends ChangeNotifier {
 
   void resolve({
     required String conflictId,
-    required ConflictResolutionAction action,
-    required String actor,
+    required FirefaResolutionAction action,
+    required String actorId,
   }) {
     _records.add(
-      ConflictResolutionRecord(
+      FirefaConflictResolution(
         conflictId: conflictId,
         action: action,
-        actor: actor,
+        actorId: actorId,
         resolvedAt: DateTime.now().toUtc(),
       ),
     );
