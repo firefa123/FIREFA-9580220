@@ -81,7 +81,9 @@ class InventoryStore extends ChangeNotifier {
   String _key(String outlet, String item) => '$outlet::$item';
   void _validateItem(InventoryCatalogItem item) {
     if (item.id.trim().isEmpty || item.name.trim().isEmpty || item.unit.trim().isEmpty ||
-        !item.minimumStock.isFinite || item.minimumStock < 0) throw ArgumentError('Data item inventory tidak valid.');
+        !item.minimumStock.isFinite || item.minimumStock < 0) {
+      throw ArgumentError('Data item inventory tidak valid.');
+    }
   }
   void _validateMovement(String outlet, String item, double quantity) {
     if (outlet.trim().isEmpty) throw ArgumentError('Outlet wajib diisi.');
@@ -141,9 +143,9 @@ class InventoryStore extends ChangeNotifier {
     final from = _stock[fromKey] ?? 0, to = _stock[toKey] ?? 0, next = _nextMovementId;
     if (quantity > from) throw StateError('Stok outlet asal tidak mencukupi.');
     final now = DateTime.now().toUtc();
-    final out = InventoryMovement(id: 'INV-' + (_nextMovementId++).toString(), outletId: fromOutletId,
+    final out = InventoryMovement(id: 'INV-${_nextMovementId++}', outletId: fromOutletId,
       itemId: itemId, type: 'transfer_out', quantity: quantity, referenceOutletId: toOutletId, createdAt: now);
-    final incoming = InventoryMovement(id: 'INV-' + (_nextMovementId++).toString(), outletId: toOutletId,
+    final incoming = InventoryMovement(id: 'INV-${_nextMovementId++}', outletId: toOutletId,
       itemId: itemId, type: 'transfer_in', quantity: quantity, referenceOutletId: fromOutletId, createdAt: now);
     _stock[fromKey] = from - quantity; _stock[toKey] = to + quantity; _movements.addAll([out, incoming]);
     try { await _persist(); } catch (_) {
@@ -185,7 +187,7 @@ class InventoryStore extends ChangeNotifier {
       oldStock[key] = _stock[key] ?? 0;
       _stock[key] = oldStock[key]! - entry.value;
       created.add(InventoryMovement(
-        id: 'INV-' + (_nextMovementId++).toString(),
+        id: 'INV-${_nextMovementId++}',
         outletId: outletId,
         itemId: entry.key,
         type: 'order_consumption',
