@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firefa_main_app/features/modules/offline_sync_queue.dart';
@@ -26,46 +28,46 @@ void main() {
         total: 1000,
       );
 
-  test('initialize rejects corrupt persisted outbox without partial recovery', () async {
-    final validOrder = makeOrder('persisted-order', 'persisted-outlet');
-    final validEntry = {
-      'eventId': 'evt-valid-1',
-      'outletId': validOrder.outletId,
-      'orderId': validOrder.id,
-      'eventType': 'order.created',
-      'createdAt': DateTime.utc(2026, 1, 1).toIso8601String(),
-      'orderSnapshot': validOrder.toJson(),
-      'status': 'pending',
-      'attempts': 0,
-      'nextAttemptAt': null,
-    };
-    SharedPreferences.setMockInitialValues({
-      'firefa_sync_outbox_v1': '{"version":1,"nextSequence":2,"entries":['
-          '${validEntry.toString()}]}',
-    });
+  Map<String, dynamic> entryFor(FirefaOrder order, String eventId) => {
+        'eventId': eventId,
+        'outletId': order.outletId,
+        'orderId': order.id,
+        'eventType': 'order.created',
+        'createdAt': DateTime.utc(2026, 1, 1).toIso8601String(),
+        'orderSnapshot': order.toJson(),
+        'status': 'pending',
+        'attempts': 0,
+        'nextAttemptAt': null,
+      };
 
-    final queue = FirefaOfflineSyncQueue.instance;
-    // Replace the malformed Dart-map string with a proper JSON payload.
+  test('initialize rejects duplicate IDs in persisted outbox', () async {
+    final order = makeOrder('persisted-order', 'persisted-outlet');
+    final entry = entryFor(order, 'evt-duplicate');
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       'firefa_sync_outbox_v1',
-      '{"version":1,"nextSequence":2,"entries":[]} ',
+      jsonEncode({
+        'version': 1,
+        'nextSequence': 3,
+        'entries': [entry, entry],
+      }),
     );
-    await queue.initialize();
-    expect(queue.entriesForOutlet('persisted-outlet'), isEmpty);
+
+    final queue = FirefaOfflineSyncQueue.instance;
+    await expectLater(queue.initialize(), throwsFormatException);
   });
 
-  test('initialize recovers interrupted sends and persists pending status', () async {
+  test('restore recovers interrupted sends as pending', () async {
     final queue = FirefaOfflineSyncQueue.instance;
     await queue.initialize();
-    final event = queue.enqueueOrder(makeOrder('recovery-order', 'recovery-outlet'), 'order.created');
+    final event = queue.enqueueOrder(
+      makeOrder('recovery-order', 'recovery-outlet'),
+      'order.created',
+    );
     await queue.waitForPendingSave();
     await queue.markSyncing(event.eventId);
     await queue.waitForPendingSave();
 
-    // Simulate process interruption by changing the durable status to syncing
-    // and creating a fresh queue singleton is not possible in this process;
-    // validate the exported restore path used by combined snapshots instead.
     final snapshot = queue.exportSnapshot();
     queue.restoreCombinedSnapshot(snapshot);
     await queue.waitForPendingSave();
