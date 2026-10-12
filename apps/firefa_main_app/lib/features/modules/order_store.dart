@@ -276,10 +276,27 @@ class FirefaOrderStore extends ChangeNotifier {
       if (parsed.id != orderId || parsed.outletId != outletId) {
         throw StateError('Identitas snapshot server tidak cocok dengan order aktif.');
       }
-      if (parsed.total < 0 || parsed.subtotal < 0 || parsed.discount < 0 ||
-          parsed.tax < 0 || parsed.service < 0 || parsed.discount > parsed.subtotal ||
-          parsed.subtotal - parsed.discount + parsed.tax + parsed.service != parsed.total ||
-          parsed.items.isEmpty) {
+      final itemSubtotal = parsed.items.fold<int>(
+        0,
+        (sum, item) => sum + item.total,
+      );
+      final hasInvalidItem = parsed.items.any(
+        (item) =>
+            item.productName.trim().isEmpty ||
+            item.quantity <= 0 ||
+            item.unitPrice < 0,
+      );
+      if (parsed.total < 0 ||
+          parsed.subtotal < 0 ||
+          parsed.discount < 0 ||
+          parsed.tax < 0 ||
+          parsed.service < 0 ||
+          parsed.discount > parsed.subtotal ||
+          parsed.subtotal - parsed.discount + parsed.tax + parsed.service !=
+              parsed.total ||
+          parsed.items.isEmpty ||
+          hasInvalidItem ||
+          itemSubtotal != parsed.subtotal) {
         throw FormatException('Snapshot server melanggar validasi order.');
       }
       nextOrder = parsed;
