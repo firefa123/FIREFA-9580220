@@ -8,7 +8,6 @@ import 'package:firefa_main_app/features/modules/order_models.dart';
 import 'package:firefa_main_app/features/modules/sync_adapter.dart';
 import 'package:firefa_main_app/features/modules/sync_engine.dart';
 import 'package:firefa_main_app/features/modules/order_store.dart';
-import 'package:firefa_main_app/features/modules/conflict_management.dart';
 import 'package:firefa_main_app/features/modules/conflict_store.dart';
 import 'package:firefa_main_app/features/modules/hybrid_sync_conflict_bridge.dart';
 import 'package:firefa_main_app/features/modules/sync_coordinator.dart';
