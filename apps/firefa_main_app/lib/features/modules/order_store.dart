@@ -190,19 +190,39 @@ class FirefaOrderStore extends ChangeNotifier {
       throw ArgumentError('Outlet wajib dipilih.');
     }
 
-    if (items.isEmpty || total < 0) {
+    if (orderType.trim().isEmpty || items.isEmpty || total < 0) {
       throw ArgumentError('Pesanan tidak valid.');
     }
 
-    if (orderType == 'Dine In' && (tableId == null || tableId.isEmpty)) {
+    if (orderType == 'Dine In' &&
+        (tableId == null || tableId.trim().isEmpty)) {
       throw ArgumentError('Nomor meja wajib dipilih.');
     }
+
+    final hasInvalidItem = items.any(
+      (item) =>
+          item.productName.trim().isEmpty ||
+          item.quantity <= 0 ||
+          item.unitPrice < 0,
+    );
+    if (hasInvalidItem) {
+      throw ArgumentError('Detail item pesanan tidak valid.');
+    }
+
+    // The financial snapshot must agree with the actual item lines. This
+    // prevents callers from storing a total that cannot be explained by the
+    // order contents, including when the order is later synced offline.
+    final calculatedSubtotal = items.fold<int>(
+      0,
+      (sum, item) => sum + item.total,
+    );
 
     if (subtotal < 0 ||
         discount < 0 ||
         tax < 0 ||
         service < 0 ||
         discount > subtotal ||
+        calculatedSubtotal != subtotal ||
         subtotal - discount + tax + service != total) {
       throw ArgumentError('Perhitungan pesanan tidak valid.');
     }
