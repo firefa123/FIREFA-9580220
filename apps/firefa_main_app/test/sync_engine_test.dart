@@ -172,6 +172,37 @@ void main() {
     await store.waitForPendingSave();
   });
 
+  test('Accept Server rejects invalid item totals without mutating local order', () async {
+    final store = FirefaOrderStore.instance;
+    final outletId = 'conflict-invalid-server';
+    final order = store.createOrder(
+      outletId: outletId, orderType: 'Take Away', tableId: null,
+      items: const [FirefaOrderItem(productName: 'Rice', quantity: 1, unitPrice: 1500)],
+      subtotal: 1500, discount: 0, tax: 0, service: 0, total: 1500,
+    );
+    await store.waitForPendingSave();
+    final entry = queue.entriesForOutlet(outletId).last;
+    final invalidServer = Map<String, dynamic>.from(order.toJson())
+      ..['items'] = [
+        const FirefaOrderItem(productName: 'Rice', quantity: -1, unitPrice: 1500).toJson(),
+      ]
+      ..['status'] = 'preparing';
+    expect(
+      () => store.reconcileConflict(
+        eventId: entry.eventId,
+        outletId: outletId,
+        orderId: order.id,
+        acceptServer: true,
+        serverSnapshot: invalidServer,
+      ),
+      throwsFormatException,
+    );
+    expect(store.findOrder(outletId, order.id)!.status, FirefaOrderStatus.confirmed);
+    expect(queue.findEvent(entry.eventId), isNotNull);
+    await queue.removeEvent(entry.eventId);
+    await store.waitForPendingSave();
+  });
+
   test('sync coordinator automatically routes server mismatch into conflict inbox', () async {
     final store = FirefaOrderStore.instance;
     final outletId = 'coordinator-conflict-outlet';
