@@ -50,6 +50,21 @@ class _ConflictAdapter extends FirefaSyncAdapter {
       );
 }
 
+class _CountingAckAdapter extends FirefaSyncAdapter {
+  int sends = 0;
+
+  @override
+  Future<FirefaSyncReceipt> send(FirefaSyncEnvelope event) async {
+    sends++;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    return FirefaSyncReceipt(
+      eventId: event.eventId,
+      outcome: FirefaSyncOutcome.acknowledged,
+      serverReference: 'receipt-${event.eventId}',
+    );
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final queue = FirefaOfflineSyncQueue.instance;
@@ -353,6 +368,34 @@ void main() {
     expect(await queue.retryFailedForOutlet('failed-test-outlet'), 1);
     expect(event.status, FirefaSyncStatus.pending);
     expect(await queue.retryFailedForOutlet('failed-test-outlet'), 0);
+
+    await queue.removeEvent(event.eventId);
+    await queue.waitForPendingSave();
+  });
+
+  test('concurrent sync requests never send the same event twice', () async {
+    final event = queue.enqueueOrder(
+      makeOrder('CONCURRENT-SYNC', 'concurrent-test-outlet'),
+      'order.created',
+    );
+    await queue.waitForPendingSave();
+    final adapter = _CountingAckAdapter();
+    final coordinator = FirefaSyncCoordinator(
+      queue: queue,
+      adapter: adapter,
+      conflictBridge: FirefaHybridSyncConflictBridge(
+        store: FirefaConflictStore.instance,
+      ),
+    );
+
+    final summaries = await Future.wait([
+      coordinator.syncOutlet('concurrent-test-outlet'),
+      coordinator.syncOutlet('concurrent-test-outlet'),
+    ]);
+
+    expect(adapter.sends, 1);
+    expect(summaries.fold<int>(0, (sum, value) => sum + value.acknowledged), 1);
+    expect(event.status, FirefaSyncStatus.synced);
 
     await queue.removeEvent(event.eventId);
     await queue.waitForPendingSave();

@@ -26,6 +26,7 @@ This module covers the Flutter client's durable outbox, retry policy, conflict i
 - `syncing -> failed` represents a permanent rejection.
 - Retryable failures return to `pending` with a persisted due time.
 - An interrupted `syncing` entry returns to `pending` on restore.
+- Concurrent sync invocations cannot send the same event twice: only the invocation that successfully transitions `pending -> syncing` may call the adapter.
 - Illegal transitions to terminal states are rejected.
 
 ## Not implemented / not claimed
@@ -46,4 +47,4 @@ flutter test
 flutter run
 ```
 
-Verify analyzer is clean, all tests pass, the dashboard shows accurate local counts, the disabled adapter never reports success, retry due times survive restoration, and conflict events remain out of retry batches.
+Verify analyzer is clean, all tests pass (including concurrent invocation coverage), the dashboard shows accurate local counts, the disabled adapter never reports success, retry due times survive restoration, and conflict events remain out of retry batches.
