@@ -125,6 +125,22 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
   /// The future backend must still enforce idempotency on eventId.
   FirefaSyncEntry enqueueOrder(FirefaOrder order, String eventType) {
     _ensureInitialized();
+
+    // Reject malformed identities before allocating an event ID or mutating
+    // the durable outbox. Outlet/order identity must match the snapshot sent
+    // to the future backend.
+    if (order.outletId.trim().isEmpty || order.id.trim().isEmpty) {
+      throw ArgumentError('Outlet dan ID order wajib diisi untuk sinkronisasi.');
+    }
+    if (eventType.trim().isEmpty) {
+      throw ArgumentError.value(eventType, 'eventType', 'Tidak boleh kosong.');
+    }
+    final snapshot = order.toJson();
+    if (snapshot['outletId'] != order.outletId ||
+        snapshot['id'] != order.id) {
+      throw StateError('Identitas snapshot order tidak konsisten.');
+    }
+
     final sequence = _nextSequence++;
     final bytes = List<int>.generate(16, (_) => _random.nextInt(256));
     final nonce = bytes.map((value) => value.toRadixString(16).padLeft(2, '0')).join();
@@ -134,7 +150,7 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
       orderId: order.id,
       eventType: eventType,
       createdAt: DateTime.now().toUtc(),
-      orderSnapshot: order.toJson(),
+      orderSnapshot: snapshot,
     );
     _entries.add(event);
     _scheduleSave();
