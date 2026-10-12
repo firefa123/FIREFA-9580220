@@ -76,6 +76,7 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     if (_initialized) return;
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_storageKey);
+    var recoveredInterruptedSend = false;
     if (raw != null && raw.isNotEmpty) {
       final decoded = Map<String, dynamic>.from(jsonDecode(raw) as Map);
       _nextSequence = decoded['nextSequence'] as int;
@@ -90,10 +91,16 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
       for (final entry in _entries) {
         if (entry.status == FirefaSyncStatus.syncing) {
           entry.status = FirefaSyncStatus.pending;
+          entry.nextAttemptAt = null;
+          recoveredInterruptedSend = true;
         }
       }
     }
     _initialized = true;
+    if (recoveredInterruptedSend) {
+      _scheduleSave();
+      await waitForPendingSave();
+    }
     notifyListeners();
   }
 
@@ -340,11 +347,15 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
       ..clear()
       ..addAll(restored);
     _nextSequence = sequence;
+    var recoveredInterruptedSend = false;
     for (final entry in _entries) {
       if (entry.status == FirefaSyncStatus.syncing) {
         entry.status = FirefaSyncStatus.pending;
+        entry.nextAttemptAt = null;
+        recoveredInterruptedSend = true;
       }
     }
+    _scheduleSave();
     notifyListeners();
   }
 

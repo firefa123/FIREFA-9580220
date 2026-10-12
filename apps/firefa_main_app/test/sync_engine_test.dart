@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -91,6 +93,54 @@ void main() {
       () => engine.retryDelay(1, jitterMilliseconds: 1001),
       throwsRangeError,
     );
+  });
+
+  test('restoring interrupted sends persists pending status and retry time', () async {
+    final interrupted = queue.enqueueOrder(
+      makeOrder('RECOVERY-SYNCING', 'recovery-test-outlet'),
+      'order.created',
+    );
+    final deferred = queue.enqueueOrder(
+      makeOrder('RECOVERY-DEFERRED', 'recovery-test-outlet'),
+      'order.created',
+    );
+    await queue.waitForPendingSave();
+
+    await queue.markSyncing(interrupted.eventId);
+    await queue.markPending(
+      deferred.eventId,
+      retryDelay: const Duration(minutes: 2),
+    );
+    final expectedRetryAt = deferred.nextAttemptAt;
+    final snapshot = queue.exportSnapshot();
+
+    queue.restoreCombinedSnapshot(snapshot);
+    await queue.waitForPendingSave();
+
+    expect(queue.findEvent(interrupted.eventId)!.status, FirefaSyncStatus.pending);
+    expect(queue.findEvent(interrupted.eventId)!.nextAttemptAt, isNull);
+    expect(queue.findEvent(deferred.eventId)!.status, FirefaSyncStatus.pending);
+    expect(queue.findEvent(deferred.eventId)!.nextAttemptAt, expectedRetryAt);
+
+    final prefs = await SharedPreferences.getInstance();
+    final saved = Map<String, dynamic>.from(
+      jsonDecode(prefs.getString('firefa_sync_outbox_v1')!) as Map,
+    );
+    final savedEntries = (saved['entries'] as List)
+        .map((value) => Map<String, dynamic>.from(value as Map))
+        .toList();
+    expect(
+      savedEntries.firstWhere((entry) => entry['eventId'] == interrupted.eventId)['status'],
+      FirefaSyncStatus.pending.name,
+    );
+    expect(
+      savedEntries.firstWhere((entry) => entry['eventId'] == deferred.eventId)['nextAttemptAt'],
+      expectedRetryAt!.toIso8601String(),
+    );
+
+    await queue.removeEvent(interrupted.eventId);
+    await queue.removeEvent(deferred.eventId);
+    await queue.waitForPendingSave();
   });
 
   test('batch validates limits and outlet', () {
