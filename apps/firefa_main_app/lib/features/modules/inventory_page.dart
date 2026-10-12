@@ -57,7 +57,26 @@ class _InventoryPageState extends State<InventoryPage> {
   Future<void> manageRecipe() async {
     if (!allowed) return;
     final sourceOutlet = outlet.selectedOutletId;
-    final menus = menuStore.forOutlet(sourceOutlet);
+    final menus = menuStore.forOutlet(sourceOutlet)
+        .where((menu) => menu.isActive)
+        .map((menu) => (id: menu.id, name: menu.name))
+        .toList();
+    if (menus.isEmpty && menuStore.forOutlet(sourceOutlet).isEmpty) {
+      menus.addAll(const [
+        (id: 'P01', name: 'Cappuccino'),
+        (id: 'P02', name: 'Cafe Latte'),
+        (id: 'P03', name: 'Americano'),
+        (id: 'P04', name: 'Matcha Latte'),
+        (id: 'P05', name: 'Chocolate Ice'),
+        (id: 'P06', name: 'Lemon Tea'),
+        (id: 'P07', name: 'Nasi Goreng'),
+        (id: 'P08', name: 'Chicken Katsu'),
+        (id: 'P09', name: 'Beef Burger'),
+        (id: 'P10', name: 'French Fries'),
+        (id: 'P11', name: 'Chicken Wings'),
+        (id: 'P12', name: 'Cheesecake'),
+      ]);
+    }
     final items = store.forOutlet(sourceOutlet);
     if (menus.isEmpty || items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tambahkan menu dan barang inventory terlebih dahulu untuk mengatur resep.')));
@@ -459,7 +478,7 @@ class _InventoryPageState extends State<InventoryPage> {
                   const Text('Belum ada resep. Checkout belum akan mengurangi stok sampai resep dibuat.', style: TextStyle(color: muted, fontSize: 12)),
                 for (final recipe in store.recipesForOutlet(outlet.selectedOutletId))
                   Card(child: ListTile(
-                    title: Text(menuStore.forOutlet(outlet.selectedOutletId).where((m) => m.id == recipe.menuId).map((m) => m.name).firstOrNull ?? recipe.menuId),
+                    title: Text(menuStore.forOutlet(outlet.selectedOutletId).where((m) => m.id == recipe.menuId).map((m) => m.name).firstOrNull ?? const {'P01': 'Cappuccino', 'P02': 'Cafe Latte', 'P03': 'Americano', 'P04': 'Matcha Latte', 'P05': 'Chocolate Ice', 'P06': 'Lemon Tea', 'P07': 'Nasi Goreng', 'P08': 'Chicken Katsu', 'P09': 'Beef Burger', 'P10': 'French Fries', 'P11': 'Chicken Wings', 'P12': 'Cheesecake'}[recipe.menuId] ?? recipe.menuId),
                     subtitle: Text('${items.where((i) => i.id == recipe.ingredientId).map((i) => i.name).firstOrNull ?? recipe.ingredientId}: ${recipe.quantity} ${items.where((i) => i.id == recipe.ingredientId).map((i) => i.unit).firstOrNull ?? ''} per menu'),
                     trailing: allowed ? IconButton(tooltip: 'Hapus bahan dari resep', icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                       onPressed: () => store.removeRecipeLine(outletId: recipe.outletId, menuId: recipe.menuId, ingredientId: recipe.ingredientId)) : null,
