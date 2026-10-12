@@ -457,10 +457,18 @@ class FirefaOrderStore extends ChangeNotifier {
 
   bool cancel(String outletId, String orderId) {
     final order = findOrder(outletId, orderId);
+    if (order == null) return false;
 
-    if (order == null || !order.cancel()) {
+    // A synchronous cancellation cannot safely restore recipe stock. Force
+    // stock-processed orders through cancelAndRestoreStock so cancellation
+    // cannot silently leave inventory deducted.
+    final inventory = FirefaInventoryStore.instance;
+    if (inventory.isOrderStockProcessed(orderId) &&
+        !inventory.isOrderStockReversed(orderId)) {
       return false;
     }
+
+    if (!order.cancel()) return false;
 
     FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
     _scheduleSave();
