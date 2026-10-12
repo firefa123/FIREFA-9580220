@@ -394,7 +394,9 @@ void main() {
     ]);
 
     expect(adapter.sends, 1);
+    expect(summaries.fold<int>(0, (sum, value) => sum + value.attempted), 1);
     expect(summaries.fold<int>(0, (sum, value) => sum + value.acknowledged), 1);
+    expect(summaries.fold<int>(0, (sum, value) => sum + value.retryableFailures), 0);
     expect(event.status, FirefaSyncStatus.synced);
 
     await queue.removeEvent(event.eventId);

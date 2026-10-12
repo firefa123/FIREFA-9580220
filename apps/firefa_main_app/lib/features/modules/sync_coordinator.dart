@@ -30,6 +30,7 @@ class FirefaSyncCoordinator {
       outletId: outletId,
       limit: limit,
     );
+    var attempted = 0;
     var acknowledged = 0;
     var conflicts = 0;
     var retryableFailures = 0;
@@ -50,6 +51,7 @@ class FirefaSyncCoordinator {
       try {
         await queue.markSyncing(envelope.eventId);
         markedSyncing = true;
+        attempted++;
         final receipt = await adapter.send(envelope);
         if (receipt.outcome == FirefaSyncOutcome.acknowledged &&
             engine.isValidAcknowledgement(envelope, receipt)) {
@@ -100,6 +102,9 @@ class FirefaSyncCoordinator {
         }
         retryableFailures++;
       } catch (_) {
+        // A concurrent invocation may have claimed this event first. That is
+        // not a transport failure and must not inflate retryable failure counts.
+        if (!markedSyncing) continue;
         // Preserve the event for a later retry. Never report false success.
         if (markedSyncing) {
           try {
@@ -113,7 +118,7 @@ class FirefaSyncCoordinator {
     }
 
     return FirefaSyncRunSummary(
-      attempted: batch.length,
+      attempted: attempted,
       acknowledged: acknowledged,
       conflicts: conflicts,
       retryableFailures: retryableFailures,
