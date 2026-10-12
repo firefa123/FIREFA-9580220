@@ -42,6 +42,10 @@ class _ConflictCenterPageState extends State<ConflictCenterPage> {
       .where((c) => c.outletId == outlet.selectedOutletId).toList()
     ..sort((a, b) => b.detectedAt.compareTo(a.detectedAt));
 
+  bool canAutoReconcile(FirefaSyncConflict c) =>
+      c.kind == FirefaConflictKind.concurrentEdit ||
+      c.kind == FirefaConflictKind.staleServerVersion;
+
   Future<void> decide(FirefaSyncConflict c, FirefaResolutionAction action) async {
     if (saving) return;
     setState(() => saving = true);
@@ -116,11 +120,11 @@ class _ConflictCenterPageState extends State<ConflictCenterPage> {
                   const Text('Snapshot server'),
                   SelectableText(current.serverSnapshot.toString()),
                   const SizedBox(height: 12),
-                  const Text('Keep Local mempertahankan order lokal dan menjadwalkan ulang event. Accept Server menerapkan snapshot tervalidasi ke order lokal; keduanya tidak mengubah server secara langsung.'),
+                  const Text('Untuk konflik perubahan order, Keep Local mempertahankan order lokal dan menjadwalkan ulang event; Accept Server menerapkan snapshot tervalidasi ke order lokal. Konflik pembayaran, inventori, atau respons server tidak valid wajib Manual Review.'),
                   Wrap(spacing: 8, children: [
                     OutlinedButton(onPressed: saving ? null : () => decide(current, FirefaResolutionAction.manualReview), child: const Text('Manual Review')),
-                    OutlinedButton(onPressed: saving ? null : () => decide(current, FirefaResolutionAction.keepLocal), child: const Text('Keep Local')),
-                    FilledButton(onPressed: saving ? null : () async {
+                    OutlinedButton(onPressed: saving || !canAutoReconcile(current) ? null : () => decide(current, FirefaResolutionAction.keepLocal), child: const Text('Keep Local')),
+                    FilledButton(onPressed: saving || !canAutoReconcile(current) ? null : () async {
                       final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
                         title: const Text('Catat Accept Server?'),
                         content: const Text('Snapshot server yang ditampilkan akan divalidasi dan diterapkan ke order lokal. Ini tidak menulis ke server cloud.'),
