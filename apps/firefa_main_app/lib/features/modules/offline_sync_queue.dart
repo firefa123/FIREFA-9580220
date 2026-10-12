@@ -368,22 +368,45 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
   /// Used only when a validated combined snapshot is restored.
   void restoreCombinedSnapshot(Map<String, dynamic> data) {
     _ensureInitialized();
-    final restored = (data['entries'] as List)
+
+    // Validate the complete snapshot before touching the live queue. A corrupt
+    // backup must not partially replace the current durable outbox.
+    final rawEntries = data['entries'];
+    final sequence = data['nextSequence'];
+    if (data['version'] != 1 || rawEntries is! List ||
+        sequence is! int || sequence < 1) {
+      throw const FormatException('Snapshot outbox FIREFA tidak valid.');
+    }
+
+    final restored = rawEntries
         .map((value) => FirefaSyncEntry.fromJson(
               Map<String, dynamic>.from(value as Map),
             ))
         .toList();
-    final sequence = data['nextSequence'] as int;
-    _entries
-      ..clear()
-      ..addAll(restored);
-    _nextSequence = sequence;
-    for (final entry in _entries) {
+    final eventIds = <String>{};
+    for (final entry in restored) {
+      if (entry.eventId.trim().isEmpty ||
+          entry.outletId.trim().isEmpty ||
+          entry.orderId.trim().isEmpty ||
+          entry.eventType.trim().isEmpty ||
+          entry.attempts < 0 ||
+          !eventIds.add(entry.eventId) ||
+          entry.orderSnapshot['id'] != entry.orderId ||
+          entry.orderSnapshot['outletId'] != entry.outletId) {
+        throw const FormatException(
+          'Identitas atau status event pada snapshot outbox tidak valid.',
+        );
+      }
       if (entry.status == FirefaSyncStatus.syncing) {
         entry.status = FirefaSyncStatus.pending;
         entry.nextAttemptAt = null;
       }
     }
+
+    _entries
+      ..clear()
+      ..addAll(restored);
+    _nextSequence = sequence;
     _scheduleSave();
     notifyListeners();
   }
