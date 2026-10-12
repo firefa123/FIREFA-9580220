@@ -74,6 +74,43 @@ void main() {
     await queue.waitForPendingSave();
   });
 
+  test('retry backoff defers pending events until their due time', () async {
+    final event = queue.enqueueOrder(
+      makeOrder('BACKOFF-TEST', 'backoff-test-outlet'),
+      'order.created',
+    );
+    await queue.waitForPendingSave();
+    await queue.markSyncing(event.eventId);
+    await queue.markPending(
+      event.eventId,
+      retryDelay: const Duration(minutes: 1),
+    );
+    expect(event.nextAttemptAt, isNotNull);
+    expect(
+      engine.pendingBatch(
+        queue: queue,
+        outletId: 'backoff-test-outlet',
+        now: DateTime.now(),
+      ),
+      isEmpty,
+    );
+    expect(
+      engine.pendingBatch(
+        queue: queue,
+        outletId: 'backoff-test-outlet',
+        now: DateTime.now().add(const Duration(minutes: 2)),
+      ).map((entry) => entry.eventId),
+      [event.eventId],
+    );
+
+    final restored = FirefaSyncEntry.fromJson(event.toJson());
+    expect(restored.nextAttemptAt, event.nextAttemptAt);
+    expect(restored.attempts, 1);
+
+    await queue.removeEvent(event.eventId);
+    await queue.waitForPendingSave();
+  });
+
   test('batch validates limits and outlet', () {
     expect(() => engine.pendingBatch(queue: queue, outletId: ''), throwsArgumentError);
     expect(() => engine.pendingBatch(queue: queue, outletId: 'test-outlet-A', limit: 0), throwsRangeError);

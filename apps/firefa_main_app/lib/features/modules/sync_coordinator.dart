@@ -32,6 +32,14 @@ class FirefaSyncCoordinator {
     var conflicts = 0;
     var retryableFailures = 0;
 
+    Future<void> scheduleRetry(String eventId) async {
+      final entry = queue.findEvent(eventId);
+      await queue.markPending(
+        eventId,
+        retryDelay: engine.retryDelay(entry?.attempts ?? 0),
+      );
+    }
+
     for (final envelope in batch) {
       var markedSyncing = false;
       try {
@@ -54,7 +62,7 @@ class FirefaSyncCoordinator {
               snapshot == null ||
               serverOutletId == null ||
               serverOrderId == null) {
-            await queue.markPending(envelope.eventId);
+            await scheduleRetry(envelope.eventId);
             retryableFailures++;
             continue;
           }
