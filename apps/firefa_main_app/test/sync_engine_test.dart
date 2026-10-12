@@ -85,7 +85,7 @@ void main() {
     );
     expect(
       engine.retryDelay(8, jitterMilliseconds: 1000),
-      const Duration(minutes: 5),
+      const Duration(seconds: 257),
     );
     expect(
       () => engine.retryDelay(1, jitterMilliseconds: 1001),

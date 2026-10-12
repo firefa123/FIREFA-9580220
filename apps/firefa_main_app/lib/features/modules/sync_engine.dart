@@ -53,7 +53,7 @@ class FirefaSyncEngine {
     if (jitterMilliseconds < 0 || jitterMilliseconds > 1000) {
       throw RangeError.range(jitterMilliseconds, 0, 1000, 'jitterMilliseconds');
     }
-    final exponent = attempts > 9 ? 9 : attempts;
+    final exponent = attempts > 8 ? 8 : attempts;
     final baseMilliseconds = (1 << exponent) * 1000;
     final totalMilliseconds = baseMilliseconds + jitterMilliseconds;
     return Duration(
