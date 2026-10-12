@@ -68,11 +68,17 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
 
   final List<FirefaSyncEntry> _entries = [];
   bool _initialized = false;
+  Future<void>? _initialization;
   int _nextSequence = 1;
   final Random _random = Random.secure();
   Future<void> _pendingSave = Future<void>.value();
 
-  Future<void> initialize() async {
+  Future<void> initialize() {
+    if (_initialized) return Future<void>.value();
+    return _initialization ??= _initialize();
+  }
+
+  Future<void> _initialize() async {
     if (_initialized) return;
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_storageKey);
