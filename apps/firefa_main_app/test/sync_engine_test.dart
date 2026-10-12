@@ -5,6 +5,10 @@ import 'package:firefa_main_app/features/modules/offline_sync_queue.dart';
 import 'package:firefa_main_app/features/modules/order_models.dart';
 import 'package:firefa_main_app/features/modules/sync_adapter.dart';
 import 'package:firefa_main_app/features/modules/sync_engine.dart';
+import 'package:firefa_main_app/features/modules/order_store.dart';
+import 'package:firefa_main_app/features/modules/conflict_management.dart';
+import 'package:firefa_main_app/features/modules/conflict_store.dart';
+import 'package:firefa_main_app/features/modules/hybrid_sync_conflict_bridge.dart';
 
 FirefaOrder makeOrder(String id, String outlet) => FirefaOrder(
   id: id,
@@ -28,6 +32,8 @@ void main() {
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
     await queue.initialize();
+    await FirefaOrderStore.instance.initialize();
+    await FirefaConflictStore.instance.initialize();
   });
 
   test('FIFO selection, batch limit and outlet isolation', () async {
@@ -77,6 +83,59 @@ void main() {
       eventId: envelope.eventId,
       outcome: FirefaSyncOutcome.acknowledged,
     )), isFalse);
+  });
+
+  test('Keep Local retains order and replaces conflicted outbox event', () async {
+    final store = FirefaOrderStore.instance;
+    final order = store.createOrder(
+      outletId: 'conflict-keep-local', orderType: 'Take Away', tableId: null,
+      items: const [FirefaOrderItem(productName: 'Tea', quantity: 1, unitPrice: 1000)],
+      subtotal: 1000, discount: 0, tax: 0, service: 0, total: 1000,
+    );
+    await store.waitForPendingSave();
+    final entry = queue.entriesForOutlet(order.outletId).last;
+    final server = Map<String, dynamic>.from(order.toJson())..['status'] = 'preparing';
+    final bridge = FirefaHybridSyncConflictBridge(store: FirefaConflictStore.instance);
+    expect(await bridge.processServerMismatch(
+      local: entry, outletId: order.outletId, orderId: order.id,
+      serverSnapshot: server,
+    ), isTrue);
+
+    await store.reconcileConflict(
+      eventId: entry.eventId, outletId: order.outletId, orderId: order.id,
+      acceptServer: false,
+    );
+    expect(store.findOrder(order.outletId, order.id)!.status, FirefaOrderStatus.confirmed);
+    expect(queue.entriesForOutlet(order.outletId).any((e) => e.eventId == entry.eventId), isFalse);
+    expect(queue.entriesForOutlet(order.outletId).any((e) => e.orderId == order.id && e.eventType == 'order.updated'), isTrue);
+    await FirefaConflictStore.instance.remove(entry.eventId);
+    await store.waitForPendingSave();
+  });
+
+  test('Accept Server applies a validated server snapshot to the local order', () async {
+    final store = FirefaOrderStore.instance;
+    final order = store.createOrder(
+      outletId: 'conflict-accept-server', orderType: 'Take Away', tableId: null,
+      items: const [FirefaOrderItem(productName: 'Coffee', quantity: 1, unitPrice: 1500)],
+      subtotal: 1500, discount: 0, tax: 0, service: 0, total: 1500,
+    );
+    await store.waitForPendingSave();
+    final entry = queue.entriesForOutlet(order.outletId).last;
+    final server = Map<String, dynamic>.from(order.toJson())..['status'] = 'preparing';
+    final bridge = FirefaHybridSyncConflictBridge(store: FirefaConflictStore.instance);
+    expect(await bridge.processServerMismatch(
+      local: entry, outletId: order.outletId, orderId: order.id,
+      serverSnapshot: server,
+    ), isTrue);
+
+    await store.reconcileConflict(
+      eventId: entry.eventId, outletId: order.outletId, orderId: order.id,
+      acceptServer: true, serverSnapshot: server,
+    );
+    expect(store.findOrder(order.outletId, order.id)!.status, FirefaOrderStatus.preparing);
+    expect(queue.entriesForOutlet(order.outletId).any((e) => e.eventId == entry.eventId), isFalse);
+    await FirefaConflictStore.instance.remove(entry.eventId);
+    await store.waitForPendingSave();
   });
 
   test('disabled transport never acknowledges and leaves queue pending', () async {
