@@ -259,10 +259,14 @@ class FirefaOrderStore extends ChangeNotifier {
     final matchingEvent = queue.entriesForOutlet(outletId).where(
       (entry) => entry.eventId == eventId && entry.orderId == orderId,
     );
-    if (matchingEvent.isEmpty) {
-      throw StateError('Event outbox konflik tidak ditemukan atau identitasnya berbeda.');
+    final hasConflictedEvent = matchingEvent.isNotEmpty;
+    if (!hasConflictedEvent &&
+        queue.entriesForOutlet(outletId).any((entry) => entry.eventId == eventId)) {
+      throw StateError('Event konflik ditemukan pada order yang berbeda.');
     }
 
+    // Idempotency: a prior attempt may have persisted the order but failed
+    // before the inbox/audit update. Allow retry when the event is already gone.
     FirefaOrder nextOrder = previousOrder;
     if (acceptServer) {
       if (serverSnapshot == null) {
@@ -285,9 +289,19 @@ class FirefaOrderStore extends ChangeNotifier {
     // Keep Local, enqueue a fresh event ID so the retained snapshot can retry.
     _orders[index] = nextOrder;
     try {
-      await queue.removeEvent(eventId);
+      if (hasConflictedEvent) {
+        await queue.removeEvent(eventId);
+      }
       if (!acceptServer) {
-        queue.enqueueOrder(nextOrder, 'order.updated');
+        final alreadyQueued = queue.entriesForOutlet(outletId).any(
+          (entry) =>
+              entry.orderId == orderId &&
+              entry.eventType == 'order.updated' &&
+              jsonEncode(entry.orderSnapshot) == jsonEncode(nextOrder.toJson()),
+        );
+        if (!alreadyQueued) {
+          queue.enqueueOrder(nextOrder, 'order.updated');
+        }
       }
       _scheduleSave();
       await waitForPendingSave();
