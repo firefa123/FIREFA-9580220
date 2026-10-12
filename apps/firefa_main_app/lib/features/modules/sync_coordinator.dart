@@ -1,5 +1,4 @@
 import 'conflict_management.dart';
-import 'conflict_store.dart';
 import 'hybrid_sync_conflict_bridge.dart';
 import 'offline_sync_queue.dart';
 import 'sync_adapter.dart';
