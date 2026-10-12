@@ -184,7 +184,7 @@ void main() {
     final entry = queue.entriesForOutlet(outletId).last;
     final invalidServer = Map<String, dynamic>.from(order.toJson())
       ..['items'] = [
-        const FirefaOrderItem(productName: 'Rice', quantity: -1, unitPrice: 1500).toJson(),
+        FirefaOrderItem(productName: 'Rice', quantity: -1, unitPrice: 1500).toJson(),
       ]
       ..['status'] = 'preparing';
     await expectLater(
