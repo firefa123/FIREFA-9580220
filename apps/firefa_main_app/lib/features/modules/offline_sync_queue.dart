@@ -79,22 +79,36 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     var recoveredInterruptedSend = false;
     if (raw != null && raw.isNotEmpty) {
       final decoded = Map<String, dynamic>.from(jsonDecode(raw) as Map);
-      _nextSequence = decoded['nextSequence'] as int;
-      _entries
-        ..clear()
-        ..addAll((decoded['entries'] as List).map(
-          (value) => FirefaSyncEntry.fromJson(
-            Map<String, dynamic>.from(value as Map),
-          ),
-        ));
-      // Interrupted sends must be retried after a future backend exists.
-      for (final entry in _entries) {
+      final sequence = decoded['nextSequence'];
+      final rawEntries = decoded['entries'];
+      if (decoded['version'] != 1 ||
+          sequence is! int ||
+          sequence < 1 ||
+          rawEntries is! List) {
+        throw const FormatException('Snapshot outbox lokal tidak valid.');
+      }
+
+      // Parse and validate off to the side so corrupt persisted data cannot
+      // partially replace the in-memory queue.
+      final restored = rawEntries
+          .map((value) => FirefaSyncEntry.fromJson(
+                Map<String, dynamic>.from(value as Map),
+              ))
+          .toList();
+      _validateEntries(restored);
+      for (final entry in restored) {
+        // Interrupted sends must be retried after a future backend exists.
         if (entry.status == FirefaSyncStatus.syncing) {
           entry.status = FirefaSyncStatus.pending;
           entry.nextAttemptAt = null;
           recoveredInterruptedSend = true;
         }
       }
+
+      _entries
+        ..clear()
+        ..addAll(restored);
+      _nextSequence = sequence;
     }
     _initialized = true;
     if (recoveredInterruptedSend) {
@@ -365,6 +379,24 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     };
   }
 
+  void _validateEntries(List<FirefaSyncEntry> entries) {
+    final eventIds = <String>{};
+    for (final entry in entries) {
+      if (entry.eventId.trim().isEmpty ||
+          entry.outletId.trim().isEmpty ||
+          entry.orderId.trim().isEmpty ||
+          entry.eventType.trim().isEmpty ||
+          entry.attempts < 0 ||
+          !eventIds.add(entry.eventId) ||
+          entry.orderSnapshot['id'] != entry.orderId ||
+          entry.orderSnapshot['outletId'] != entry.outletId) {
+        throw const FormatException(
+          'Identitas atau status event pada snapshot outbox tidak valid.',
+        );
+      }
+    }
+  }
+
   /// Used only when a validated combined snapshot is restored.
   void restoreCombinedSnapshot(Map<String, dynamic> data) {
     _ensureInitialized();
@@ -383,20 +415,8 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
               Map<String, dynamic>.from(value as Map),
             ))
         .toList();
-    final eventIds = <String>{};
+    _validateEntries(restored);
     for (final entry in restored) {
-      if (entry.eventId.trim().isEmpty ||
-          entry.outletId.trim().isEmpty ||
-          entry.orderId.trim().isEmpty ||
-          entry.eventType.trim().isEmpty ||
-          entry.attempts < 0 ||
-          !eventIds.add(entry.eventId) ||
-          entry.orderSnapshot['id'] != entry.orderId ||
-          entry.orderSnapshot['outletId'] != entry.outletId) {
-        throw const FormatException(
-          'Identitas atau status event pada snapshot outbox tidak valid.',
-        );
-      }
       if (entry.status == FirefaSyncStatus.syncing) {
         entry.status = FirefaSyncStatus.pending;
         entry.nextAttemptAt = null;
