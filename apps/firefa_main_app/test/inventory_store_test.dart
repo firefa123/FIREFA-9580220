@@ -160,6 +160,18 @@ void main() {
       ),
       throwsStateError,
     );
+    // Individually valid lines must also be rejected if their combined
+    // requirement for the same ingredient exceeds the supported limit.
+    expect(
+      () => store.validateOrderStock(
+        outletId: 'LEGACY-A',
+        menuLines: [
+          (menuId: 'menu-latte', quantity: 5000000),
+          (menuId: 'menu-latte', quantity: 5000000),
+        ],
+      ),
+      throwsStateError,
+    );
     expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == coffee.id).stock, 100);
     expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == milk.id).stock, 300);
     expect(await store.consumeOrderStock(orderId: 'POS-ORDER-1', outletId: 'LEGACY-A', menuLines: [(menuId: 'menu-latte', quantity: 2)]), isTrue);
