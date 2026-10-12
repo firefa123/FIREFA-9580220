@@ -17,6 +17,7 @@ class FirefaOrderStore extends ChangeNotifier {
   static const String _combinedKey = 'firefa_orders_outbox_v2';
 
   final List<FirefaOrder> _orders = [];
+  final Set<String> _cancellationsInProgress = <String>{};
 
   int _nextNumber = 1001;
   bool _initialized = false;
@@ -402,10 +403,15 @@ class FirefaOrderStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  String _orderKey(String outletId, String orderId) =>
+      '${outletId}\u0000${orderId}';
+
   bool advance(String outletId, String orderId) {
     final order = findOrder(outletId, orderId);
 
-    if (order == null || !order.advanceStatus()) {
+    if (order == null ||
+        _cancellationsInProgress.contains(_orderKey(outletId, orderId)) ||
+        !order.advanceStatus()) {
       return false;
     }
 
@@ -420,49 +426,58 @@ class FirefaOrderStore extends ChangeNotifier {
   /// local-first best effort rather than a crash-atomic cross-store transaction.
   Future<bool> cancelAndRestoreStock(String outletId, String orderId) async {
     final order = findOrder(outletId, orderId);
-    if (order == null || !order.status.canCancel ||
+    final key = _orderKey(outletId, orderId);
+    if (order == null ||
+        _cancellationsInProgress.contains(key) ||
+        !order.status.canCancel ||
         order.paymentStatus == FirefaPaymentStatus.paid) {
       return false;
     }
 
-    // Initialize required stores before mutating order state. If local
-    // storage cannot be opened, leave the order untouched and cancellable.
-    final inventory = FirefaInventoryStore.instance;
-    final queue = FirefaOfflineSyncQueue.instance;
-    await inventory.initialize();
-    await queue.initialize();
-
-    // Change the order state before the stock-restoration await so another
-    // action cannot pay or advance it while restoration is in flight.
-    final previousStatus = order.status;
-    if (!order.cancel()) return false;
-
+    // Lock the order before the first await. Otherwise markPaid/advance could
+    // mutate the same order while store initialization is in flight.
+    _cancellationsInProgress.add(key);
     try {
-      if (inventory.isOrderStockProcessed(orderId) &&
-          !inventory.isOrderStockReversed(orderId)) {
-        await inventory.restoreCancelledOrderStock(
-          orderId: orderId,
-          outletId: outletId,
-        );
-      }
-    } catch (_) {
-      // Keep the order cancellable if restoration could not be completed.
-      order.status = previousStatus;
-      _scheduleSave();
-      notifyListeners();
-      rethrow;
-    }
+      final inventory = FirefaInventoryStore.instance;
+      final queue = FirefaOfflineSyncQueue.instance;
+      await inventory.initialize();
+      await queue.initialize();
 
-    queue.enqueueOrder(order, 'order.updated');
-    _scheduleSave();
-    await waitForPendingSave();
-    notifyListeners();
-    return true;
+      final previousStatus = order.status;
+      if (!order.cancel()) return false;
+
+      try {
+        if (inventory.isOrderStockProcessed(orderId) &&
+            !inventory.isOrderStockReversed(orderId)) {
+          await inventory.restoreCancelledOrderStock(
+            orderId: orderId,
+            outletId: outletId,
+          );
+        }
+      } catch (_) {
+        // Keep the order cancellable if restoration could not be completed.
+        order.status = previousStatus;
+        _scheduleSave();
+        notifyListeners();
+        rethrow;
+      }
+
+      queue.enqueueOrder(order, 'order.updated');
+      _scheduleSave();
+      await waitForPendingSave();
+      notifyListeners();
+      return true;
+    } finally {
+      _cancellationsInProgress.remove(key);
+    }
   }
 
   bool cancel(String outletId, String orderId) {
     final order = findOrder(outletId, orderId);
-    if (order == null) return false;
+    if (order == null ||
+        _cancellationsInProgress.contains(_orderKey(outletId, orderId))) {
+      return false;
+    }
 
     // A synchronous cancellation cannot safely restore recipe stock. Force
     // stock-processed orders through cancelAndRestoreStock so cancellation
@@ -484,7 +499,9 @@ class FirefaOrderStore extends ChangeNotifier {
   bool markPaid(String outletId, String orderId) {
     final order = findOrder(outletId, orderId);
 
-    if (order == null || !order.markPaid()) {
+    if (order == null ||
+        _cancellationsInProgress.contains(_orderKey(outletId, orderId)) ||
+        !order.markPaid()) {
       return false;
     }
 
