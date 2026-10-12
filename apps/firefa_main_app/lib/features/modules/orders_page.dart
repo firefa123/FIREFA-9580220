@@ -509,6 +509,7 @@ class _OrdersPageState extends State<OrdersPage> {
       ('Syncing', count(FirefaSyncStatus.syncing), Colors.blue),
       ('Synced', count(FirefaSyncStatus.synced), Colors.green),
       ('Failed', count(FirefaSyncStatus.failed), Colors.red),
+      ('Conflict', count(FirefaSyncStatus.conflict), Colors.deepPurple),
     ];
 
     return Container(
@@ -589,6 +590,7 @@ class _OrdersPageState extends State<OrdersPage> {
                           FirefaSyncStatus.syncing => Colors.blue,
                           FirefaSyncStatus.synced => Colors.green,
                           FirefaSyncStatus.failed => Colors.red,
+                          FirefaSyncStatus.conflict => Colors.deepPurple,
                         }),
                         Text(entry.eventType, style: const TextStyle(color: muted, fontSize: 12)),
                       ],
