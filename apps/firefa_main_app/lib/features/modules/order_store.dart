@@ -237,6 +237,68 @@ class FirefaOrderStore extends ChangeNotifier {
     return null;
   }
 
+  /// Apply an explicit conflict decision to the real local order and outbox.
+  /// Server snapshots are accepted only after full model parsing and identity checks.
+  Future<void> reconcileConflict({
+    required String eventId,
+    required String outletId,
+    required String orderId,
+    required bool acceptServer,
+    Map<String, dynamic>? serverSnapshot,
+  }) async {
+    _ensureInitialized();
+    final index = _orders.indexWhere(
+      (order) => order.outletId == outletId && order.id == orderId,
+    );
+    if (index < 0) {
+      throw StateError('Order lokal tidak ditemukan untuk konflik ini.');
+    }
+
+    final previousOrder = _orders[index];
+    final queue = FirefaOfflineSyncQueue.instance;
+    final matchingEvent = queue.entriesForOutlet(outletId).where(
+      (entry) => entry.eventId == eventId && entry.orderId == orderId,
+    );
+    if (matchingEvent.isEmpty) {
+      throw StateError('Event outbox konflik tidak ditemukan atau identitasnya berbeda.');
+    }
+
+    FirefaOrder nextOrder = previousOrder;
+    if (acceptServer) {
+      if (serverSnapshot == null) {
+        throw ArgumentError('Snapshot server wajib tersedia untuk Accept Server.');
+      }
+      final parsed = FirefaOrder.fromJson(Map<String, dynamic>.from(serverSnapshot));
+      if (parsed.id != orderId || parsed.outletId != outletId) {
+        throw StateError('Identitas snapshot server tidak cocok dengan order aktif.');
+      }
+      if (parsed.total < 0 || parsed.subtotal < 0 || parsed.discount < 0 ||
+          parsed.tax < 0 || parsed.service < 0 || parsed.discount > parsed.subtotal ||
+          parsed.subtotal - parsed.discount + parsed.tax + parsed.service != parsed.total ||
+          parsed.items.isEmpty) {
+        throw FormatException('Snapshot server melanggar validasi order.');
+      }
+      nextOrder = parsed;
+    }
+
+    // Update the authoritative local order, then retire the stale event. For
+    // Keep Local, enqueue a fresh event ID so the retained snapshot can retry.
+    _orders[index] = nextOrder;
+    try {
+      await queue.removeEvent(eventId);
+      if (!acceptServer) {
+        queue.enqueueOrder(nextOrder, 'order.updated');
+      }
+      _scheduleSave();
+      await waitForPendingSave();
+    } catch (_) {
+      _orders[index] = previousOrder;
+      _scheduleSave();
+      rethrow;
+    }
+    notifyListeners();
+  }
+
   bool advance(String outletId, String orderId) {
     final order = findOrder(outletId, orderId);
 
