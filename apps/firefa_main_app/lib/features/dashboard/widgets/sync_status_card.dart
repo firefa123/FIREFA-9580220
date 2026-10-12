@@ -37,8 +37,10 @@ class _SyncStatusCardState extends State<SyncStatusCard> {
     });
 
     try {
+      final queue = FirefaOfflineSyncQueue.instance;
+      await queue.retryFailedForOutlet(widget.outletId);
       final summary = await FirefaSyncCoordinator(
-        queue: FirefaOfflineSyncQueue.instance,
+        queue: queue,
         adapter: widget.adapter,
         conflictBridge: FirefaHybridSyncConflictBridge(
           store: FirefaConflictStore.instance,
@@ -92,8 +94,14 @@ class _SyncStatusCardState extends State<SyncStatusCard> {
           final pending = entries
               .where((entry) => entry.status == FirefaSyncStatus.pending)
               .length;
+          final syncing = entries
+              .where((entry) => entry.status == FirefaSyncStatus.syncing)
+              .length;
           final failed = entries
               .where((entry) => entry.status == FirefaSyncStatus.failed)
+              .length;
+          final queuedConflicts = entries
+              .where((entry) => entry.status == FirefaSyncStatus.conflict)
               .length;
           final conflicts = conflictStore.conflicts
               .where((conflict) => conflict.outletId == widget.outletId)
@@ -111,7 +119,9 @@ class _SyncStatusCardState extends State<SyncStatusCard> {
                   ),
                   const SizedBox(height: 12),
                   Text('Pending: $pending'),
+                  Text('Sedang diproses: $syncing'),
                   Text('Gagal: $failed'),
+                  Text('Konflik di antrean: $queuedConflicts'),
                   Text('Konflik perlu ditinjau: $conflicts'),
                   const SizedBox(height: 8),
                   const Text(

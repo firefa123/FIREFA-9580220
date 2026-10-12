@@ -227,11 +227,50 @@ void main() {
     expect(summary.conflicts, 1);
     expect(summary.acknowledged, 0);
     expect(FirefaConflictStore.instance.conflicts.any((c) => c.eventId == event.eventId), isTrue);
-    expect(queue.findEvent(event.eventId)!.status, FirefaSyncStatus.pending);
+    expect(queue.findEvent(event.eventId)!.status, FirefaSyncStatus.conflict);
+    expect(queue.findEvent(event.eventId)!.attempts, 1);
+    expect(engine.pendingBatch(queue: queue, outletId: outletId), isEmpty);
 
     await FirefaConflictStore.instance.remove(event.eventId);
     await queue.removeEvent(event.eventId);
     await store.waitForPendingSave();
+  });
+
+  test('syncing increments attempts and can safely return to pending', () async {
+    final event = queue.enqueueOrder(
+      makeOrder('STATUS-TEST', 'status-test-outlet'),
+      'order.created',
+    );
+    await queue.waitForPendingSave();
+
+    await queue.markSyncing(event.eventId);
+    expect(event.status, FirefaSyncStatus.syncing);
+    expect(event.attempts, 1);
+
+    await queue.markPending(event.eventId);
+    expect(event.status, FirefaSyncStatus.pending);
+    expect(event.attempts, 1);
+
+    await queue.removeEvent(event.eventId);
+    await queue.waitForPendingSave();
+  });
+
+  test('permanent failure is recorded and explicit retry restores pending', () async {
+    final event = queue.enqueueOrder(
+      makeOrder('FAILED-TEST', 'failed-test-outlet'),
+      'order.created',
+    );
+    await queue.waitForPendingSave();
+    await queue.markSyncing(event.eventId);
+    await queue.markFailed(event.eventId);
+    expect(event.status, FirefaSyncStatus.failed);
+
+    expect(await queue.retryFailedForOutlet('failed-test-outlet'), 1);
+    expect(event.status, FirefaSyncStatus.pending);
+    expect(await queue.retryFailedForOutlet('failed-test-outlet'), 0);
+
+    await queue.removeEvent(event.eventId);
+    await queue.waitForPendingSave();
   });
 
   test('disabled transport never acknowledges and leaves queue pending', () async {

@@ -33,7 +33,10 @@ class FirefaSyncCoordinator {
     var retryableFailures = 0;
 
     for (final envelope in batch) {
+      var markedSyncing = false;
       try {
+        await queue.markSyncing(envelope.eventId);
+        markedSyncing = true;
         final receipt = await adapter.send(envelope);
         if (receipt.outcome == FirefaSyncOutcome.acknowledged &&
             engine.isValidAcknowledgement(envelope, receipt)) {
@@ -51,6 +54,7 @@ class FirefaSyncCoordinator {
               snapshot == null ||
               serverOutletId == null ||
               serverOrderId == null) {
+            await queue.markPending(envelope.eventId);
             retryableFailures++;
             continue;
           }
@@ -63,20 +67,34 @@ class FirefaSyncCoordinator {
                 FirefaConflictKind.invalidServerResponse,
           );
           if (created) {
+            await queue.markConflict(envelope.eventId);
             conflicts++;
           } else {
             // Identical snapshots need no conflict, but a conflict receipt
             // must not be treated as a verified acknowledgement.
+            await queue.markPending(envelope.eventId);
             retryableFailures++;
           }
           continue;
         }
 
-        // Retryable/permanent failures and invalid acknowledgements stay out
-        // of the synced state until a verified contract is received.
+        // A permanent rejection is visible to the operator; other failures
+        // remain retryable and never count as a successful sync.
+        if (receipt.outcome == FirefaSyncOutcome.permanentFailure) {
+          await queue.markFailed(envelope.eventId);
+        } else {
+          await queue.markPending(envelope.eventId);
+        }
         retryableFailures++;
       } catch (_) {
         // Preserve the event for a later retry. Never report false success.
+        if (markedSyncing) {
+          try {
+            await queue.markPending(envelope.eventId);
+          } catch (_) {
+            // Keep the original failure as the reported outcome.
+          }
+        }
         retryableFailures++;
       }
     }

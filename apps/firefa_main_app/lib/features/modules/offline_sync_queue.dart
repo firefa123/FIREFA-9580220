@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'order_models.dart';
 
-enum FirefaSyncStatus { pending, syncing, synced, failed }
+enum FirefaSyncStatus { pending, syncing, synced, failed, conflict }
 
 class FirefaSyncEntry {
   final String eventId;
@@ -135,6 +135,105 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
       if (entry.eventId == eventId) return entry;
     }
     return null;
+  }
+
+  /// Persist the in-flight state and count this send attempt.
+  Future<void> markSyncing(String eventId) async {
+    _ensureInitialized();
+    final entry = findEvent(eventId);
+    if (entry == null) throw StateError('Event outbox tidak ditemukan.');
+    if (entry.status != FirefaSyncStatus.pending) {
+      throw StateError('Hanya event pending yang dapat diproses.');
+    }
+    final previousAttempts = entry.attempts;
+    entry.status = FirefaSyncStatus.syncing;
+    entry.attempts++;
+    try {
+      _scheduleSave();
+      await waitForPendingSave();
+    } catch (_) {
+      entry.status = FirefaSyncStatus.pending;
+      entry.attempts = previousAttempts;
+      rethrow;
+    }
+    notifyListeners();
+  }
+
+  /// Return a non-acknowledged event to pending so a later retry can run.
+  Future<void> markPending(String eventId) async {
+    _ensureInitialized();
+    final entry = findEvent(eventId);
+    if (entry == null) return;
+    final previous = entry.status;
+    if (previous == FirefaSyncStatus.pending) return;
+    entry.status = FirefaSyncStatus.pending;
+    try {
+      _scheduleSave();
+      await waitForPendingSave();
+    } catch (_) {
+      entry.status = previous;
+      rethrow;
+    }
+    notifyListeners();
+  }
+
+  /// Keep conflicted events out of future send batches until reconciled.
+  Future<void> markConflict(String eventId) async {
+    _ensureInitialized();
+    final entry = findEvent(eventId);
+    if (entry == null) throw StateError('Event outbox tidak ditemukan.');
+    final previous = entry.status;
+    entry.status = FirefaSyncStatus.conflict;
+    try {
+      _scheduleSave();
+      await waitForPendingSave();
+    } catch (_) {
+      entry.status = previous;
+      rethrow;
+    }
+    notifyListeners();
+  }
+
+  /// Permanently rejected events require an explicit retry from the UI.
+  Future<void> markFailed(String eventId) async {
+    _ensureInitialized();
+    final entry = findEvent(eventId);
+    if (entry == null) throw StateError('Event outbox tidak ditemukan.');
+    final previous = entry.status;
+    entry.status = FirefaSyncStatus.failed;
+    try {
+      _scheduleSave();
+      await waitForPendingSave();
+    } catch (_) {
+      entry.status = previous;
+      rethrow;
+    }
+    notifyListeners();
+  }
+
+  /// Explicit user retry moves failed events for one outlet back to pending.
+  Future<int> retryFailedForOutlet(String outletId) async {
+    _ensureInitialized();
+    final failed = _entries
+        .where((entry) =>
+            entry.outletId == outletId &&
+            entry.status == FirefaSyncStatus.failed)
+        .toList();
+    if (failed.isEmpty) return 0;
+    for (final entry in failed) {
+      entry.status = FirefaSyncStatus.pending;
+    }
+    try {
+      _scheduleSave();
+      await waitForPendingSave();
+    } catch (_) {
+      for (final entry in failed) {
+        entry.status = FirefaSyncStatus.failed;
+      }
+      rethrow;
+    }
+    notifyListeners();
+    return failed.length;
   }
 
   /// Mark an event synced only after a verified backend acknowledgement.
