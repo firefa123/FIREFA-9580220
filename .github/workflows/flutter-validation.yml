@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, "fix/**"]
+    branches: [main]
 
 permissions:
   contents: read
@@ -23,7 +23,6 @@ jobs:
         with:
           channel: stable
           cache: true
-          cache-dependency-path: apps/firefa_main_app/pubspec.lock
       - name: Install dependencies
         run: flutter pub get
       - name: Analyze
