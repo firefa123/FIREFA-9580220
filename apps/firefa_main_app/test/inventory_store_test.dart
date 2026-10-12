@@ -141,6 +141,16 @@ void main() {
     expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == coffee.id).stock, 100);
     expect(store.addRecipeLine(outletId: 'LEGACY-A', menuId: 'menu-latte', ingredientId: milk.id, quantity: 100), isTrue);
     expect(store.validateOrderStock(outletId: 'LEGACY-A', menuLines: [(menuId: 'menu-latte', quantity: 2)]), isTrue);
+    // Large quantities must fail validation rather than overflow arithmetic.
+    expect(
+      () => store.validateOrderStock(
+        outletId: 'LEGACY-A',
+        menuLines: [(menuId: 'menu-latte', quantity: 999999999)],
+      ),
+      throwsStateError,
+    );
+    expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == coffee.id).stock, 100);
+    expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == milk.id).stock, 300);
     expect(await store.consumeOrderStock(orderId: 'POS-ORDER-1', outletId: 'LEGACY-A', menuLines: [(menuId: 'menu-latte', quantity: 2)]), isTrue);
     expect(await store.consumeOrderStock(orderId: 'POS-ORDER-1', outletId: 'LEGACY-A', menuLines: [(menuId: 'menu-latte', quantity: 2)]), isFalse);
     expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == coffee.id).stock, 64);
