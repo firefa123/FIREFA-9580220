@@ -4,6 +4,7 @@ import '../../core/auth/role_permissions.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/outlet/active_outlet_store.dart';
 import '../modules/pos_page.dart';
+import '../conflict/conflict_center_page.dart';
 import '../modules/order_models.dart';
 import '../modules/order_store.dart';
 import '../modules/orders_page.dart';
@@ -49,6 +50,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'Menu Management',
     'Inventory',
     'Reports',
+    'Conflict Center',
     'Settings',
     'Suppliers',
     'Purchasing',
@@ -63,6 +65,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'Kelola produk, kategori, dan harga menu.',
     'Pantau stok bahan baku dan persediaan.',
     'Analisis penjualan dan performa bisnis.',
+    'Tinjau konflik sinkronisasi dan catat keputusan.',
     'Kelola preferensi dan konfigurasi bisnis.',
     'Kelola pemasok dan informasi kontak per outlet.',
     'Buat PO dan terima barang ke stok inventory.',
@@ -77,6 +80,7 @@ class _DashboardPageState extends State<DashboardPage> {
     FirefaPermission.menuManage,
     FirefaPermission.inventoryManage,
     FirefaPermission.reportsView,
+    FirefaPermission.conflictManage,
     FirefaPermission.settingsManage,
     FirefaPermission.inventoryManage,
     FirefaPermission.inventoryManage,
@@ -604,12 +608,14 @@ class _DashboardPageState extends State<DashboardPage> {
       case 6:
         return const ReportsPage();
       case 7:
-        return const SettingsPage();
+        return const ConflictCenterPage();
       case 8:
-        return const SupplierPage();
+        return const SettingsPage();
       case 9:
-        return const PurchaseOrderPage();
+        return const SupplierPage();
       case 10:
+        return const PurchaseOrderPage();
+      case 11:
         return const PrinterPage();
       default:
         return const SizedBox.shrink();
