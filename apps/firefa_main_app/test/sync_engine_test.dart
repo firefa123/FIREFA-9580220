@@ -107,7 +107,17 @@ void main() {
     );
     expect(store.findOrder(order.outletId, order.id)!.status, FirefaOrderStatus.confirmed);
     expect(queue.entriesForOutlet(order.outletId).any((e) => e.eventId == entry.eventId), isFalse);
-    expect(queue.entriesForOutlet(order.outletId).any((e) => e.orderId == order.id && e.eventType == 'order.updated'), isTrue);
+    expect(queue.entriesForOutlet(order.outletId).where(
+      (e) => e.orderId == order.id && e.eventType == 'order.updated',
+    ), hasLength(1));
+    // Retrying after a partial failure must not create duplicate outbox events.
+    await store.reconcileConflict(
+      eventId: entry.eventId, outletId: order.outletId, orderId: order.id,
+      acceptServer: false,
+    );
+    expect(queue.entriesForOutlet(order.outletId).where(
+      (e) => e.orderId == order.id && e.eventType == 'order.updated',
+    ), hasLength(1));
     await FirefaConflictStore.instance.remove(entry.eventId);
     await store.waitForPendingSave();
   });
