@@ -273,6 +273,39 @@ void main() {
     await queue.waitForPendingSave();
   });
 
+  test('coordinator schedules retry after disabled transport failure', () async {
+    final event = queue.enqueueOrder(
+      makeOrder('COORDINATOR-RETRY', 'coordinator-retry-outlet'),
+      'order.created',
+    );
+    await queue.waitForPendingSave();
+    final coordinator = FirefaSyncCoordinator(
+      queue: queue,
+      adapter: const FirefaDisabledSyncAdapter(),
+      conflictBridge: FirefaHybridSyncConflictBridge(
+        store: FirefaConflictStore.instance,
+      ),
+    );
+
+    final summary = await coordinator.syncOutlet('coordinator-retry-outlet');
+    expect(summary.attempted, 1);
+    expect(summary.retryableFailures, 1);
+    expect(event.status, FirefaSyncStatus.pending);
+    expect(event.attempts, 1);
+    expect(event.nextAttemptAt, isNotNull);
+    expect(event.nextAttemptAt!.isAfter(DateTime.now().toUtc()), isTrue);
+    expect(
+      engine.pendingBatch(
+        queue: queue,
+        outletId: 'coordinator-retry-outlet',
+      ),
+      isEmpty,
+    );
+
+    await queue.removeEvent(event.eventId);
+    await queue.waitForPendingSave();
+  });
+
   test('disabled transport never acknowledges and leaves queue pending', () async {
     final entry = queue.entriesForOutlet('test-outlet-A').first;
     final before = queue.pendingCountForOutlet('test-outlet-A');

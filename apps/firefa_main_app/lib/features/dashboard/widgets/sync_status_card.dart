@@ -51,7 +51,15 @@ class _SyncStatusCardState extends State<SyncStatusCard> {
       setState(() {
         _lastSummary = summary;
         if (summary.attempted == 0) {
-          _lastMessage = 'Tidak ada event pending untuk outlet ini.';
+          final hasDeferredRetry = queue.entriesForOutlet(widget.outletId).any(
+            (entry) =>
+                entry.status == FirefaSyncStatus.pending &&
+                entry.nextAttemptAt != null &&
+                entry.nextAttemptAt!.isAfter(DateTime.now().toUtc()),
+          );
+          _lastMessage = hasDeferredRetry
+              ? 'Ada event menunggu jeda retry. Coba lagi setelah waktunya tiba.'
+              : 'Tidak ada event pending yang siap diproses.';
         } else if (summary.conflicts > 0) {
           _lastMessage =
               'Ditemukan ${summary.conflicts} konflik. Periksa Pusat Konflik.';
