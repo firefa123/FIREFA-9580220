@@ -305,6 +305,22 @@ void main() {
     await store.waitForPendingSave();
   });
 
+  test('outbox rejects illegal terminal state transitions', () async {
+    final event = queue.enqueueOrder(
+      makeOrder('ILLEGAL-TRANSITION', 'transition-test-outlet'),
+      'order.created',
+    );
+    await queue.waitForPendingSave();
+
+    await expectLater(queue.markSynced(event.eventId), throwsStateError);
+    await expectLater(queue.markConflict(event.eventId), throwsStateError);
+    await expectLater(queue.markFailed(event.eventId), throwsStateError);
+    expect(event.status, FirefaSyncStatus.pending);
+
+    await queue.removeEvent(event.eventId);
+    await queue.waitForPendingSave();
+  });
+
   test('syncing increments attempts and can safely return to pending', () async {
     final event = queue.enqueueOrder(
       makeOrder('STATUS-TEST', 'status-test-outlet'),

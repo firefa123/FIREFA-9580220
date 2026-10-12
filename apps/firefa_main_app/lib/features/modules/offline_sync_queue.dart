@@ -204,6 +204,9 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     _ensureInitialized();
     final entry = findEvent(eventId);
     if (entry == null) throw StateError('Event outbox tidak ditemukan.');
+    if (entry.status != FirefaSyncStatus.syncing) {
+      throw StateError('Hanya event yang sedang diproses dapat menjadi konflik.');
+    }
     final previous = entry.status;
     final previousNextAttemptAt = entry.nextAttemptAt;
     entry.status = FirefaSyncStatus.conflict;
@@ -224,6 +227,9 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     _ensureInitialized();
     final entry = findEvent(eventId);
     if (entry == null) throw StateError('Event outbox tidak ditemukan.');
+    if (entry.status != FirefaSyncStatus.syncing) {
+      throw StateError('Hanya event yang sedang diproses dapat ditandai gagal.');
+    }
     final previous = entry.status;
     final previousNextAttemptAt = entry.nextAttemptAt;
     entry.status = FirefaSyncStatus.failed;
@@ -270,6 +276,9 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     _ensureInitialized();
     final entry = findEvent(eventId);
     if (entry == null) throw StateError('Event outbox tidak ditemukan.');
+    if (entry.status != FirefaSyncStatus.syncing) {
+      throw StateError('Hanya event yang sedang diproses dapat ditandai tersinkron.');
+    }
     final previous = entry.status;
     final previousNextAttemptAt = entry.nextAttemptAt;
     entry.status = FirefaSyncStatus.synced;
