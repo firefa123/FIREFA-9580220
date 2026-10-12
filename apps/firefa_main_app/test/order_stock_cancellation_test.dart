@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -110,5 +112,20 @@ void main() {
 
     await orders.waitForPendingSave();
     await inventory.waitForPendingSave();
+
+    // Verify the idempotency marker and restored quantity reached durable storage.
+    final prefs = await SharedPreferences.getInstance();
+    final rawInventory = prefs.getString(FirefaInventoryStore.storageKey);
+    expect(rawInventory, isNotNull);
+    final savedInventory = jsonDecode(rawInventory!) as Map<String, dynamic>;
+    expect((savedInventory['reversedOrderIds'] as List).cast<String>(),
+        contains(order.id));
+    final savedItems = (savedInventory['items'] as List)
+        .map((value) => Map<String, dynamic>.from(value as Map))
+        .toList();
+    expect(
+      savedItems.singleWhere((item) => item['id'] == ingredient.id)['stock'],
+      16,
+    );
   });
 }
