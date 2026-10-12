@@ -129,6 +129,24 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     return event;
   }
 
+  /// Remove an obsolete event after a conflict has been explicitly reconciled.
+  /// The change is persisted before this method completes.
+  Future<bool> removeEvent(String eventId) async {
+    _ensureInitialized();
+    final index = _entries.indexWhere((entry) => entry.eventId == eventId);
+    if (index < 0) return false;
+    final removed = _entries.removeAt(index);
+    try {
+      _scheduleSave();
+      await waitForPendingSave();
+    } catch (_) {
+      _entries.insert(index, removed);
+      rethrow;
+    }
+    notifyListeners();
+    return true;
+  }
+
   /// Reconcile restored orders with the latest durable event snapshot.
   /// Does not replay or send events; creates one repair event only when needed.
   int reconcileOrders(Iterable<FirefaOrder> orders) {
