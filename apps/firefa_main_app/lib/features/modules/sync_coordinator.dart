@@ -80,7 +80,7 @@ class FirefaSyncCoordinator {
           } else {
             // Identical snapshots need no conflict, but a conflict receipt
             // must not be treated as a verified acknowledgement.
-            await queue.markPending(envelope.eventId);
+            await scheduleRetry(envelope.eventId);
             retryableFailures++;
           }
           continue;
@@ -91,14 +91,14 @@ class FirefaSyncCoordinator {
         if (receipt.outcome == FirefaSyncOutcome.permanentFailure) {
           await queue.markFailed(envelope.eventId);
         } else {
-          await queue.markPending(envelope.eventId);
+          await scheduleRetry(envelope.eventId);
         }
         retryableFailures++;
       } catch (_) {
         // Preserve the event for a later retry. Never report false success.
         if (markedSyncing) {
           try {
-            await queue.markPending(envelope.eventId);
+            await scheduleRetry(envelope.eventId);
           } catch (_) {
             // Keep the original failure as the reported outcome.
           }

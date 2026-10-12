@@ -18,7 +18,6 @@ class FirefaSyncEntry {
   final Map<String, dynamic> orderSnapshot;
   FirefaSyncStatus status;
   int attempts;
-  DateTime? nextAttemptAt;
 
   FirefaSyncEntry({
     required this.eventId,
@@ -29,7 +28,6 @@ class FirefaSyncEntry {
     required this.orderSnapshot,
     this.status = FirefaSyncStatus.pending,
     this.attempts = 0,
-    this.nextAttemptAt,
   });
 
   Map<String, dynamic> toJson() => {
@@ -41,7 +39,6 @@ class FirefaSyncEntry {
     'orderSnapshot': orderSnapshot,
     'status': status.name,
     'attempts': attempts,
-    'nextAttemptAt': nextAttemptAt?.toIso8601String(),
   };
 
   factory FirefaSyncEntry.fromJson(Map<String, dynamic> json) =>
@@ -53,10 +50,7 @@ class FirefaSyncEntry {
         createdAt: DateTime.parse(json['createdAt'] as String),
         orderSnapshot: Map<String, dynamic>.from(json['orderSnapshot'] as Map),
         status: FirefaSyncStatus.values.byName(json['status'] as String),
-        attempts: (json['attempts'] as int?) ?? 0,
-        nextAttemptAt: json['nextAttemptAt'] == null
-            ? null
-            : DateTime.parse(json['nextAttemptAt'] as String),
+        attempts: json['attempts'] as int,
       );
 }
 
@@ -153,7 +147,6 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     }
     final previousAttempts = entry.attempts;
     entry.status = FirefaSyncStatus.syncing;
-    entry.nextAttemptAt = null;
     entry.attempts++;
     try {
       _scheduleSave();
@@ -167,26 +160,18 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
   }
 
   /// Return a non-acknowledged event to pending so a later retry can run.
-  Future<void> markPending(
-    String eventId, {
-    Duration? retryDelay,
-  }) async {
+  Future<void> markPending(String eventId) async {
     _ensureInitialized();
     final entry = findEvent(eventId);
     if (entry == null) return;
     final previous = entry.status;
-    final previousNextAttemptAt = entry.nextAttemptAt;
-    if (previous == FirefaSyncStatus.pending && retryDelay == null) return;
+    if (previous == FirefaSyncStatus.pending) return;
     entry.status = FirefaSyncStatus.pending;
-    entry.nextAttemptAt = retryDelay == null
-        ? null
-        : DateTime.now().toUtc().add(retryDelay);
     try {
       _scheduleSave();
       await waitForPendingSave();
     } catch (_) {
       entry.status = previous;
-      entry.nextAttemptAt = previousNextAttemptAt;
       rethrow;
     }
     notifyListeners();
@@ -198,15 +183,12 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     final entry = findEvent(eventId);
     if (entry == null) throw StateError('Event outbox tidak ditemukan.');
     final previous = entry.status;
-    final previousNextAttemptAt = entry.nextAttemptAt;
     entry.status = FirefaSyncStatus.conflict;
-    entry.nextAttemptAt = null;
     try {
       _scheduleSave();
       await waitForPendingSave();
     } catch (_) {
       entry.status = previous;
-      entry.nextAttemptAt = previousNextAttemptAt;
       rethrow;
     }
     notifyListeners();
@@ -218,15 +200,12 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     final entry = findEvent(eventId);
     if (entry == null) throw StateError('Event outbox tidak ditemukan.');
     final previous = entry.status;
-    final previousNextAttemptAt = entry.nextAttemptAt;
     entry.status = FirefaSyncStatus.failed;
-    entry.nextAttemptAt = null;
     try {
       _scheduleSave();
       await waitForPendingSave();
     } catch (_) {
       entry.status = previous;
-      entry.nextAttemptAt = previousNextAttemptAt;
       rethrow;
     }
     notifyListeners();
@@ -243,13 +222,12 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     if (failed.isEmpty) return 0;
     for (final entry in failed) {
       entry.status = FirefaSyncStatus.pending;
-      entry.nextAttemptAt = null;
     }
     try {
       _scheduleSave();
       await waitForPendingSave();
     } catch (_) {
-      for (final entry of failed) {
+      for (final entry in failed) {
         entry.status = FirefaSyncStatus.failed;
       }
       rethrow;
@@ -264,15 +242,12 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     final entry = findEvent(eventId);
     if (entry == null) throw StateError('Event outbox tidak ditemukan.');
     final previous = entry.status;
-    final previousNextAttemptAt = entry.nextAttemptAt;
     entry.status = FirefaSyncStatus.synced;
-    entry.nextAttemptAt = null;
     try {
       _scheduleSave();
       await waitForPendingSave();
     } catch (_) {
       entry.status = previous;
-      entry.nextAttemptAt = previousNextAttemptAt;
       rethrow;
     }
     notifyListeners();
