@@ -81,6 +81,17 @@ class FirefaStockOpname {
     );
 }
 
+
+class FirefaRecipeLine {
+  const FirefaRecipeLine({required this.outletId, required this.menuId, required this.ingredientId, required this.quantity});
+  final String outletId, menuId, ingredientId;
+  final int quantity;
+  Map<String, dynamic> toJson() => {'outletId': outletId, 'menuId': menuId, 'ingredientId': ingredientId, 'quantity': quantity};
+  factory FirefaRecipeLine.fromJson(Map<String, dynamic> json) => FirefaRecipeLine(
+    outletId: json['outletId'] as String, menuId: json['menuId'] as String,
+    ingredientId: json['ingredientId'] as String, quantity: json['quantity'] as int);
+}
+
 class FirefaInventoryStore extends ChangeNotifier {
   FirefaInventoryStore._();
   static final FirefaInventoryStore instance = FirefaInventoryStore._();
@@ -92,6 +103,8 @@ class FirefaInventoryStore extends ChangeNotifier {
   final List<FirefaStockMovement> _movements = [];
   int _nextMovementId = 1;
   final List<FirefaStockOpname> _opnames = [];
+  final List<FirefaRecipeLine> _recipes = [];
+  final Set<String> _processedOrderIds = {};
   int _nextOpnameId = 1;
   Future<void> _pendingSave = Future<void>.value();
   Future<void>? _initializing;
@@ -116,6 +129,8 @@ class FirefaInventoryStore extends ChangeNotifier {
         _nextMovementId = decoded['nextMovementId'] as int? ?? 1;
         _opnames..clear()..addAll((decoded['opnames'] as List<dynamic>? ?? []).map((entry) => FirefaStockOpname.fromJson(Map<String, dynamic>.from(entry as Map))));
         _nextOpnameId = decoded['nextOpnameId'] as int? ?? 1;
+        _recipes..clear()..addAll((decoded['recipes'] as List<dynamic>? ?? []).map((entry) => FirefaRecipeLine.fromJson(Map<String, dynamic>.from(entry as Map))));
+        _processedOrderIds..clear()..addAll((decoded['processedOrderIds'] as List<dynamic>? ?? []).whereType<String>());
       }
       _initialized = true;
       notifyListeners();
@@ -162,6 +177,84 @@ class FirefaInventoryStore extends ChangeNotifier {
     _save();
     return true;
   }
+
+
+  List<FirefaRecipeLine> recipesForOutlet(String outletId) {
+    if (!_initialized) throw StateError('Inventory belum diinisialisasi');
+    return List.unmodifiable(_recipes.where((line) => line.outletId == outletId));
+  }
+
+  bool addRecipeLine({required String outletId, required String menuId, required String ingredientId, required int quantity}) {
+    if (!_initialized || outletId.trim().isEmpty || menuId.trim().isEmpty || quantity <= 0 || quantity > 999999999 || _index(outletId, ingredientId) < 0) return false;
+    final index = _recipes.indexWhere((line) => line.outletId == outletId && line.menuId == menuId && line.ingredientId == ingredientId);
+    final line = FirefaRecipeLine(outletId: outletId, menuId: menuId, ingredientId: ingredientId, quantity: quantity);
+    if (index >= 0) { _recipes[index] = line; } else { _recipes.add(line); }
+    notifyListeners();
+    _save();
+    return true;
+  }
+
+  bool removeRecipeLine({required String outletId, required String menuId, required String ingredientId}) {
+    if (!_initialized) return false;
+    final before = _recipes.length;
+    _recipes.removeWhere((line) => line.outletId == outletId && line.menuId == menuId && line.ingredientId == ingredientId);
+    if (_recipes.length == before) return false;
+    notifyListeners();
+    _save();
+    return true;
+  }
+
+  bool validateOrderStock({required String outletId, required List<({String menuId, int quantity})> menuLines}) {
+    if (!_initialized) throw StateError('Inventory belum diinisialisasi');
+    final recipes = _recipes.where((line) => line.outletId == outletId).toList();
+    if (recipes.isEmpty) return false;
+    final requiredQuantities = <String, int>{};
+    for (final menu in menuLines) {
+      if (menu.quantity <= 0) throw StateError('Kuantitas pesanan tidak valid.');
+      final lines = recipes.where((line) => line.menuId == menu.menuId).toList();
+      if (lines.isEmpty) throw StateError('Resep belum diatur untuk menu ${menu.menuId}. Checkout dibatalkan agar stok tidak salah.');
+      for (final line in lines) {
+        requiredQuantities[line.ingredientId] = (requiredQuantities[line.ingredientId] ?? 0) + line.quantity * menu.quantity;
+      }
+    }
+    for (final entry in requiredQuantities.entries) {
+      final index = _index(outletId, entry.key);
+      if (index < 0) throw StateError('Bahan resep tidak ditemukan di outlet ini.');
+      if (_items[index].stock < entry.value) throw StateError('Stok ${_items[index].name} tidak cukup. Dibutuhkan ${entry.value}, tersedia ${_items[index].stock}.');
+    }
+    return true;
+  }
+
+  Future<bool> consumeOrderStock({required String orderId, required String outletId, required List<({String menuId, int quantity})> menuLines}) async {
+    if (orderId.trim().isEmpty) throw ArgumentError('ID order wajib diisi.');
+    if (_processedOrderIds.contains(orderId)) return false;
+    if (!validateOrderStock(outletId: outletId, menuLines: menuLines)) return false;
+    final requiredQuantities = <String, int>{};
+    final recipes = _recipes.where((line) => line.outletId == outletId).toList();
+    for (final menu in menuLines) {
+      for (final line in recipes.where((line) => line.menuId == menu.menuId)) {
+        requiredQuantities[line.ingredientId] = (requiredQuantities[line.ingredientId] ?? 0) + line.quantity * menu.quantity;
+      }
+    }
+    for (final entry in requiredQuantities.entries) {
+      final index = _index(outletId, entry.key);
+      if (index < 0 || _items[index].stock < entry.value) throw StateError('Stok berubah sebelum pesanan diproses. Silakan coba lagi.');
+    }
+    for (final entry in requiredQuantities.entries) {
+      final index = _index(outletId, entry.key);
+      final old = _items[index];
+      final after = old.stock - entry.value;
+      _items[index] = FirefaInventoryItem(id: old.id, outletId: old.outletId, name: old.name, unit: old.unit, stock: after, minimumStock: old.minimumStock);
+      _movements.add(FirefaStockMovement(id: 'movement-${_nextMovementId++}', outletId: outletId, itemId: old.id, itemName: old.name, type: 'out', before: old.stock, after: after, note: 'POS order $orderId', timestamp: DateTime.now().toIso8601String()));
+    }
+    _processedOrderIds.add(orderId);
+    notifyListeners();
+    _save();
+    await waitForPendingSave();
+    return true;
+  }
+
+  bool isOrderStockProcessed(String orderId) => _processedOrderIds.contains(orderId);
 
   List<FirefaStockMovement> historyForOutlet(String outletId) {
     if (!_initialized) throw StateError('Inventory belum diinisialisasi');
@@ -281,6 +374,8 @@ class FirefaInventoryStore extends ChangeNotifier {
       'movements': _movements.map((m) => m.toJson()).toList(),
       'nextOpnameId': _nextOpnameId,
       'opnames': _opnames.map((record) => record.toJson()).toList(),
+      'recipes': _recipes.map((line) => line.toJson()).toList(),
+      'processedOrderIds': _processedOrderIds.toList(),
     });
     _pendingSave = _pendingSave.catchError((Object error) {
       debugPrint('Inventory save sebelumnya gagal: $error');

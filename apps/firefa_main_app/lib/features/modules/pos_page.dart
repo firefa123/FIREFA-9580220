@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/outlet/active_outlet_store.dart';
 import 'menu_store.dart';
+import 'inventory_store.dart';
 import 'order_models.dart';
 import 'order_store.dart';
 import 'pos_payment_dialog.dart';
@@ -738,6 +739,10 @@ class _PosPageState extends State<PosPage> {
     }
     setState(() => _checkoutBusy = true);
     try {
+      final inventory = FirefaInventoryStore.instance;
+      await inventory.initialize();
+      final stockLines = cart.map((item) => (menuId: item.product.id, quantity: item.quantity)).toList();
+      inventory.validateOrderStock(outletId: sourceOutlet, menuLines: stockLines);
       final store = FirefaOrderStore.instance;
       final order = store.createOrder(
         outletId: sourceOutlet,
@@ -745,6 +750,7 @@ class _PosPageState extends State<PosPage> {
         tableId: config.orderType == 'Dine In' ? config.table : null,
         items: cart.map((item) => FirefaOrderItem(
           productName: item.product.name,
+          productId: item.product.id,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           details: item.details,
@@ -755,6 +761,8 @@ class _PosPageState extends State<PosPage> {
         service: serviceAmount,
         total: grandTotal,
       );
+      await inventory.consumeOrderStock(orderId: order.id, outletId: sourceOutlet, menuLines: stockLines);
+      await inventory.waitForPendingSave();
       if (payment != null) {
         if (!store.markPaid(sourceOutlet, order.id)) {
           throw StateError('Status pembayaran tidak dapat diperbarui.');

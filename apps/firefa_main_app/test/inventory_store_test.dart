@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firefa_main_app/features/inventory/inventory_store.dart';
 import 'package:firefa_main_app/features/inventory/order_inventory_service.dart';
 import 'package:firefa_main_app/features/inventory/recipe_ingredient_model.dart';
+import 'package:firefa_main_app/features/modules/inventory_store.dart' as legacy;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -124,6 +125,27 @@ void main() {
   test('domain inventory uses a separate storage key from the legacy UI store', () {
     expect(InventoryStore().storageKey, 'firefa_inventory_domain_v1');
     expect(InventoryStore().storageKey, isNot('firefa_inventory_v1'));
+  });
+
+
+  test('legacy inventory recipes validate and deduct POS stock once per order', () async {
+    final store = legacy.FirefaInventoryStore.instance;
+    await store.initialize();
+    expect(store.add(outletId: 'LEGACY-A', name: 'Coffee', unit: 'gram', stock: 100, minimumStock: 5), isTrue);
+    expect(store.add(outletId: 'LEGACY-A', name: 'Milk', unit: 'ml', stock: 300, minimumStock: 20), isTrue);
+    final coffee = store.forOutlet('LEGACY-A').singleWhere((item) => item.name == 'Coffee');
+    final milk = store.forOutlet('LEGACY-A').singleWhere((item) => item.name == 'Milk');
+    expect(store.addRecipeLine(outletId: 'LEGACY-A', menuId: 'menu-latte', ingredientId: coffee.id, quantity: 18), isTrue);
+    expect(store.addRecipeLine(outletId: 'LEGACY-A', menuId: 'menu-latte', ingredientId: milk.id, quantity: 200), isTrue);
+    expect(() => store.validateOrderStock(outletId: 'LEGACY-A', menuLines: [(menuId: 'menu-latte', quantity: 2)]), throwsStateError);
+    expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == coffee.id).stock, 100);
+    expect(store.addRecipeLine(outletId: 'LEGACY-A', menuId: 'menu-latte', ingredientId: milk.id, quantity: 100), isTrue);
+    expect(store.validateOrderStock(outletId: 'LEGACY-A', menuLines: [(menuId: 'menu-latte', quantity: 2)]), isTrue);
+    expect(await store.consumeOrderStock(orderId: 'POS-ORDER-1', outletId: 'LEGACY-A', menuLines: [(menuId: 'menu-latte', quantity: 2)]), isTrue);
+    expect(await store.consumeOrderStock(orderId: 'POS-ORDER-1', outletId: 'LEGACY-A', menuLines: [(menuId: 'menu-latte', quantity: 2)]), isFalse);
+    expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == coffee.id).stock, 64);
+    expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == milk.id).stock, 100);
+    await store.waitForPendingSave();
   });
 
 }
