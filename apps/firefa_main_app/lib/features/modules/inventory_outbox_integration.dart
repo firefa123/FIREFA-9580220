@@ -1,6 +1,3 @@
-/// Bridge between inventory movement and hybrid outbox sync.
-/// Keeps stock changes durable before network synchronization.
-
 class InventoryOutboxEvent {
   final String movementId;
   final String itemId;
@@ -17,6 +14,8 @@ class InventoryOutboxEvent {
   });
 }
 
+/// Bridge between inventory movement and hybrid outbox sync.
+/// Keeps stock changes durable before network synchronization.
 class InventoryOutboxIntegration {
   const InventoryOutboxIntegration();
 
