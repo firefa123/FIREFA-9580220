@@ -738,12 +738,15 @@ class _PosPageState extends State<PosPage> {
       return;
     }
     setState(() => _checkoutBusy = true);
+    FirefaOrder? createdOrder;
+    FirefaOrderStore? checkoutOrderStore;
     try {
       final inventory = FirefaInventoryStore.instance;
       await inventory.initialize();
       final stockLines = cart.map((item) => (menuId: item.product.id, quantity: item.quantity)).toList();
       inventory.validateOrderStock(outletId: sourceOutlet, menuLines: stockLines);
       final store = FirefaOrderStore.instance;
+      checkoutOrderStore = store;
       final order = store.createOrder(
         outletId: sourceOutlet,
         orderType: config.orderType,
@@ -761,6 +764,7 @@ class _PosPageState extends State<PosPage> {
         service: serviceAmount,
         total: grandTotal,
       );
+      createdOrder = order;
       await inventory.consumeOrderStock(orderId: order.id, outletId: sourceOutlet, menuLines: stockLines);
       await inventory.waitForPendingSave();
       if (payment != null) {
@@ -783,9 +787,29 @@ class _PosPageState extends State<PosPage> {
         )),
       );
     } catch (error) {
+      var rollbackMessage = '';
+      final order = createdOrder;
+      final store = checkoutOrderStore;
+      if (order != null && store != null) {
+        final current = store.findOrder(sourceOutlet, order.id);
+        if (current != null &&
+            current.status.canCancel &&
+            current.paymentStatus == FirefaPaymentStatus.unpaid) {
+          try {
+            final rolledBack = await store.cancelAndRestoreStock(sourceOutlet, order.id);
+            if (rolledBack) {
+              rollbackMessage = ' Pesanan ${order.id} dibatalkan dan stok resep dipulihkan.';
+            }
+          } catch (rollbackError) {
+            rollbackMessage = ' Perhatian: pesanan ${order.id} mungkin masih tercatat. Periksa daftar pesanan dan stok. Detail pemulihan: $rollbackError';
+          }
+        } else if (current != null) {
+          rollbackMessage = ' Periksa status pesanan ${order.id} pada daftar pesanan sebelum mencoba checkout lagi.';
+        }
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Checkout gagal: $error')),
+          SnackBar(content: Text('Checkout gagal: $error.$rollbackMessage')),
         );
       }
     } finally {
