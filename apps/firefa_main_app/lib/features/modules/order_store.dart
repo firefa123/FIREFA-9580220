@@ -354,17 +354,29 @@ class FirefaOrderStore extends ChangeNotifier {
       return false;
     }
 
-    final inventory = FirefaInventoryStore.instance;
-    await inventory.initialize();
-    if (inventory.isOrderStockProcessed(orderId) &&
-        !inventory.isOrderStockReversed(orderId)) {
-      await inventory.restoreCancelledOrderStock(
-        orderId: orderId,
-        outletId: outletId,
-      );
+    // Change the order state before the first await so another action cannot
+    // pay or advance it while stock restoration is in flight.
+    final previousStatus = order.status;
+    if (!order.cancel()) return false;
+
+    try {
+      final inventory = FirefaInventoryStore.instance;
+      await inventory.initialize();
+      if (inventory.isOrderStockProcessed(orderId) &&
+          !inventory.isOrderStockReversed(orderId)) {
+        await inventory.restoreCancelledOrderStock(
+          orderId: orderId,
+          outletId: outletId,
+        );
+      }
+    } catch (_) {
+      // Keep the order cancellable if restoration could not be completed.
+      order.status = previousStatus;
+      _scheduleSave();
+      notifyListeners();
+      rethrow;
     }
 
-    if (!order.cancel()) return false;
     FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
     _scheduleSave();
     await waitForPendingSave();
