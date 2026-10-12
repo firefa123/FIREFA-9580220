@@ -5,6 +5,7 @@ import '../modules/conflict_management.dart';
 import '../modules/conflict_resolution_model.dart';
 import '../modules/conflict_resolution_store.dart';
 import '../modules/conflict_store.dart';
+import '../modules/order_store.dart';
 
 class ConflictCenterPage extends StatefulWidget {
   const ConflictCenterPage({super.key});
@@ -45,12 +46,25 @@ class _ConflictCenterPageState extends State<ConflictCenterPage> {
     if (saving) return;
     setState(() => saving = true);
     try {
+      if (action != FirefaResolutionAction.manualReview) {
+        await FirefaOrderStore.instance.reconcileConflict(
+          eventId: c.eventId,
+          outletId: c.outletId,
+          orderId: c.orderId,
+          acceptServer: action == FirefaResolutionAction.acceptServer,
+          serverSnapshot: c.serverSnapshot,
+        );
+      }
       await audit.resolve(conflictId: c.eventId, action: action, actorId: outlet.role.label);
       if (action != FirefaResolutionAction.manualReview) await inbox.remove(c.eventId);
       if (!mounted) return;
       setState(() { saving = false; if (action != FirefaResolutionAction.manualReview) selectedId = null; });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
-        action == FirefaResolutionAction.manualReview ? 'Review dicatat; konflik tetap terbuka.' : 'Keputusan tersimpan di audit lokal; data bisnis tidak diubah.')));
+        action == FirefaResolutionAction.manualReview
+          ? 'Review dicatat; konflik tetap terbuka.'
+          : action == FirefaResolutionAction.keepLocal
+            ? 'Order lokal dipertahankan dan dimasukkan kembali ke antrean sinkronisasi.'
+            : 'Snapshot server diterapkan ke order lokal setelah validasi.')));
     } catch (e) {
       if (!mounted) return;
       setState(() => saving = false);
