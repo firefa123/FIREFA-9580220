@@ -214,17 +214,24 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  void cancel(FirefaOrder order) {
+  Future<void> cancel(FirefaOrder order) async {
     if (!canActOn(order)) {
       message('Anda tidak memiliki izin untuk pesanan ini.');
       return;
     }
 
-    final success = orderStore.cancel(outletId, order.id);
-
-    message(
-      success ? '${order.id} dibatalkan.' : 'Pesanan tidak dapat dibatalkan.',
-    );
+    try {
+      final success = await orderStore.cancelAndRestoreStock(outletId, order.id);
+      if (!mounted) return;
+      message(
+        success
+            ? '${order.id} dibatalkan. Jika stok resep sebelumnya terpotong, stok telah dipulihkan.'
+            : 'Pesanan tidak dapat dibatalkan.',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      message('Pembatalan gagal diproses: $error');
+    }
   }
 
   void markPaid(FirefaOrder order) {
