@@ -212,11 +212,23 @@ class FirefaInventoryStore extends ChangeNotifier {
     if (recipes.isEmpty) return false;
     final requiredQuantities = <String, int>{};
     for (final menu in menuLines) {
-      if (menu.quantity <= 0) throw StateError('Kuantitas pesanan tidak valid.');
+      if (menu.quantity <= 0 || menu.quantity > 999999999) {
+        throw StateError('Kuantitas pesanan tidak valid.');
+      }
       final lines = recipes.where((line) => line.menuId == menu.menuId).toList();
       if (lines.isEmpty) throw StateError('Resep belum diatur untuk menu ${menu.menuId}. Checkout dibatalkan agar stok tidak salah.');
       for (final line in lines) {
-        requiredQuantities[line.ingredientId] = (requiredQuantities[line.ingredientId] ?? 0) + line.quantity * menu.quantity;
+        // Bound multiplication and accumulation before computing them so a
+        // malformed quantity cannot overflow and pass the stock check.
+        if (line.quantity > 999999999 ~/ menu.quantity) {
+          throw StateError('Kebutuhan stok untuk menu ${menu.menuId} terlalu besar.');
+        }
+        final required = line.quantity * menu.quantity;
+        final current = requiredQuantities[line.ingredientId] ?? 0;
+        if (current > 999999999 - required) {
+          throw StateError('Total kebutuhan bahan melebihi batas yang didukung.');
+        }
+        requiredQuantities[line.ingredientId] = current + required;
       }
     }
     for (final entry in requiredQuantities.entries) {
