@@ -26,6 +26,10 @@ class FirefaOrderStore extends ChangeNotifier {
   Future<void> initialize() async {
     if (_initialized) return;
 
+    // Order loading and outbox reconciliation both depend on the queue being
+    // ready, including in tests and fresh offline installations.
+    await FirefaOfflineSyncQueue.instance.initialize();
+
     final prefs = await SharedPreferences.getInstance();
     final combinedRaw = prefs.getString(_combinedKey);
     final raw = combinedRaw ?? prefs.getString(_storageKey);
