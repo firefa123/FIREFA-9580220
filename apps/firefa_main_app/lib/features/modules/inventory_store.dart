@@ -105,6 +105,7 @@ class FirefaInventoryStore extends ChangeNotifier {
   final List<FirefaStockOpname> _opnames = [];
   final List<FirefaRecipeLine> _recipes = [];
   final Set<String> _processedOrderIds = {};
+  final Set<String> _reversedOrderIds = {};
   int _nextOpnameId = 1;
   Future<void> _pendingSave = Future<void>.value();
   Future<void>? _initializing;
@@ -131,6 +132,7 @@ class FirefaInventoryStore extends ChangeNotifier {
         _nextOpnameId = decoded['nextOpnameId'] as int? ?? 1;
         _recipes..clear()..addAll((decoded['recipes'] as List<dynamic>? ?? []).map((entry) => FirefaRecipeLine.fromJson(Map<String, dynamic>.from(entry as Map))));
         _processedOrderIds..clear()..addAll((decoded['processedOrderIds'] as List<dynamic>? ?? []).whereType<String>());
+        _reversedOrderIds..clear()..addAll((decoded['reversedOrderIds'] as List<dynamic>? ?? []).whereType<String>());
       }
       _initialized = true;
       notifyListeners();
@@ -254,7 +256,74 @@ class FirefaInventoryStore extends ChangeNotifier {
     return true;
   }
 
+  /// Restores the exact quantities consumed by a cancelled POS order.
+  /// Uses the movement ledger rather than current recipes, which may have changed.
+  /// A reversal is recorded by order ID so repeated cancellation cannot add stock twice.
+  Future<bool> restoreCancelledOrderStock({
+    required String orderId,
+    required String outletId,
+  }) async {
+    if (!_initialized) throw StateError('Inventory belum diinisialisasi');
+    if (orderId.trim().isEmpty || outletId.trim().isEmpty) {
+      throw ArgumentError('Order dan outlet wajib diisi.');
+    }
+    if (_reversedOrderIds.contains(orderId)) return false;
+    if (!_processedOrderIds.contains(orderId)) return false;
+
+    final sourceMovements = _movements.where((movement) =>
+      movement.outletId == outletId &&
+      movement.type == 'out' &&
+      movement.note == 'POS order $orderId'
+    ).toList();
+    if (sourceMovements.isEmpty) {
+      throw StateError('Riwayat pemakaian stok untuk order $orderId tidak ditemukan.');
+    }
+
+    final restorations = <({int index, int quantity})>[];
+    for (final movement in sourceMovements) {
+      final index = _index(outletId, movement.itemId);
+      final quantity = movement.before - movement.after;
+      if (index < 0 || quantity <= 0 ||
+          _items[index].stock > 999999999 - quantity) {
+        throw StateError('Stok tidak dapat dipulihkan dengan aman untuk ${movement.itemName}.');
+      }
+      restorations.add((index: index, quantity: quantity));
+    }
+
+    for (var i = 0; i < sourceMovements.length; i++) {
+      final movement = sourceMovements[i];
+      final restoration = restorations[i];
+      final old = _items[restoration.index];
+      final after = old.stock + restoration.quantity;
+      _items[restoration.index] = FirefaInventoryItem(
+        id: old.id,
+        outletId: old.outletId,
+        name: old.name,
+        unit: old.unit,
+        stock: after,
+        minimumStock: old.minimumStock,
+      );
+      _movements.add(FirefaStockMovement(
+        id: 'movement-${_nextMovementId++}',
+        outletId: outletId,
+        itemId: old.id,
+        itemName: old.name,
+        type: 'in',
+        before: old.stock,
+        after: after,
+        note: 'Pembatalan POS order $orderId',
+        timestamp: DateTime.now().toIso8601String(),
+      ));
+    }
+    _reversedOrderIds.add(orderId);
+    notifyListeners();
+    _save();
+    await waitForPendingSave();
+    return true;
+  }
+
   bool isOrderStockProcessed(String orderId) => _processedOrderIds.contains(orderId);
+  bool isOrderStockReversed(String orderId) => _reversedOrderIds.contains(orderId);
 
   List<FirefaStockMovement> historyForOutlet(String outletId) {
     if (!_initialized) throw StateError('Inventory belum diinisialisasi');
@@ -376,6 +445,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       'opnames': _opnames.map((record) => record.toJson()).toList(),
       'recipes': _recipes.map((line) => line.toJson()).toList(),
       'processedOrderIds': _processedOrderIds.toList(),
+      'reversedOrderIds': _reversedOrderIds.toList(),
     });
     _pendingSave = _pendingSave.catchError((Object error) {
       debugPrint('Inventory save sebelumnya gagal: $error');
