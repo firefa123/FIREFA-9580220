@@ -425,14 +425,19 @@ class FirefaOrderStore extends ChangeNotifier {
       return false;
     }
 
-    // Change the order state before the first await so another action cannot
-    // pay or advance it while stock restoration is in flight.
+    // Initialize required stores before mutating order state. If local
+    // storage cannot be opened, leave the order untouched and cancellable.
+    final inventory = FirefaInventoryStore.instance;
+    final queue = FirefaOfflineSyncQueue.instance;
+    await inventory.initialize();
+    await queue.initialize();
+
+    // Change the order state before the stock-restoration await so another
+    // action cannot pay or advance it while restoration is in flight.
     final previousStatus = order.status;
     if (!order.cancel()) return false;
 
     try {
-      final inventory = FirefaInventoryStore.instance;
-      await inventory.initialize();
       if (inventory.isOrderStockProcessed(orderId) &&
           !inventory.isOrderStockReversed(orderId)) {
         await inventory.restoreCancelledOrderStock(
@@ -448,7 +453,7 @@ class FirefaOrderStore extends ChangeNotifier {
       rethrow;
     }
 
-    FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
+    queue.enqueueOrder(order, 'order.updated');
     _scheduleSave();
     await waitForPendingSave();
     notifyListeners();
