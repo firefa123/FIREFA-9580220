@@ -8,6 +8,7 @@ import 'package:firefa_main_app/features/modules/sync_engine.dart';
 import 'package:firefa_main_app/features/modules/order_store.dart';
 import 'package:firefa_main_app/features/modules/conflict_store.dart';
 import 'package:firefa_main_app/features/modules/hybrid_sync_conflict_bridge.dart';
+import 'package:firefa_main_app/features/modules/sync_coordinator.dart';
 
 FirefaOrder makeOrder(String id, String outlet) => FirefaOrder(
   id: id,
@@ -22,6 +23,29 @@ FirefaOrder makeOrder(String id, String outlet) => FirefaOrder(
   service: 0,
   total: 1000,
 );
+
+class _ConflictAdapter extends FirefaSyncAdapter {
+  final Map<String, dynamic> serverSnapshot;
+  final String outletId;
+  final String orderId;
+
+  const _ConflictAdapter({
+    required this.serverSnapshot,
+    required this.outletId,
+    required this.orderId,
+  });
+
+  @override
+  Future<FirefaSyncReceipt> send(FirefaSyncEnvelope event) async =>
+      FirefaSyncReceipt(
+        eventId: event.eventId,
+        outcome: FirefaSyncOutcome.conflict,
+        serverOutletId: outletId,
+        serverOrderId: orderId,
+        serverSnapshot: serverSnapshot,
+        conflictKind: FirefaConflictKind.concurrentEdit,
+      );
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -144,6 +168,37 @@ void main() {
     expect(store.findOrder(order.outletId, order.id)!.status, FirefaOrderStatus.preparing);
     expect(queue.entriesForOutlet(order.outletId).any((e) => e.eventId == entry.eventId), isFalse);
     await FirefaConflictStore.instance.remove(entry.eventId);
+    await store.waitForPendingSave();
+  });
+
+  test('sync coordinator automatically routes server mismatch into conflict inbox', () async {
+    final store = FirefaOrderStore.instance;
+    final outletId = 'coordinator-conflict-outlet';
+    final order = store.createOrder(
+      outletId: outletId, orderType: 'Take Away', tableId: null,
+      items: const [FirefaOrderItem(productName: 'Noodle', quantity: 1, unitPrice: 2000)],
+      subtotal: 2000, discount: 0, tax: 0, service: 0, total: 2000,
+    );
+    await store.waitForPendingSave();
+    final event = queue.entriesForOutlet(outletId).last;
+    final server = Map<String, dynamic>.from(order.toJson())..['status'] = 'preparing';
+    final coordinator = FirefaSyncCoordinator(
+      queue: queue,
+      adapter: _ConflictAdapter(
+        serverSnapshot: server, outletId: outletId, orderId: order.id,
+      ),
+      conflictBridge: FirefaHybridSyncConflictBridge(store: FirefaConflictStore.instance),
+    );
+
+    final summary = await coordinator.syncOutlet(outletId);
+    expect(summary.attempted, 1);
+    expect(summary.conflicts, 1);
+    expect(summary.acknowledged, 0);
+    expect(FirefaConflictStore.instance.conflicts.any((c) => c.eventId == event.eventId), isTrue);
+    expect(queue.findEvent(event.eventId)!.status, FirefaSyncStatus.pending);
+
+    await FirefaConflictStore.instance.remove(event.eventId);
+    await queue.removeEvent(event.eventId);
     await store.waitForPendingSave();
   });
 
