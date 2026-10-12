@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'conflict_management.dart';
 import 'hybrid_sync_conflict_bridge.dart';
 import 'offline_sync_queue.dart';
@@ -36,7 +38,10 @@ class FirefaSyncCoordinator {
       final entry = queue.findEvent(eventId);
       await queue.markPending(
         eventId,
-        retryDelay: engine.retryDelay(entry?.attempts ?? 0),
+        retryDelay: engine.retryDelay(
+          entry?.attempts ?? 0,
+          jitterMilliseconds: Random.secure().nextInt(1001),
+        ),
       );
     }
 

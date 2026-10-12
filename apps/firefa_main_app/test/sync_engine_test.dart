@@ -74,6 +74,25 @@ void main() {
     await queue.waitForPendingSave();
   });
 
+  test('retry backoff adds bounded jitter and respects five minute cap', () {
+    expect(
+      engine.retryDelay(0, jitterMilliseconds: 500),
+      const Duration(milliseconds: 1500),
+    );
+    expect(
+      engine.retryDelay(3, jitterMilliseconds: 1000),
+      const Duration(seconds: 9),
+    );
+    expect(
+      engine.retryDelay(8, jitterMilliseconds: 1000),
+      const Duration(minutes: 5),
+    );
+    expect(
+      () => engine.retryDelay(1, jitterMilliseconds: 1001),
+      throwsRangeError,
+    );
+  });
+
   test('batch validates limits and outlet', () {
     expect(() => engine.pendingBatch(queue: queue, outletId: ''), throwsArgumentError);
     expect(() => engine.pendingBatch(queue: queue, outletId: 'test-outlet-A', limit: 0), throwsRangeError);

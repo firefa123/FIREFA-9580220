@@ -43,14 +43,21 @@ class FirefaSyncEngine {
     FirefaSyncReceipt receipt,
   ) => receipt.acknowledges(envelope);
 
-  /// Exponential retry delay capped at five minutes. This is a policy helper
+  /// Exponential retry delay with bounded jitter, capped at five minutes.
+  /// This is a policy helper
   /// only; it does not schedule timers or send any requests.
-  Duration retryDelay(int attempts) {
+  Duration retryDelay(int attempts, {int jitterMilliseconds = 0}) {
     if (attempts < 0) {
       throw ArgumentError.value(attempts, 'attempts');
     }
+    if (jitterMilliseconds < 0 || jitterMilliseconds > 1000) {
+      throw RangeError.range(jitterMilliseconds, 0, 1000, 'jitterMilliseconds');
+    }
     final exponent = attempts > 8 ? 8 : attempts;
-    final seconds = 1 << exponent;
-    return Duration(seconds: seconds > 300 ? 300 : seconds);
+    final baseMilliseconds = (1 << exponent) * 1000;
+    final totalMilliseconds = baseMilliseconds + jitterMilliseconds;
+    return Duration(
+      milliseconds: totalMilliseconds > 300000 ? 300000 : totalMilliseconds,
+    );
   }
 }
