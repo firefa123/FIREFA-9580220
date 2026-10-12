@@ -69,6 +69,11 @@ void main() {
     );
     expect(inventory.forOutlet('CANCEL-TEST').single.stock, 14);
 
+    // The synchronous cancellation path must not bypass recipe stock restore.
+    expect(orders.cancel('CANCEL-TEST', order.id), isFalse);
+    expect(order.status, isNot(FirefaOrderStatus.cancelled));
+    expect(inventory.forOutlet('CANCEL-TEST').single.stock, 14);
+
     expect(await orders.cancelAndRestoreStock('CANCEL-TEST', order.id), isTrue);
     expect(order.status, FirefaOrderStatus.cancelled);
     expect(inventory.forOutlet('CANCEL-TEST').single.stock, 20);
