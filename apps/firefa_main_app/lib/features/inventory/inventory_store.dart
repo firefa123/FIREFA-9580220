@@ -14,68 +14,6 @@ class InventoryCatalogItem {
     minimumStock: (json['minimumStock'] as num?)?.toDouble() ?? 0,
   );
 
-  /// Deducts a complete recipe requirement set once per order ID.
-  /// All quantities are validated before any stock is changed.
-  Future<bool> consumeOrderIngredients({
-    required String orderId,
-    required String outletId,
-    required Map<String, double> ingredientQuantities,
-  }) async {
-    _ready();
-    if (orderId.trim().isEmpty || outletId.trim().isEmpty) {
-      throw ArgumentError('Order ID dan outlet wajib diisi.');
-    }
-    if (_processedOrderIds.contains(orderId)) return false;
-    if (ingredientQuantities.isEmpty) {
-      throw ArgumentError('Kebutuhan bahan pesanan tidak boleh kosong.');
-    }
-    final requirements = <String, double>{};
-    for (final entry in ingredientQuantities.entries) {
-      _validateMovement(outletId, entry.key, entry.value);
-      requirements[entry.key] = (requirements[entry.key] ?? 0) + entry.value;
-    }
-    for (final entry in requirements.entries) {
-      if (stockFor(outletId, entry.key) < entry.value) {
-        throw StateError('Stok tidak mencukupi untuk item ${entry.key}.');
-      }
-    }
-    final oldNext = _nextMovementId;
-    final oldStock = <String, double>{};
-    final created = <InventoryMovement>[];
-    final now = DateTime.now().toUtc();
-    for (final entry in requirements.entries) {
-      final key = _key(outletId, entry.key);
-      oldStock[key] = _stock[key] ?? 0;
-      _stock[key] = oldStock[key]! - entry.value;
-      created.add(InventoryMovement(
-        id: 'INV-' + (_nextMovementId++).toString(),
-        outletId: outletId,
-        itemId: entry.key,
-        type: 'order_consumption',
-        quantity: entry.value,
-        referenceOrderId: orderId,
-        createdAt: now,
-      ));
-    }
-    _movements.addAll(created);
-    _processedOrderIds.add(orderId);
-    try {
-      await _persist();
-    } catch (_) {
-      oldStock.forEach((key, value) => _stock[key] = value);
-      _movements.removeWhere((movement) => created.contains(movement));
-      _processedOrderIds.remove(orderId);
-      _nextMovementId = oldNext;
-      rethrow;
-    }
-    notifyListeners();
-    return true;
-  }
-
-  bool isOrderProcessed(String orderId) {
-    _ready();
-    return _processedOrderIds.contains(orderId);
-  }
 
 }
 
@@ -209,4 +147,67 @@ class InventoryStore extends ChangeNotifier {
     }
     notifyListeners();
   }
+  /// Deducts a complete recipe requirement set once per order ID.
+  /// All quantities are validated before any stock is changed.
+  Future<bool> consumeOrderIngredients({
+    required String orderId,
+    required String outletId,
+    required Map<String, double> ingredientQuantities,
+  }) async {
+    _ready();
+    if (orderId.trim().isEmpty || outletId.trim().isEmpty) {
+      throw ArgumentError('Order ID dan outlet wajib diisi.');
+    }
+    if (_processedOrderIds.contains(orderId)) return false;
+    if (ingredientQuantities.isEmpty) {
+      throw ArgumentError('Kebutuhan bahan pesanan tidak boleh kosong.');
+    }
+    final requirements = <String, double>{};
+    for (final entry in ingredientQuantities.entries) {
+      _validateMovement(outletId, entry.key, entry.value);
+      requirements[entry.key] = (requirements[entry.key] ?? 0) + entry.value;
+    }
+    for (final entry in requirements.entries) {
+      if (stockFor(outletId, entry.key) < entry.value) {
+        throw StateError('Stok tidak mencukupi untuk item ${entry.key}.');
+      }
+    }
+    final oldNext = _nextMovementId;
+    final oldStock = <String, double>{};
+    final created = <InventoryMovement>[];
+    final now = DateTime.now().toUtc();
+    for (final entry in requirements.entries) {
+      final key = _key(outletId, entry.key);
+      oldStock[key] = _stock[key] ?? 0;
+      _stock[key] = oldStock[key]! - entry.value;
+      created.add(InventoryMovement(
+        id: 'INV-' + (_nextMovementId++).toString(),
+        outletId: outletId,
+        itemId: entry.key,
+        type: 'order_consumption',
+        quantity: entry.value,
+        referenceOrderId: orderId,
+        createdAt: now,
+      ));
+    }
+    _movements.addAll(created);
+    _processedOrderIds.add(orderId);
+    try {
+      await _persist();
+    } catch (_) {
+      oldStock.forEach((key, value) => _stock[key] = value);
+      _movements.removeWhere((movement) => created.contains(movement));
+      _processedOrderIds.remove(orderId);
+      _nextMovementId = oldNext;
+      rethrow;
+    }
+    notifyListeners();
+    return true;
+  }
+
+  bool isOrderProcessed(String orderId) {
+    _ready();
+    return _processedOrderIds.contains(orderId);
+  }
+
 }
