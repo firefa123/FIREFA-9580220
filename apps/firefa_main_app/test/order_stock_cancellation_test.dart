@@ -74,6 +74,40 @@ void main() {
     expect(await orders.cancelAndRestoreStock('CANCEL-TEST', order.id), isFalse);
     expect(inventory.forOutlet('CANCEL-TEST').single.stock, 20);
     expect(inventory.isOrderStockReversed(order.id), isTrue);
+
+    // A paid order must not be cancelled or have its stock restored.
+    final paidOrder = orders.createOrder(
+      outletId: 'CANCEL-TEST',
+      orderType: 'Take Away',
+      tableId: null,
+      items: const [
+        FirefaOrderItem(
+          productName: 'Coffee',
+          productId: 'menu-coffee',
+          quantity: 2,
+          unitPrice: 1000,
+        ),
+      ],
+      subtotal: 2000,
+      discount: 0,
+      tax: 0,
+      service: 0,
+      total: 2000,
+    );
+    expect(
+      await inventory.consumeOrderStock(
+        orderId: paidOrder.id,
+        outletId: 'CANCEL-TEST',
+        menuLines: [(menuId: 'menu-coffee', quantity: 2)],
+      ),
+      isTrue,
+    );
+    expect(orders.markPaid('CANCEL-TEST', paidOrder.id), isTrue);
+    expect(await orders.cancelAndRestoreStock('CANCEL-TEST', paidOrder.id), isFalse);
+    expect(paidOrder.status, isNot(FirefaOrderStatus.cancelled));
+    expect(inventory.forOutlet('CANCEL-TEST').single.stock, 16);
+    expect(inventory.isOrderStockReversed(paidOrder.id), isFalse);
+
     await orders.waitForPendingSave();
     await inventory.waitForPendingSave();
   });
