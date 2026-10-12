@@ -290,9 +290,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       restorations.add((index: index, quantity: quantity));
     }
 
-    for (var i = 0; i < sourceMovements.length; i++) {
-      final movement = sourceMovements[i];
-      final restoration = restorations[i];
+    for (final restoration in restorations) {
       final old = _items[restoration.index];
       final after = old.stock + restoration.quantity;
       _items[restoration.index] = FirefaInventoryItem(
