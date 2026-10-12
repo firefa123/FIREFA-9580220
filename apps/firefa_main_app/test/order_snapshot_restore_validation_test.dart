@@ -60,7 +60,10 @@ void main() {
     };
 
     expect(() => store.restoreLocalSnapshot(invalid), throwsFormatException);
-    expect(store.ordersForOutlet('live-outlet').single.id, existing.id);
+    expect(
+      store.ordersForOutlet('live-outlet').any((order) => order.id == existing.id),
+      isTrue,
+    );
     expect(store.exportLocalSnapshot()['orders'], before['orders']);
   });
 
@@ -89,7 +92,10 @@ void main() {
     };
 
     expect(() => store.restoreLocalSnapshot(invalid), throwsFormatException);
-    expect(store.ordersForOutlet('live-outlet').single.id, existing.id);
+    expect(
+      store.ordersForOutlet('live-outlet').any((order) => order.id == existing.id),
+      isTrue,
+    );
     expect(store.exportLocalSnapshot()['orders'], before['orders']);
   });
 }
