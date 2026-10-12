@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firefa_main_app/features/modules/inventory_store.dart';
@@ -116,5 +118,29 @@ void main() {
       suppliers.waitForPendingSave(),
       orders.waitForPendingSave(),
     ]);
+
+    // Persisted records must preserve receipt history and stock changes.
+    final prefs = await SharedPreferences.getInstance();
+    final savedOrders = jsonDecode(
+      prefs.getString(FirefaPurchaseOrderStore.storageKey)!,
+    ) as Map<String, dynamic>;
+    final savedRecords = (savedOrders['orders'] as List<dynamic>)
+        .map((entry) => Map<String, dynamic>.from(entry as Map))
+        .toList();
+    final savedFirst = savedRecords.singleWhere((entry) => entry['id'] == po.id);
+    final savedSecond = savedRecords.singleWhere((entry) => entry['id'] == second.id);
+    expect(savedFirst['status'], 'received');
+    expect(savedFirst['receivedQuantity'], 8);
+    expect(savedFirst['receipts'], hasLength(2));
+    expect(savedSecond['status'], 'cancelled');
+    expect(savedSecond['quantity'] - savedSecond['receivedQuantity'], 1);
+
+    final savedInventory = jsonDecode(
+      prefs.getString(FirefaInventoryStore.storageKey)!,
+    ) as Map<String, dynamic>;
+    final savedItems = (savedInventory['items'] as List<dynamic>)
+        .map((entry) => Map<String, dynamic>.from(entry as Map))
+        .toList();
+    expect(savedItems.singleWhere((entry) => entry['id'] == 'inventory-1')['stock'], 19);
   });
 }
