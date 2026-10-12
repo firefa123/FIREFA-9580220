@@ -129,6 +129,31 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     return event;
   }
 
+  FirefaSyncEntry? findEvent(String eventId) {
+    _ensureInitialized();
+    for (final entry in _entries) {
+      if (entry.eventId == eventId) return entry;
+    }
+    return null;
+  }
+
+  /// Mark an event synced only after a verified backend acknowledgement.
+  Future<void> markSynced(String eventId) async {
+    _ensureInitialized();
+    final entry = findEvent(eventId);
+    if (entry == null) throw StateError('Event outbox tidak ditemukan.');
+    final previous = entry.status;
+    entry.status = FirefaSyncStatus.synced;
+    try {
+      _scheduleSave();
+      await waitForPendingSave();
+    } catch (_) {
+      entry.status = previous;
+      rethrow;
+    }
+    notifyListeners();
+  }
+
   /// Remove an obsolete event after a conflict has been explicitly reconciled.
   /// The change is persisted before this method completes.
   Future<bool> removeEvent(String eventId) async {
