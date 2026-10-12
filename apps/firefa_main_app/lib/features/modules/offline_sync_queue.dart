@@ -199,6 +199,12 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     if (entry == null) return;
     final previous = entry.status;
     final previousNextAttemptAt = entry.nextAttemptAt;
+    if (previous != FirefaSyncStatus.pending &&
+        previous != FirefaSyncStatus.syncing) {
+      throw StateError(
+        'Hanya event pending atau syncing yang dapat dijadwalkan ulang.',
+      );
+    }
     if (previous == FirefaSyncStatus.pending && retryDelay == null) return;
     entry.status = FirefaSyncStatus.pending;
     entry.nextAttemptAt = retryDelay == null
