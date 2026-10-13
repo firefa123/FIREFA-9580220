@@ -96,5 +96,17 @@ void main() {
       );
       await expectLater(store.initialize(), throwsFormatException);
     }
+
+    await prefs.setString(
+      FirefaPurchaseOrderStore.storageKey,
+      jsonEncode({
+        'version': 1,
+        'nextId': 2,
+        'orders': [order()],
+      }),
+    );
+    await expectLater(store.initialize(), completes);
+    expect(store.forOutlet('outlet-1'), hasLength(1));
+    expect(store.forOutlet('outlet-1').single.id, 'po-1');
   });
 }
