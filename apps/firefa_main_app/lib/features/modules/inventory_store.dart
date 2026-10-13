@@ -435,6 +435,14 @@ class FirefaInventoryStore extends ChangeNotifier {
     final orderKey = _orderKey(outletId, orderId);
     if (_processedOrderIds.contains(orderKey)) return false;
     if (!validateOrderStock(outletId: outletId, menuLines: menuLines)) return false;
+
+    // Keep a rollback point until the stock deduction and idempotency marker
+    // have both reached durable storage. A failed local write must not leave
+    // this process believing an unpersisted order has consumed stock.
+    final itemsBefore = List<FirefaInventoryItem>.from(_items);
+    final movementsBefore = _movements.length;
+    final nextMovementIdBefore = _nextMovementId;
+    final processedBefore = Set<String>.from(_processedOrderIds);
     final requiredQuantities = <String, int>{};
     final recipes = _recipes.where((line) => line.outletId == outletId).toList();
     for (final menu in menuLines) {
@@ -455,9 +463,31 @@ class FirefaInventoryStore extends ChangeNotifier {
     }
     _processedOrderIds.add(orderKey);
     notifyListeners();
-    _save();
-    await waitForPendingSave();
-    return true;
+    try {
+      _save();
+      await waitForPendingSave();
+      return true;
+    } catch (error) {
+      _items
+        ..clear()
+        ..addAll(itemsBefore);
+      if (_movements.length > movementsBefore) {
+        _movements.removeRange(movementsBefore, _movements.length);
+      }
+      _nextMovementId = nextMovementIdBefore;
+      _processedOrderIds
+        ..clear()
+        ..addAll(processedBefore);
+      notifyListeners();
+      // Best effort: persist the rolled-back snapshot after the failed write.
+      try {
+        _save();
+        await waitForPendingSave();
+      } catch (_) {
+        // Preserve the original storage error for the caller.
+      }
+      Error.throwWithStackTrace(error, StackTrace.current);
+    }
   }
 
   /// Restores the exact quantities consumed by a cancelled POS order.
@@ -475,6 +505,12 @@ class FirefaInventoryStore extends ChangeNotifier {
     if (_reversedOrderIds.contains(orderKey)) return false;
     if (!_processedOrderIds.contains(orderKey)) return false;
 
+    // Cancellation is also transactional: if the durable write fails, restore
+    // the exact pre-cancellation stock and leave the order eligible for retry.
+    final itemsBefore = List<FirefaInventoryItem>.from(_items);
+    final movementsBefore = _movements.length;
+    final nextMovementIdBefore = _nextMovementId;
+    final reversedBefore = Set<String>.from(_reversedOrderIds);
     final sourceMovements = _movements.where((movement) =>
       movement.outletId == outletId &&
       movement.type == 'out' &&
@@ -520,9 +556,30 @@ class FirefaInventoryStore extends ChangeNotifier {
     }
     _reversedOrderIds.add(orderKey);
     notifyListeners();
-    _save();
-    await waitForPendingSave();
-    return true;
+    try {
+      _save();
+      await waitForPendingSave();
+      return true;
+    } catch (error) {
+      _items
+        ..clear()
+        ..addAll(itemsBefore);
+      if (_movements.length > movementsBefore) {
+        _movements.removeRange(movementsBefore, _movements.length);
+      }
+      _nextMovementId = nextMovementIdBefore;
+      _reversedOrderIds
+        ..clear()
+        ..addAll(reversedBefore);
+      notifyListeners();
+      try {
+        _save();
+        await waitForPendingSave();
+      } catch (_) {
+        // Preserve the original storage error for the caller.
+      }
+      Error.throwWithStackTrace(error, StackTrace.current);
+    }
   }
 
   bool isOrderStockProcessed(String orderId, {required String outletId}) =>
