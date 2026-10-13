@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -179,6 +180,52 @@ class LocalOrderRepository implements OrderRepository {
     }
   }
 
+  bool _sameTransactionIdentity(TransactionModel a, TransactionModel b) =>
+      a.id == b.id &&
+      a.createdAt == b.createdAt &&
+      a.totalAmount == b.totalAmount &&
+      _sameList(a.itemIds, b.itemIds);
+
+  bool _samePaymentIdentity(PaymentModel a, PaymentModel b) =>
+      a.id == b.id &&
+      a.transactionId == b.transactionId &&
+      a.method == b.method &&
+      a.amount == b.amount &&
+      a.createdAt == b.createdAt;
+
+  bool _sameList(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  bool _canTransitionTransaction(TransactionStatus from, TransactionStatus to) {
+    if (from == to) return true;
+    switch (from) {
+      case TransactionStatus.pending:
+        return to == TransactionStatus.awaitingPayment ||
+            to == TransactionStatus.cancelled;
+      case TransactionStatus.awaitingPayment:
+        return to == TransactionStatus.paid ||
+            to == TransactionStatus.cancelled;
+      case TransactionStatus.paid:
+        return to == TransactionStatus.completed;
+      case TransactionStatus.cancelled:
+      case TransactionStatus.completed:
+        return false;
+    }
+  }
+
+  bool _canTransitionPayment(PaymentStatus from, PaymentStatus to) =>
+      from == to ||
+      (from == PaymentStatus.pending &&
+          (to == PaymentStatus.paid || to == PaymentStatus.failed));
+
+  bool _canTransitionSync(SyncStatus from, SyncStatus to) =>
+      from == to || (from != SyncStatus.synced && to == SyncStatus.synced);
+
   Future<T> _serialize<T>(Future<T> Function() action) {
     final completer = Completer<T>();
     _writeTail = _writeTail.then((_) async {
@@ -207,6 +254,13 @@ class LocalOrderRepository implements OrderRepository {
   Future<void> saveTransaction(TransactionModel transaction) async {
     await _ensureInitialized();
     await _serialize(() async {
+      final existing = _transactions[transaction.id];
+      if (existing != null &&
+          (!_sameTransactionIdentity(existing, transaction) ||
+              !_canTransitionTransaction(existing.status, transaction.status) ||
+              !_canTransitionSync(existing.syncStatus, transaction.syncStatus))) {
+        throw StateError('Perubahan transaksi bertentangan dengan state tersimpan.');
+      }
       final nextTransactions = Map<String, TransactionModel>.from(_transactions)
         ..[transaction.id] = transaction;
       final nextPayments = Map<String, PaymentModel>.from(_payments);
@@ -220,6 +274,12 @@ class LocalOrderRepository implements OrderRepository {
   Future<void> savePayment(PaymentModel payment) async {
     await _ensureInitialized();
     await _serialize(() async {
+      final existing = _payments[payment.id];
+      if (existing != null &&
+          (!_samePaymentIdentity(existing, payment) ||
+              !_canTransitionPayment(existing.status, payment.status))) {
+        throw StateError('Perubahan pembayaran bertentangan dengan state tersimpan.');
+      }
       final nextTransactions = Map<String, TransactionModel>.from(_transactions);
       final nextPayments = Map<String, PaymentModel>.from(_payments)
         ..[payment.id] = payment;
