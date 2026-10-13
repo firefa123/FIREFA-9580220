@@ -158,6 +158,44 @@ void main() {
     await queue.waitForPendingSave();
   });
 
+  test('pending batch respects retry time and excludes failed events', () async {
+    final dueOrder = queue.enqueueOrder(
+      makeOrder('RETRY-DUE-1', 'retry-window-outlet'),
+      'order.created',
+    );
+    final failedOrder = queue.enqueueOrder(
+      makeOrder('RETRY-FAILED-1', 'retry-window-outlet'),
+      'order.created',
+    );
+    await queue.waitForPendingSave();
+
+    await queue.markPending(
+      dueOrder.eventId,
+      retryDelay: const Duration(minutes: 2),
+    );
+    await queue.markSyncing(failedOrder.eventId);
+    await queue.markFailed(failedOrder.eventId);
+
+    final beforeDue = engine.pendingBatch(
+      queue: queue,
+      outletId: 'retry-window-outlet',
+      now: DateTime.now().toUtc(),
+    );
+    expect(beforeDue.any((event) => event.eventId == dueOrder.eventId), isFalse);
+    expect(beforeDue.any((event) => event.eventId == failedOrder.eventId), isFalse);
+
+    final afterDue = engine.pendingBatch(
+      queue: queue,
+      outletId: 'retry-window-outlet',
+      now: DateTime.now().toUtc().add(const Duration(minutes: 3)),
+    );
+    expect(afterDue.map((event) => event.eventId), [dueOrder.eventId]);
+
+    await queue.removeEvent(dueOrder.eventId);
+    await queue.removeEvent(failedOrder.eventId);
+    await queue.waitForPendingSave();
+  });
+
   test('batch validates limits and outlet', () {
     expect(() => engine.pendingBatch(queue: queue, outletId: ''), throwsArgumentError);
     expect(() => engine.pendingBatch(queue: queue, outletId: 'test-outlet-A', limit: 0), throwsRangeError);
