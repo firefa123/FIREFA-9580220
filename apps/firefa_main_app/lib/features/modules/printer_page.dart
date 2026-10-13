@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/app_theme.dart';
 import 'printer_store.dart';
@@ -123,15 +124,93 @@ class _PrinterPageState extends State<PrinterPage> {
     }
   }
 
-  void _testPrint(FirefaPrinterConfig config) {
-    final message = !config.enabled
-        ? 'Printer ${config.role.label} belum diaktifkan.'
-        : config.target.trim().isEmpty
-            ? 'Isi target/alamat printer terlebih dahulu.'
-            : 'Test print ${config.name} disimulasikan ke ${config.target}.';
+  Future<void> _testPrint(FirefaPrinterConfig config) async {
+    if (!config.enabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Printer ${config.role.label} belum diaktifkan.')),
+      );
+      return;
+    }
+    if (config.target.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Isi target/alamat printer terlebih dahulu.')),
+      );
+      return;
+    }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+    final now = DateTime.now().toLocal();
+    final stamp = '${now.year}-${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')} '
+        '${now.hour.toString().padLeft(2, '0')}:'
+        '${now.minute.toString().padLeft(2, '0')}';
+    final receipt = <String>[
+      'FIREFA - TEST PRINT',
+      '------------------------------',
+      'Printer : ${config.name}',
+      'Peran   : ${config.role.label}',
+      'Target  : ${config.target.trim()}',
+      'Waktu   : $stamp',
+      '------------------------------',
+      if (config.role == FirefaPrinterRole.cashier) ...[
+        'Contoh struk kasir',
+        'Pesanan: TEST-001',
+        '1 x Produk Uji        Rp 1.000',
+        'TOTAL                 Rp 1.000',
+      ] else if (config.role == FirefaPrinterRole.kitchen) ...[
+        'TIKET DAPUR',
+        'Pesanan: TEST-001',
+        '1 x Produk Uji',
+        'Catatan: TEST KITCHEN',
+      ] else ...[
+        'TIKET BAR',
+        'Pesanan: TEST-001',
+        '1 x Minuman Uji',
+        'Catatan: TEST BAR',
+      ],
+      '------------------------------',
+      'Ini preview lokal, bukan cetak fisik.',
+    ].join('\\n');
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Preview Test Print'),
+        content: SizedBox(
+          width: 380,
+          child: SingleChildScrollView(
+            child: SelectableText(
+              receipt,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 13,
+                height: 1.45,
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Tutup'),
+          ),
+          FilledButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: receipt));
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Contoh struk disalin. Kirim melalui aplikasi/driver printer yang sesuai.',
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.copy_outlined),
+            label: const Text('Salin struk'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -157,7 +236,8 @@ class _PrinterPageState extends State<PrinterPage> {
             ),
             const SizedBox(height: 6),
             const Text(
-              'Konfigurasi printer outlet disimpan lokal pada perangkat ini.',
+              'Konfigurasi tersimpan lokal. Test menghasilkan preview teks; '
+              'cetak fisik memerlukan koneksi dan driver printer yang sesuai.',
               style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 13,

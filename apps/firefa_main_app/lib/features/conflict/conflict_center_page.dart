@@ -5,6 +5,7 @@ import '../modules/conflict_management.dart';
 import '../modules/conflict_resolution_model.dart';
 import '../modules/conflict_resolution_store.dart';
 import '../modules/conflict_store.dart';
+import '../modules/order_store.dart';
 
 class ConflictCenterPage extends StatefulWidget {
   const ConflictCenterPage({super.key});
@@ -41,16 +42,33 @@ class _ConflictCenterPageState extends State<ConflictCenterPage> {
       .where((c) => c.outletId == outlet.selectedOutletId).toList()
     ..sort((a, b) => b.detectedAt.compareTo(a.detectedAt));
 
+  bool canAutoReconcile(FirefaSyncConflict c) =>
+      c.kind == FirefaConflictKind.concurrentEdit ||
+      c.kind == FirefaConflictKind.staleServerVersion;
+
   Future<void> decide(FirefaSyncConflict c, FirefaResolutionAction action) async {
     if (saving) return;
     setState(() => saving = true);
     try {
+      if (action != FirefaResolutionAction.manualReview) {
+        await FirefaOrderStore.instance.reconcileConflict(
+          eventId: c.eventId,
+          outletId: c.outletId,
+          orderId: c.orderId,
+          acceptServer: action == FirefaResolutionAction.acceptServer,
+          serverSnapshot: c.serverSnapshot,
+        );
+      }
       await audit.resolve(conflictId: c.eventId, action: action, actorId: outlet.role.label);
       if (action != FirefaResolutionAction.manualReview) await inbox.remove(c.eventId);
       if (!mounted) return;
       setState(() { saving = false; if (action != FirefaResolutionAction.manualReview) selectedId = null; });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
-        action == FirefaResolutionAction.manualReview ? 'Review dicatat; konflik tetap terbuka.' : 'Keputusan tersimpan di audit lokal; data bisnis tidak diubah.')));
+        action == FirefaResolutionAction.manualReview
+          ? 'Review dicatat; konflik tetap terbuka.'
+          : action == FirefaResolutionAction.keepLocal
+            ? 'Order lokal dipertahankan dan dimasukkan kembali ke antrean sinkronisasi.'
+            : 'Snapshot server diterapkan ke order lokal setelah validasi.')));
     } catch (e) {
       if (!mounted) return;
       setState(() => saving = false);
@@ -102,14 +120,14 @@ class _ConflictCenterPageState extends State<ConflictCenterPage> {
                   const Text('Snapshot server'),
                   SelectableText(current.serverSnapshot.toString()),
                   const SizedBox(height: 12),
-                  const Text('Tindakan mencatat keputusan lokal; tidak mengubah order, stok, pembayaran, atau server.'),
+                  const Text('Untuk konflik perubahan order, Keep Local mempertahankan order lokal dan menjadwalkan ulang event; Accept Server menerapkan snapshot tervalidasi ke order lokal. Konflik pembayaran, inventori, atau respons server tidak valid wajib Manual Review.'),
                   Wrap(spacing: 8, children: [
                     OutlinedButton(onPressed: saving ? null : () => decide(current, FirefaResolutionAction.manualReview), child: const Text('Manual Review')),
-                    OutlinedButton(onPressed: saving ? null : () => decide(current, FirefaResolutionAction.keepLocal), child: const Text('Keep Local')),
-                    FilledButton(onPressed: saving ? null : () async {
+                    OutlinedButton(onPressed: saving || !canAutoReconcile(current) ? null : () => decide(current, FirefaResolutionAction.keepLocal), child: const Text('Keep Local')),
+                    FilledButton(onPressed: saving || !canAutoReconcile(current) ? null : () async {
                       final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
                         title: const Text('Catat Accept Server?'),
-                        content: const Text('Keputusan dicatat, tetapi snapshot bisnis tidak diubah.'),
+                        content: const Text('Snapshot server yang ditampilkan akan divalidasi dan diterapkan ke order lokal. Ini tidak menulis ke server cloud.'),
                         actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Lanjut'))],
                       ));
                       if (ok == true) await decide(current, FirefaResolutionAction.acceptServer);

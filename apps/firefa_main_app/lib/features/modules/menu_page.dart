@@ -48,6 +48,21 @@ class _MenuPageState extends State<MenuPage> {
       FirefaAccess.can(outlet.role, FirefaPermission.menuManage) &&
       outlet.canAccessOutlet(outlet.selectedOutletId);
 
+  Future<void> _confirmSaved(String action) async {
+    try {
+      await store.waitForPendingSave();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('$action tersimpan di perangkat ini.'),
+      ));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('$action berubah di layar, tetapi gagal disimpan: $error'),
+      ));
+    }
+  }
+
   String rupiah(int amount) => 'Rp ${amount.toString().replaceAllMapped(
         RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.')}';
 
@@ -167,7 +182,9 @@ class _MenuPageState extends State<MenuPage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Nama harus unik per outlet, kategori valid, dan harga lebih dari Rp 0.'),
       ));
+      return;
     }
+    await _confirmSaved('Menu baru');
   }
 
   Future<void> editMenu(FirefaMenuItem item) async {
@@ -253,7 +270,9 @@ class _MenuPageState extends State<MenuPage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Nama menu harus unik per outlet dan harga harus lebih dari Rp 0.'),
       ));
+      return;
     }
+    await _confirmSaved('Perubahan menu');
   }
 
   Future<void> deleteMenu(FirefaMenuItem item) async {
@@ -284,7 +303,9 @@ class _MenuPageState extends State<MenuPage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Menu tidak ditemukan atau tidak dapat dihapus.'),
       ));
+      return;
     }
+    await _confirmSaved('Penghapusan menu');
   }
 
   @override
@@ -475,9 +496,13 @@ class _MenuPageState extends State<MenuPage> {
                                   value: item.isActive,
                                   activeThumbColor: primary,
                                   onChanged: allowed
-                                      ? (value) => store.setActive(
-                                            outlet.selectedOutletId, item.id, value,
-                                          )
+                                      ? (value) async {
+                                          final sourceOutlet = outlet.selectedOutletId;
+                                          if (!store.setActive(sourceOutlet, item.id, value)) {
+                                            return;
+                                          }
+                                          await _confirmSaved('Status menu');
+                                        }
                                       : null,
                                 ),
                                 PopupMenuButton<String>(

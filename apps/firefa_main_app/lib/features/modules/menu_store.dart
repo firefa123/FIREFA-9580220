@@ -49,7 +49,7 @@ class FirefaMenuItem {
   );
 }
 
-/// Independent local catalog; POS still uses its existing demo products.
+/// Local menu catalog used by the active POS when outlet items exist.
 class FirefaMenuStore extends ChangeNotifier {
   FirefaMenuStore._();
   static final FirefaMenuStore instance = FirefaMenuStore._();

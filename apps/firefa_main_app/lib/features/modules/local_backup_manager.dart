@@ -116,9 +116,9 @@ class FirefaLocalBackupManager extends ChangeNotifier {
     final createdAt = DateTime.parse(decoded['createdAt'] as String).toLocal();
     final snapshot = Map<String, dynamic>.from(decoded['snapshot'] as Map);
 
-    // OrderStore validates the snapshot before replacing active state.
-    FirefaOrderStore.instance.restoreLocalSnapshot(snapshot);
-    await FirefaOrderStore.instance.waitForPendingSave();
+    // Validate and durably apply the combined snapshot. The store rolls
+    // back its active state if the combined write fails.
+    await FirefaOrderStore.instance.restoreLocalSnapshotDurably(snapshot);
 
     final orders = snapshot['orders'] as List;
     final outbox = Map<String, dynamic>.from(snapshot['outbox'] as Map);

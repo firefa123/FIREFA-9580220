@@ -21,6 +21,7 @@ import 'widgets/stat_card.dart';
 import 'widgets/revenue_card.dart';
 import 'widgets/recent_orders_card.dart';
 import 'widgets/top_selling_card.dart';
+import 'widgets/sync_status_card.dart';
 
 class DashboardPage extends StatefulWidget {
   final FirefaRole role;
@@ -495,6 +496,8 @@ class _DashboardPageState extends State<DashboardPage> {
             ],
           ),
         ),
+        SyncStatusCard(outletId: outletStore.selectedOutletId),
+        const SizedBox(height: 24),
         _buildStats(orders),
         const SizedBox(height: 24),
         RevenueCard(orders: orders),

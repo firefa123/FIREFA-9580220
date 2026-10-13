@@ -1,0 +1,44 @@
+name: Flutter validation
+
+on:
+  pull_request:
+    types: [ready_for_review]
+    branches: [main]
+    paths:
+      - 'apps/firefa_main_app/**'
+      - '.github/workflows/flutter-validation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/firefa_main_app/**'
+      - '.github/workflows/flutter-validation.yml'
+
+# Keep only the newest validation for a branch/PR while edits are in progress.
+concurrency:
+  group: flutter-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/firefa_main_app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Test
+        run: flutter test --reporter expanded

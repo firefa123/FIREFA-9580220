@@ -35,14 +35,28 @@ class FirefaPaymentReconciliation {
     required double serverAmount,
     required bool serverExists,
     required bool duplicate,
+    String? localStatus,
+    String? serverStatus,
   }) {
+    if (paymentId.trim().isEmpty) {
+      throw ArgumentError.value(paymentId, 'paymentId', 'Tidak boleh kosong');
+    }
+    if (!localAmount.isFinite || !serverAmount.isFinite ||
+        localAmount < 0 || serverAmount < 0) {
+      throw ArgumentError('Nominal pembayaran harus finite dan tidak negatif.');
+    }
+
     final status = duplicate
         ? FirefaPaymentMatchStatus.duplicateDetected
         : !serverExists
             ? FirefaPaymentMatchStatus.missingOnServer
-            : localAmount != serverAmount
-                ? FirefaPaymentMatchStatus.amountMismatch
-                : FirefaPaymentMatchStatus.matched;
+            : localStatus != null &&
+                    serverStatus != null &&
+                    localStatus != serverStatus
+                ? FirefaPaymentMatchStatus.statusMismatch
+                : localAmount != serverAmount
+                    ? FirefaPaymentMatchStatus.amountMismatch
+                    : FirefaPaymentMatchStatus.matched;
 
     return FirefaPaymentReconciliationResult(
       paymentId: paymentId,

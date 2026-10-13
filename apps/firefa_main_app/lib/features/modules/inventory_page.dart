@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/auth/role_permissions.dart';
 import '../../core/outlet/active_outlet_store.dart';
 import 'inventory_store.dart';
+import 'menu_store.dart';
 
 class InventoryPage extends StatefulWidget {
   const InventoryPage({super.key});
@@ -20,6 +21,7 @@ class _InventoryPageState extends State<InventoryPage> {
 
   final outlet = FirefaActiveOutletStore.instance;
   final store = FirefaInventoryStore.instance;
+  final menuStore = FirefaMenuStore.instance;
   late final Future<void> ready;
   String itemQuery = '';
   String itemStatus = 'all';
@@ -31,7 +33,7 @@ class _InventoryPageState extends State<InventoryPage> {
   @override
   void initState() {
     super.initState();
-    ready = store.initialize();
+    ready = Future.wait([store.initialize(), menuStore.initialize()]).then((_) {});
     outlet.addListener(_refresh);
     store.addListener(_refresh);
   }
@@ -50,6 +52,74 @@ class _InventoryPageState extends State<InventoryPage> {
   bool get allowed =>
       FirefaAccess.can(outlet.role, FirefaPermission.inventoryManage) &&
       outlet.canAccessOutlet(outlet.selectedOutletId);
+
+
+  Future<void> manageRecipe() async {
+    if (!allowed) return;
+    final sourceOutlet = outlet.selectedOutletId;
+    final menus = menuStore.forOutlet(sourceOutlet)
+        .where((menu) => menu.isActive)
+        .map((menu) => (id: menu.id, name: menu.name))
+        .toList();
+    if (menus.isEmpty && menuStore.forOutlet(sourceOutlet).isEmpty) {
+      menus.addAll(const [
+        (id: 'P01', name: 'Cappuccino'),
+        (id: 'P02', name: 'Cafe Latte'),
+        (id: 'P03', name: 'Americano'),
+        (id: 'P04', name: 'Matcha Latte'),
+        (id: 'P05', name: 'Chocolate Ice'),
+        (id: 'P06', name: 'Lemon Tea'),
+        (id: 'P07', name: 'Nasi Goreng'),
+        (id: 'P08', name: 'Chicken Katsu'),
+        (id: 'P09', name: 'Beef Burger'),
+        (id: 'P10', name: 'French Fries'),
+        (id: 'P11', name: 'Chicken Wings'),
+        (id: 'P12', name: 'Cheesecake'),
+      ]);
+    }
+    final items = store.forOutlet(sourceOutlet);
+    if (menus.isEmpty || items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tambahkan menu dan barang inventory terlebih dahulu untuk mengatur resep.')));
+      return;
+    }
+    var menuId = menus.first.id;
+    var ingredientId = items.first.id;
+    final quantityController = TextEditingController(text: '1');
+    final result = await showDialog<({String menuId, String ingredientId, int quantity})>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, update) => AlertDialog(
+        title: const Text('Atur Resep Menu'),
+        content: SizedBox(width: 420, child: Column(mainAxisSize: MainAxisSize.min, children: [
+          DropdownButtonFormField<String>(
+            initialValue: menuId, isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Menu POS'),
+            items: menus.map((m) => DropdownMenuItem(value: m.id, child: Text(m.name))).toList(),
+            onChanged: (value) { if (value != null) update(() => menuId = value); }),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: ingredientId, isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Bahan inventory'),
+            items: items.map((i) => DropdownMenuItem(value: i.id, child: Text('${i.name} (${i.unit})'))).toList(),
+            onChanged: (value) { if (value != null) update(() => ingredientId = value); }),
+          const SizedBox(height: 12),
+          TextField(controller: quantityController, keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(9)],
+            decoration: const InputDecoration(labelText: 'Kebutuhan bahan per 1 menu')),
+          const SizedBox(height: 8),
+          const Text('Simpan satu bahan per baris resep. Ulangi untuk bahan lain pada menu yang sama.', style: TextStyle(fontSize: 12, color: muted)),
+        ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, (menuId: menuId, ingredientId: ingredientId, quantity: int.tryParse(quantityController.text) ?? 0)), child: const Text('Simpan Resep')),
+        ],
+      )),
+    );
+    quantityController.dispose();
+    if (!mounted || result == null || sourceOutlet != outlet.selectedOutletId || !allowed) return;
+    if (!store.addRecipeLine(outletId: sourceOutlet, menuId: result.menuId, ingredientId: result.ingredientId, quantity: result.quantity)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Resep tidak valid. Periksa menu, bahan, dan jumlah kebutuhan.')));
+    }
+  }
 
   Future<void> addItem() async {
     if (!allowed) return;
@@ -386,6 +456,7 @@ class _InventoryPageState extends State<InventoryPage> {
                       color: ink, fontWeight: FontWeight.bold,
                       fontSize: narrow ? 20 : 23,
                     )),
+                    OutlinedButton.icon(onPressed: allowed ? manageRecipe : null, icon: const Icon(Icons.menu_book_outlined), label: const Text('Atur Resep POS')),
                     FilledButton.icon(
                       onPressed: allowed ? addItem : null,
                       style: FilledButton.styleFrom(backgroundColor: primary),
@@ -398,8 +469,20 @@ class _InventoryPageState extends State<InventoryPage> {
                 Text('${outlet.selectedOutletName} • ${items.length} barang • $low stok rendah • $empty habis',
                     style: const TextStyle(color: muted, fontSize: 12)),
                 const SizedBox(height: 8),
-                const Text('Inventory lokal • Belum terhubung ke POS, resep, atau cloud',
+                const Text('Inventory lokal • Resep POS aktif lokal • Cloud belum terhubung',
                     style: TextStyle(color: muted, fontSize: 12)),
+                const SizedBox(height: 14),
+                const Text('Resep Menu POS', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                if (store.recipesForOutlet(outlet.selectedOutletId).isEmpty)
+                  const Text('Belum ada resep. Checkout belum akan mengurangi stok sampai resep dibuat.', style: TextStyle(color: muted, fontSize: 12)),
+                for (final recipe in store.recipesForOutlet(outlet.selectedOutletId))
+                  Card(child: ListTile(
+                    title: Text(menuStore.forOutlet(outlet.selectedOutletId).where((m) => m.id == recipe.menuId).map((m) => m.name).firstOrNull ?? const {'P01': 'Cappuccino', 'P02': 'Cafe Latte', 'P03': 'Americano', 'P04': 'Matcha Latte', 'P05': 'Chocolate Ice', 'P06': 'Lemon Tea', 'P07': 'Nasi Goreng', 'P08': 'Chicken Katsu', 'P09': 'Beef Burger', 'P10': 'French Fries', 'P11': 'Chicken Wings', 'P12': 'Cheesecake'}[recipe.menuId] ?? recipe.menuId),
+                    subtitle: Text('${items.where((i) => i.id == recipe.ingredientId).map((i) => i.name).firstOrNull ?? recipe.ingredientId}: ${recipe.quantity} ${items.where((i) => i.id == recipe.ingredientId).map((i) => i.unit).firstOrNull ?? ''} per menu'),
+                    trailing: allowed ? IconButton(tooltip: 'Hapus bahan dari resep', icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                      onPressed: () => store.removeRecipeLine(outletId: recipe.outletId, menuId: recipe.menuId, ingredientId: recipe.ingredientId)) : null,
+                  )),
                 const SizedBox(height: 18),
                 Wrap(spacing: 12, runSpacing: 10, children: [
                   _metric('Total Barang', items.length, primary),

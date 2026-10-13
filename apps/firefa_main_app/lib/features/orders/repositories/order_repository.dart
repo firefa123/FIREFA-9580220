@@ -8,6 +8,10 @@ abstract class OrderRepository {
 
   Future<TransactionModel?> getTransaction(String transactionId);
 
+  Future<List<TransactionModel>> getTransactions();
+
+  Future<PaymentModel?> getPaymentForTransaction(String transactionId);
+
   Future<List<TransactionModel>> getPendingSyncTransactions();
 
   Future<void> markTransactionSynced(String transactionId);

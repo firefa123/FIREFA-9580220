@@ -22,6 +22,21 @@ class PosController {
     cart.removeWhere((item) => item.name == name);
   }
 
+  void restoreCart(List<CartItemModel> items) {
+    cart
+      ..clear()
+      ..addAll(
+        items.map(
+          (item) => CartItemModel(
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+          ),
+        ),
+      );
+  }
+
   void clearCart() {
     cart.clear();
   }
