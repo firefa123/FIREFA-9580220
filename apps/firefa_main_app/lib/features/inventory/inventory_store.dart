@@ -188,7 +188,8 @@ class InventoryStore extends ChangeNotifier {
     if (orderId.trim().isEmpty || outletId.trim().isEmpty) {
       throw ArgumentError('Order ID dan outlet wajib diisi.');
     }
-    final processedKey = _orderKey(outletId, orderId);\n    if (_processedOrderIds.contains(processedKey) || _processedOrderIds.contains(orderId)) return false;
+    final processedKey = _orderKey(outletId, orderId);
+    if (_processedOrderIds.contains(processedKey) || _processedOrderIds.contains(orderId)) return false;
     if (ingredientQuantities.isEmpty) {
       throw ArgumentError('Kebutuhan bahan pesanan tidak boleh kosong.');
     }
