@@ -239,7 +239,18 @@ class _InventoryPageState extends State<InventoryPage> {
         ],
       ));
       if (!mounted || yes != true || !allowed || sourceOutlet != outlet.selectedOutletId) return;
-      store.remove(sourceOutlet, item.id);
+      final reason = store.removalBlockReason(sourceOutlet, item.id);
+      if (reason != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Barang tidak dapat dihapus: $reason'),
+        ));
+        return;
+      }
+      if (!store.remove(sourceOutlet, item.id)) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Barang tidak dapat dihapus. Muat ulang data dan coba lagi.'),
+        ));
+      }
       return;
     }
     final name = TextEditingController(text: item.name);
