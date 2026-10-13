@@ -13,7 +13,7 @@ import 'order_repository.dart';
 /// persistence only; it does not claim transactional disk guarantees or cloud
 /// synchronization.
 class LocalOrderRepository implements OrderRepository {
-  LocalOrderRepository({SharedPreferences? this._preferences});
+  LocalOrderRepository({this._preferences});
 
   static const storageKey = 'firefa_local_orders_v1';
 
