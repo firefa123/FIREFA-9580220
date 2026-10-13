@@ -110,7 +110,7 @@ void main() {
     expect(orders.forOutlet(outletId).first.receivedQuantity, 1);
     expect(inventory.forOutlet(outletId).single.stock, 19);
 
-    expect(orders.cancel(outletId: outletId, orderId: second.id), isTrue);
+    expect(await orders.cancelDurably(outletId: outletId, orderId: second.id), isTrue);
     final cancelled = orders.forOutlet(outletId).first;
     expect(cancelled.status, 'cancelled');
     expect(cancelled.receivedQuantity, 1);
