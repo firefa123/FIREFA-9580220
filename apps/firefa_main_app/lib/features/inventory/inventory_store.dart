@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -208,14 +209,20 @@ class InventoryStore extends ChangeNotifier {
     _ready();
     return _items.values.where((item) => stockFor(outletId, item.id) <= item.minimumStock).toList(growable: false);
   }
-  Future<void> addItem(InventoryCatalogItem item) async {
+    Future<void> addItem(InventoryCatalogItem item) =>
+      _serializeMutation(() => _addItem(item));
+
+  Future<void> _addItem(InventoryCatalogItem item) async {
     _ready(); _validateItem(item);
     if (_items.containsKey(item.id)) throw StateError('ID item inventory sudah digunakan.');
     _items[item.id] = item;
     try { await _persist(); } catch (_) { _items.remove(item.id); rethrow; }
     notifyListeners();
   }
-  Future<void> receiveStock({required String outletId, required String itemId, required double quantity}) async {
+    Future<void> receiveStock({required String outletId, required String itemId, required double quantity}) =>
+      _serializeMutation(() => _receiveStock(outletId: outletId, itemId: itemId, quantity: quantity));
+
+  Future<void> _receiveStock({required String outletId, required String itemId, required double quantity}) async {
     _ready(); _validateMovement(outletId, itemId, quantity);
     final key = _key(outletId, itemId), old = _stock[_key(outletId, itemId)] ?? 0, next = _nextMovementId;
     final movement = InventoryMovement(id: 'INV-${_nextMovementId++}', outletId: outletId, itemId: itemId,
@@ -224,7 +231,10 @@ class InventoryStore extends ChangeNotifier {
     try { await _persist(); } catch (_) { _stock[key] = old; _movements.remove(movement); _nextMovementId = next; rethrow; }
     notifyListeners();
   }
-  Future<void> issueStock({required String outletId, required String itemId, required double quantity}) async {
+    Future<void> issueStock({required String outletId, required String itemId, required double quantity}) =>
+      _serializeMutation(() => _issueStock(outletId: outletId, itemId: itemId, quantity: quantity));
+
+  Future<void> _issueStock({required String outletId, required String itemId, required double quantity}) async {
     _ready(); _validateMovement(outletId, itemId, quantity);
     final key = _key(outletId, itemId), old = _stock[_key(outletId, itemId)] ?? 0, next = _nextMovementId;
     if (quantity > old) throw StateError('Stok tidak mencukupi.');
@@ -234,7 +244,10 @@ class InventoryStore extends ChangeNotifier {
     try { await _persist(); } catch (_) { _stock[key] = old; _movements.remove(movement); _nextMovementId = next; rethrow; }
     notifyListeners();
   }
-  Future<void> transferStock({required String fromOutletId, required String toOutletId, required String itemId, required double quantity}) async {
+    Future<void> transferStock({required String fromOutletId, required String toOutletId, required String itemId, required double quantity}) =>
+      _serializeMutation(() => _transferStock(fromOutletId: fromOutletId, toOutletId: toOutletId, itemId: itemId, quantity: quantity));
+
+  Future<void> _transferStock({required String fromOutletId, required String toOutletId, required String itemId, required double quantity}) async {
     _ready();
     if (fromOutletId.trim().isEmpty || toOutletId.trim().isEmpty || fromOutletId == toOutletId) {
       throw ArgumentError('Outlet asal dan tujuan harus berbeda.');
@@ -257,6 +270,16 @@ class InventoryStore extends ChangeNotifier {
   /// Deducts a complete recipe requirement set once per order ID.
   /// All quantities are validated before any stock is changed.
   Future<bool> consumeOrderIngredients({
+    required String orderId,
+    required String outletId,
+    required Map<String, double> ingredientQuantities,
+  }) => _serializeMutation(() => _consumeOrderIngredients(
+        orderId: orderId,
+        outletId: outletId,
+        ingredientQuantities: ingredientQuantities,
+      ));
+
+  Future<bool> _consumeOrderIngredients({
     required String orderId,
     required String outletId,
     required Map<String, double> ingredientQuantities,
