@@ -447,8 +447,8 @@ class FirefaOrderStore extends ChangeNotifier {
       if (!order.cancel()) return false;
 
       try {
-        if (inventory.isOrderStockProcessed(orderId) &&
-            !inventory.isOrderStockReversed(orderId)) {
+        if (inventory.isOrderStockProcessed(orderId, outletId: outletId) &&
+            !inventory.isOrderStockReversed(orderId, outletId: outletId)) {
           await inventory.restoreCancelledOrderStock(
             orderId: orderId,
             outletId: outletId,
@@ -483,8 +483,8 @@ class FirefaOrderStore extends ChangeNotifier {
     // stock-processed orders through cancelAndRestoreStock so cancellation
     // cannot silently leave inventory deducted.
     final inventory = FirefaInventoryStore.instance;
-    if (inventory.isOrderStockProcessed(orderId) &&
-        !inventory.isOrderStockReversed(orderId)) {
+    if (inventory.isOrderStockProcessed(orderId, outletId: outletId) &&
+        !inventory.isOrderStockReversed(orderId, outletId: outletId)) {
       return false;
     }
 
