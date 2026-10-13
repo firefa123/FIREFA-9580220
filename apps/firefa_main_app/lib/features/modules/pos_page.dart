@@ -774,6 +774,22 @@ class _PosPageState extends State<PosPage> {
         }
       }
       await store.waitForPendingSave();
+      if (config.orderType == 'Dine In') {
+        final selectedTable = tableStore
+            .forOutlet(sourceOutlet)
+            .where((table) => table.name == config.table)
+            .firstOrNull;
+        if (selectedTable != null && !selectedTable.occupied) {
+          if (!tableStore.setOccupied(
+            sourceOutlet,
+            selectedTable.id,
+            true,
+          )) {
+            throw StateError('Status meja tidak dapat diperbarui.');
+          }
+          await tableStore.waitForPendingSave();
+        }
+      }
       if (!mounted) return;
       setState(() {
         cart.clear();
