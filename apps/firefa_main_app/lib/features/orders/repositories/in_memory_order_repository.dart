@@ -90,10 +90,15 @@ class InMemoryOrderRepository implements OrderRepository {
 
     switch (payment.status) {
       case PaymentStatus.pending:
-      case PaymentStatus.failed:
         if (transaction.status != TransactionStatus.awaitingPayment &&
             transaction.status != TransactionStatus.pending) {
           throw StateError('Status transaksi tidak mengizinkan pembayaran ini.');
+        }
+      case PaymentStatus.failed:
+        if (transaction.status != TransactionStatus.awaitingPayment &&
+            transaction.status != TransactionStatus.pending &&
+            transaction.status != TransactionStatus.cancelled) {
+          throw StateError('Pembayaran gagal tidak sesuai status transaksi.');
         }
       case PaymentStatus.paid:
         if (transaction.status != TransactionStatus.awaitingPayment &&
