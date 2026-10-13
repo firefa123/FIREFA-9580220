@@ -461,12 +461,19 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
       throw const FormatException('Snapshot outbox FIREFA tidak valid.');
     }
 
-    final restored = rawEntries
-        .map((value) => FirefaSyncEntry.fromJson(
-              Map<String, dynamic>.from(value as Map),
-            ))
-        .toList();
-    _validateEntries(restored);
+    late final List<FirefaSyncEntry> restored;
+    try {
+      restored = rawEntries
+          .map((value) => FirefaSyncEntry.fromJson(
+                Map<String, dynamic>.from(value as Map),
+              ))
+          .toList();
+      _validateEntries(restored);
+    } on FormatException {
+      rethrow;
+    } catch (_) {
+      throw const FormatException('Isi event pada snapshot outbox tidak valid.');
+    }
     for (final entry in restored) {
       if (entry.status == FirefaSyncStatus.syncing) {
         entry.status = FirefaSyncStatus.pending;
