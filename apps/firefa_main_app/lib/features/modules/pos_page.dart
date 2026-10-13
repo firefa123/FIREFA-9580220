@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/outlet/active_outlet_store.dart';
 import 'menu_store.dart';
+import 'inventory_store.dart';
 import 'order_models.dart';
 import 'order_store.dart';
 import 'pos_payment_dialog.dart';
@@ -637,7 +638,8 @@ class _PosPageState extends State<PosPage> {
       final tables = tableStore.forOutlet(sourceOutlet);
       final valid = tables.isEmpty
           ? const ['A01', 'A02', 'A03', 'B01'].contains(config.table)
-          : tables.any((table) => table.name == config.table);
+          : tables.any((table) =>
+              table.name == config.table && !table.occupied);
       if (!valid) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Pilih meja yang tersedia di daftar outlet sebelum checkout.')),
@@ -737,14 +739,22 @@ class _PosPageState extends State<PosPage> {
       return;
     }
     setState(() => _checkoutBusy = true);
+    FirefaOrder? createdOrder;
+    FirefaOrderStore? checkoutOrderStore;
     try {
+      final inventory = FirefaInventoryStore.instance;
+      await inventory.initialize();
+      final stockLines = cart.map((item) => (menuId: item.product.id, quantity: item.quantity)).toList();
+      inventory.validateOrderStock(outletId: sourceOutlet, menuLines: stockLines);
       final store = FirefaOrderStore.instance;
+      checkoutOrderStore = store;
       final order = store.createOrder(
         outletId: sourceOutlet,
         orderType: config.orderType,
         tableId: config.orderType == 'Dine In' ? config.table : null,
         items: cart.map((item) => FirefaOrderItem(
           productName: item.product.name,
+          productId: item.product.id,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           details: item.details,
@@ -755,12 +765,31 @@ class _PosPageState extends State<PosPage> {
         service: serviceAmount,
         total: grandTotal,
       );
+      createdOrder = order;
+      await inventory.consumeOrderStock(orderId: order.id, outletId: sourceOutlet, menuLines: stockLines);
+      await inventory.waitForPendingSave();
       if (payment != null) {
         if (!store.markPaid(sourceOutlet, order.id)) {
           throw StateError('Status pembayaran tidak dapat diperbarui.');
         }
       }
       await store.waitForPendingSave();
+      if (config.orderType == 'Dine In') {
+        final selectedTable = tableStore
+            .forOutlet(sourceOutlet)
+            .where((table) => table.name == config.table)
+            .firstOrNull;
+        if (selectedTable != null && !selectedTable.occupied) {
+          if (!tableStore.setOccupied(
+            sourceOutlet,
+            selectedTable.id,
+            true,
+          )) {
+            throw StateError('Status meja tidak dapat diperbarui.');
+          }
+          await tableStore.waitForPendingSave();
+        }
+      }
       if (!mounted) return;
       setState(() {
         cart.clear();
@@ -775,9 +804,29 @@ class _PosPageState extends State<PosPage> {
         )),
       );
     } catch (error) {
+      var rollbackMessage = '';
+      final order = createdOrder;
+      final store = checkoutOrderStore;
+      if (order != null && store != null) {
+        final current = store.findOrder(sourceOutlet, order.id);
+        if (current != null &&
+            current.status.canCancel &&
+            current.paymentStatus == FirefaPaymentStatus.unpaid) {
+          try {
+            final rolledBack = await store.cancelAndRestoreStock(sourceOutlet, order.id);
+            if (rolledBack) {
+              rollbackMessage = ' Pesanan ${order.id} dibatalkan dan stok resep dipulihkan.';
+            }
+          } catch (rollbackError) {
+            rollbackMessage = ' Perhatian: pesanan ${order.id} mungkin masih tercatat. Periksa daftar pesanan dan stok. Detail pemulihan: $rollbackError';
+          }
+        } else if (current != null) {
+          rollbackMessage = ' Periksa status pesanan ${order.id} pada daftar pesanan sebelum mencoba checkout lagi.';
+        }
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Checkout gagal: $error')),
+          SnackBar(content: Text('Checkout gagal: $error.$rollbackMessage')),
         );
       }
     } finally {
@@ -1122,7 +1171,10 @@ class _PosPageState extends State<PosPage> {
               final tables = tableStore.forOutlet(outletId);
               final names = tables.isEmpty
                   ? const ['A01', 'A02', 'A03', 'B01']
-                  : tables.map((table) => table.name).toList();
+                  : tables
+                      .where((table) => !table.occupied)
+                      .map((table) => table.name)
+                      .toList();
               final selected = names.contains(config.table)
                   ? config.table
                   : null;

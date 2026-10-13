@@ -1,4 +1,26 @@
 import 'offline_sync_queue.dart';
+import 'conflict_management.dart';
+
+Object? _freezeEnvelopeValue(Object? value) {
+  if (value is Map) {
+    return Map<String, dynamic>.unmodifiable(
+      value.map(
+        (key, nested) => MapEntry(key.toString(), _freezeEnvelopeValue(nested)),
+      ),
+    );
+  }
+  if (value is List) {
+    return List<Object?>.unmodifiable(value.map(_freezeEnvelopeValue));
+  }
+  return value;
+}
+
+Map<String, dynamic> _freezeEnvelopeSnapshot(Map<String, dynamic> value) =>
+    Map<String, dynamic>.unmodifiable(
+      value.map(
+        (key, nested) => MapEntry(key, _freezeEnvelopeValue(nested)),
+      ),
+    );
 
 /// Immutable payload sent to the future FIREFA backend.
 /// eventId is the idempotency key; orderId is only unique within the local
@@ -18,7 +40,7 @@ class FirefaSyncEnvelope {
     required this.eventType,
     required this.createdAt,
     required Map<String, dynamic> orderSnapshot,
-  }) : orderSnapshot = Map.unmodifiable(orderSnapshot);
+  }) : orderSnapshot = _freezeEnvelopeSnapshot(orderSnapshot);
 
   factory FirefaSyncEnvelope.fromEntry(FirefaSyncEntry entry) {
     return FirefaSyncEnvelope(
@@ -43,6 +65,7 @@ class FirefaSyncEnvelope {
 
 enum FirefaSyncOutcome {
   acknowledged,
+  conflict,
   retryableFailure,
   permanentFailure,
 }
@@ -55,19 +78,27 @@ class FirefaSyncReceipt {
   final FirefaSyncOutcome outcome;
   final String? serverReference;
   final String? message;
+  final String? serverOutletId;
+  final String? serverOrderId;
+  final Map<String, dynamic>? serverSnapshot;
+  final FirefaConflictKind? conflictKind;
 
   const FirefaSyncReceipt({
     required this.eventId,
     required this.outcome,
     this.serverReference,
     this.message,
+    this.serverOutletId,
+    this.serverOrderId,
+    this.serverSnapshot,
+    this.conflictKind,
   });
 
   bool acknowledges(FirefaSyncEnvelope event) =>
       outcome == FirefaSyncOutcome.acknowledged &&
       eventId == event.eventId &&
       serverReference != null &&
-      serverReference!.isNotEmpty;
+      serverReference!.trim().isNotEmpty;
 }
 
 /// Transport contract only. This interface performs no network I/O itself.

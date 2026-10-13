@@ -4,6 +4,7 @@ import '../../core/auth/role_permissions.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/outlet/active_outlet_store.dart';
 import '../modules/pos_page.dart';
+import '../conflict/conflict_center_page.dart';
 import '../modules/order_models.dart';
 import '../modules/order_store.dart';
 import '../modules/orders_page.dart';
@@ -14,11 +15,13 @@ import '../modules/supplier_page.dart';
 import '../modules/purchase_order_page.dart';
 import '../modules/reports_page.dart';
 import '../modules/settings_page.dart';
+import '../modules/printer_page.dart';
 import 'widgets/dashboard_sidebar.dart';
 import 'widgets/stat_card.dart';
 import 'widgets/revenue_card.dart';
 import 'widgets/recent_orders_card.dart';
 import 'widgets/top_selling_card.dart';
+import 'widgets/sync_status_card.dart';
 
 class DashboardPage extends StatefulWidget {
   final FirefaRole role;
@@ -48,9 +51,11 @@ class _DashboardPageState extends State<DashboardPage> {
     'Menu Management',
     'Inventory',
     'Reports',
+    'Conflict Center',
     'Settings',
     'Suppliers',
     'Purchasing',
+    'Printer Management',
   ];
 
   static const pageDescriptions = [
@@ -61,9 +66,11 @@ class _DashboardPageState extends State<DashboardPage> {
     'Kelola produk, kategori, dan harga menu.',
     'Pantau stok bahan baku dan persediaan.',
     'Analisis penjualan dan performa bisnis.',
+    'Tinjau konflik sinkronisasi dan catat keputusan.',
     'Kelola preferensi dan konfigurasi bisnis.',
     'Kelola pemasok dan informasi kontak per outlet.',
     'Buat PO dan terima barang ke stok inventory.',
+    'Kelola printer kasir, kitchen, dan bar.',
   ];
 
   static const pagePermissions = [
@@ -74,9 +81,11 @@ class _DashboardPageState extends State<DashboardPage> {
     FirefaPermission.menuManage,
     FirefaPermission.inventoryManage,
     FirefaPermission.reportsView,
+    FirefaPermission.conflictManage,
     FirefaPermission.settingsManage,
     FirefaPermission.inventoryManage,
     FirefaPermission.inventoryManage,
+    FirefaPermission.printerManage,
   ];
 
   @override
@@ -487,6 +496,8 @@ class _DashboardPageState extends State<DashboardPage> {
             ],
           ),
         ),
+        SyncStatusCard(outletId: outletStore.selectedOutletId),
+        const SizedBox(height: 24),
         _buildStats(orders),
         const SizedBox(height: 24),
         RevenueCard(orders: orders),
@@ -600,11 +611,15 @@ class _DashboardPageState extends State<DashboardPage> {
       case 6:
         return const ReportsPage();
       case 7:
-        return const SettingsPage();
+        return const ConflictCenterPage();
       case 8:
-        return const SupplierPage();
+        return const SettingsPage();
       case 9:
+        return const SupplierPage();
+      case 10:
         return const PurchaseOrderPage();
+      case 11:
+        return const PrinterPage();
       default:
         return const SizedBox.shrink();
     }

@@ -57,12 +57,14 @@ class FirefaOrderItem {
   final int quantity;
   final int unitPrice;
   final String details;
+  final String? productId;
 
   const FirefaOrderItem({
     required this.productName,
     required this.quantity,
     required this.unitPrice,
     this.details = '',
+    this.productId,
   });
 
   int get total => quantity * unitPrice;
@@ -72,6 +74,7 @@ class FirefaOrderItem {
     'quantity': quantity,
     'unitPrice': unitPrice,
     'details': details,
+    if (productId != null) 'productId': productId,
   };
 
   factory FirefaOrderItem.fromJson(Map<String, dynamic> json) {
@@ -80,6 +83,7 @@ class FirefaOrderItem {
       quantity: json['quantity'] as int,
       unitPrice: json['unitPrice'] as int,
       details: json['details'] as String? ?? '',
+      productId: json['productId'] as String?,
     );
   }
 }

@@ -12,6 +12,7 @@ import '../../features/modules/reports_page.dart';
 import '../../features/modules/settings_page.dart';
 import '../../features/modules/supplier_page.dart';
 import '../../features/modules/purchase_order_page.dart';
+import '../../features/modules/printer_page.dart';
 
 class FirefaMainNavigation extends StatefulWidget {
   final FirefaRole role;
@@ -37,6 +38,7 @@ class _FirefaMainNavigationState extends State<FirefaMainNavigation> {
       case 'settings': return const SettingsPage();
       case 'suppliers': return const SupplierPage();
       case 'purchasing': return const PurchaseOrderPage();
+      case 'printers': return const PrinterPage();
       default: return const Center(child: Text('Module belum tersedia'));
     }
   }
