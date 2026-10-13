@@ -76,4 +76,53 @@ void main() {
     );
     expect(await repository.getTransaction(transaction.id), isNotNull);
   });
+  test('repository rejects a second payment attempt for the same transaction', () async {
+    final checkout = CheckoutController();
+    final paymentController = PaymentController();
+    final repository = InMemoryOrderRepository();
+    final transaction = checkout.checkout([
+      CartItemModel(id: 'meal', name: 'Meal', price: 12000),
+    ])!;
+    await repository.saveTransaction(transaction);
+
+    final firstPayment = paymentController.createPayment(
+      transaction: transaction,
+      method: PaymentMethod.cash,
+    );
+    await repository.savePayment(firstPayment);
+
+    final secondPayment = paymentController.createPayment(
+      transaction: transaction,
+      method: PaymentMethod.qris,
+    );
+    await expectLater(repository.savePayment(secondPayment), throwsStateError);
+    expect((await repository.getPaymentForTransaction(transaction.id))!.id,
+        firstPayment.id);
+  });
+
+  test('paid payment cannot be attached to a cancelled transaction', () async {
+    final checkout = CheckoutController();
+    final paymentController = PaymentController();
+    final repository = InMemoryOrderRepository();
+    final transaction = checkout.checkout([
+      CartItemModel(id: 'meal', name: 'Meal', price: 12000),
+    ])!;
+    await repository.saveTransaction(transaction);
+
+    final pendingPayment = paymentController.createPayment(
+      transaction: transaction,
+      method: PaymentMethod.cash,
+    );
+    final cancelled = checkout.cancel(transaction);
+    await repository.saveTransaction(cancelled);
+
+    await expectLater(
+      repository.savePayment(
+        paymentController.markPaid(pendingPayment),
+      ),
+      throwsStateError,
+    );
+    expect(await repository.getPaymentForTransaction(transaction.id), isNull);
+  });
+
 }
