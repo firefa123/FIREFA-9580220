@@ -23,7 +23,7 @@ class LocalOrderRepository implements OrderRepository {
 
   final Map<String, TransactionModel> _transactions = {};
   final Map<String, PaymentModel> _payments = {};
-  final InMemoryOrderRepository _validator = InMemoryOrderRepository();
+  Future<void> _writeTail = Future<void>.value();
 
   Future<void> initialize() {
     if (_initialized) return Future<void>.value();
@@ -121,14 +121,8 @@ class LocalOrderRepository implements OrderRepository {
         }
       }
 
-      // Validate all restored records using the same identity and transition
-      // rules used by the in-memory repository before publishing the snapshot.
-      for (final transaction in restoredTransactions.values) {
-        await _validator.saveTransaction(transaction);
-      }
-      for (final payment in restoredPayments.values) {
-        await _validator.savePayment(payment);
-      }
+      // Validate the complete candidate snapshot before publishing any state.
+      await _validateSnapshot(restoredTransactions, restoredPayments);
 
       _transactions
         ..clear()
@@ -145,10 +139,13 @@ class LocalOrderRepository implements OrderRepository {
 
   Future<void> _ensureInitialized() => initialize();
 
-  Future<void> _persist() async {
+  Future<void> _persist(
+    Map<String, TransactionModel> transactions,
+    Map<String, PaymentModel> payments,
+  ) async {
     final snapshot = <String, Object>{
       'version': 1,
-      'transactions': _transactions.values.map((transaction) => {
+      'transactions': transactions.values.map((transaction) => {
         'id': transaction.id,
         'createdAt': transaction.createdAt.toIso8601String(),
         'totalAmount': transaction.totalAmount,
@@ -156,7 +153,7 @@ class LocalOrderRepository implements OrderRepository {
         'syncStatus': transaction.syncStatus.name,
         'itemIds': transaction.itemIds,
       }).toList(),
-      'payments': _payments.values.map((payment) => {
+      'payments': payments.values.map((payment) => {
         'id': payment.id,
         'transactionId': payment.transactionId,
         'method': payment.method.name,
@@ -169,20 +166,67 @@ class LocalOrderRepository implements OrderRepository {
     if (!saved) throw StateError('Snapshot order lokal gagal disimpan.');
   }
 
+  Future<void> _validateSnapshot(
+    Map<String, TransactionModel> transactions,
+    Map<String, PaymentModel> payments,
+  ) async {
+    final validator = InMemoryOrderRepository();
+    for (final transaction in transactions.values) {
+      await validator.saveTransaction(transaction);
+    }
+    for (final payment in payments.values) {
+      await validator.savePayment(payment);
+    }
+  }
+
+  Future<T> _serialize<T>(Future<T> Function() action) {
+    final completer = Completer<T>();
+    _writeTail = _writeTail.then((_) async {
+      try {
+        completer.complete(await action());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
+  }
+
+  void _publish(
+    Map<String, TransactionModel> transactions,
+    Map<String, PaymentModel> payments,
+  ) {
+    _transactions
+      ..clear()
+      ..addAll(transactions);
+    _payments
+      ..clear()
+      ..addAll(payments);
+  }
+
   @override
   Future<void> saveTransaction(TransactionModel transaction) async {
     await _ensureInitialized();
-    await _validator.saveTransaction(transaction);
-    _transactions[transaction.id] = transaction;
-    await _persist();
+    await _serialize(() async {
+      final nextTransactions = Map<String, TransactionModel>.from(_transactions)
+        ..[transaction.id] = transaction;
+      final nextPayments = Map<String, PaymentModel>.from(_payments);
+      await _validateSnapshot(nextTransactions, nextPayments);
+      await _persist(nextTransactions, nextPayments);
+      _publish(nextTransactions, nextPayments);
+    });
   }
 
   @override
   Future<void> savePayment(PaymentModel payment) async {
     await _ensureInitialized();
-    await _validator.savePayment(payment);
-    _payments[payment.id] = payment;
-    await _persist();
+    await _serialize(() async {
+      final nextTransactions = Map<String, TransactionModel>.from(_transactions);
+      final nextPayments = Map<String, PaymentModel>.from(_payments)
+        ..[payment.id] = payment;
+      await _validateSnapshot(nextTransactions, nextPayments);
+      await _persist(nextTransactions, nextPayments);
+      _publish(nextTransactions, nextPayments);
+    });
   }
 
   @override
@@ -202,11 +246,15 @@ class LocalOrderRepository implements OrderRepository {
   @override
   Future<void> markTransactionSynced(String transactionId) async {
     await _ensureInitialized();
-    final transaction = _transactions[transactionId];
-    if (transaction == null) return;
-    final updated = transaction.copyWith(syncStatus: SyncStatus.synced);
-    await _validator.saveTransaction(updated);
-    _transactions[transactionId] = updated;
-    await _persist();
+    await _serialize(() async {
+      final transaction = _transactions[transactionId];
+      if (transaction == null) return;
+      final nextTransactions = Map<String, TransactionModel>.from(_transactions)
+        ..[transactionId] = transaction.copyWith(syncStatus: SyncStatus.synced);
+      final nextPayments = Map<String, PaymentModel>.from(_payments);
+      await _validateSnapshot(nextTransactions, nextPayments);
+      await _persist(nextTransactions, nextPayments);
+      _publish(nextTransactions, nextPayments);
+    });
   }
 }
