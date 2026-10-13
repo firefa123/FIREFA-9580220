@@ -44,11 +44,12 @@ void main() {
     final checkout = CheckoutController();
     final paymentController = PaymentController();
     final receipts = ReceiptController();
-    final transaction = checkout.markPaid(checkout.checkout([
+    final awaiting = checkout.checkout([
       CartItemModel(id: 'coffee', name: 'Coffee', price: 15000),
-    ])!);
+    ])!;
+    final transaction = checkout.markPaid(awaiting);
     final payment = paymentController.markPaid(paymentController.createPayment(
-      transaction: checkout.copyWithForTest(transaction),
+      transaction: awaiting,
       method: PaymentMethod.cash,
     ));
 
