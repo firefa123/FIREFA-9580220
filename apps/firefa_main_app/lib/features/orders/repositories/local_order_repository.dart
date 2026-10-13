@@ -295,6 +295,25 @@ class LocalOrderRepository implements OrderRepository {
   }
 
   @override
+  Future<List<TransactionModel>> getTransactions() async {
+    await _ensureInitialized();
+    final result = _transactions.values.toList(growable: false)
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return result;
+  }
+
+  @override
+  Future<PaymentModel?> getPaymentForTransaction(String transactionId) async {
+    await _ensureInitialized();
+    final matching = _payments.values
+        .where((payment) => payment.transactionId == transactionId)
+        .toList(growable: false);
+    if (matching.isEmpty) return null;
+    matching.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return matching.first;
+  }
+
+  @override
   Future<List<TransactionModel>> getPendingSyncTransactions() async {
     await _ensureInitialized();
     return _transactions.values
