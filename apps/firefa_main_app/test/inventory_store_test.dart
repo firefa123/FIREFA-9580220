@@ -183,6 +183,42 @@ void main() {
     expect(restored.stockFor('B', 'beans-scope'), 2);
   });
 
+  test('domain inventory rejects corrupt snapshot without partial initialization', () async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'firefa_inventory_domain_v1',
+      jsonEncode({
+        'version': 1,
+        'nextMovementId': 1,
+        'items': [
+          {'id': 'partial', 'name': 'Partial', 'unit': 'kg', 'minimumStock': 0},
+        ],
+        'stock': {'A::partial': -1},
+        'movements': [],
+        'processedOrderIds': [],
+      }),
+    );
+    final store = InventoryStore();
+    await expectLater(store.initialize(), throwsFormatException);
+
+    await prefs.setString(
+      'firefa_inventory_domain_v1',
+      jsonEncode({
+        'version': 1,
+        'nextMovementId': 1,
+        'items': [
+          {'id': 'recovered', 'name': 'Recovered', 'unit': 'kg', 'minimumStock': 0},
+        ],
+        'stock': {'A::recovered': 0},
+        'movements': [],
+        'processedOrderIds': [],
+      }),
+    );
+    await store.initialize();
+    expect(store.items.map((item) => item.id), ['recovered']);
+    expect(store.stockFor('A', 'recovered'), 0);
+  });
+
   test('domain inventory uses a separate storage key from the legacy UI store', () {
     expect(InventoryStore().storageKey, 'firefa_inventory_domain_v1');
     expect(InventoryStore().storageKey, isNot('firefa_inventory_v1'));
