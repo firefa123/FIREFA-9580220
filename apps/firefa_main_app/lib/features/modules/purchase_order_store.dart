@@ -449,7 +449,7 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
     int? quantity,
   }) async {
     if (!_initialized) return false;
-    final identity = '$outletId\\u0000$orderId';
+    final identity = '$outletId\u0000$orderId';
     if (!_receiptsInProgress.add(identity)) return false;
     try {
       final index = _orders.indexWhere((po) =>
