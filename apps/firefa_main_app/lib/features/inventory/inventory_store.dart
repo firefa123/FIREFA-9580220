@@ -86,7 +86,6 @@ class InventoryStore extends ChangeNotifier {
           throw const FormatException('ID item duplikat.');
         }
       }
-      final knownStockKeys = <String>{};
       for (final entry in (data['stock'] as Map).entries) {
         final key = entry.key as String;
         final value = entry.value;
@@ -98,7 +97,6 @@ class InventoryStore extends ChangeNotifier {
           throw const FormatException('Kuantitas stok tersimpan tidak valid.');
         }
         restoredStock[key] = quantity;
-        knownStockKeys.add(key);
       }
       final movementIds = <String>{};
       for (final movement in restoredMovements) {
