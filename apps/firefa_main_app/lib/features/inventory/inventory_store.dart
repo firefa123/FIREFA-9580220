@@ -66,7 +66,30 @@ class InventoryStore extends ChangeNotifier {
         _stock[entry.key] = quantity;
       }
       _movements.addAll(movements);
-      _processedOrderIds.addAll((data['processedOrderIds'] as List? ?? const []).cast<String>());
+      final savedProcessedIds =
+          (data['processedOrderIds'] as List? ?? const []).cast<String>();
+      for (final savedId in savedProcessedIds) {
+        if (savedId.contains('\u0000')) {
+          _processedOrderIds.add(savedId);
+          continue;
+        }
+        // Migrate v1 order-only markers to outlet-scoped identities using the
+        // durable consumption ledger. Keep an unresolvable legacy marker as a
+        // compatibility fallback rather than silently allowing a duplicate.
+        final matchingOutlets = movements
+            .where((movement) =>
+                movement.type == 'order_consumption' &&
+                movement.referenceOrderId == savedId)
+            .map((movement) => movement.outletId)
+            .toSet();
+        if (matchingOutlets.isEmpty) {
+          _processedOrderIds.add(savedId);
+        } else {
+          _processedOrderIds.addAll(
+            matchingOutlets.map((outlet) => _orderKey(outlet, savedId)),
+          );
+        }
+      }
       _nextMovementId = data['nextMovementId'] as int;
     }
     _initialized = true;
@@ -79,6 +102,7 @@ class InventoryStore extends ChangeNotifier {
     }
   }
   String _key(String outlet, String item) => '$outlet::$item';
+  String _orderKey(String outlet, String orderId) => '$outlet\u0000$orderId';
   void _validateItem(InventoryCatalogItem item) {
     if (item.id.trim().isEmpty || item.name.trim().isEmpty || item.unit.trim().isEmpty ||
         !item.minimumStock.isFinite || item.minimumStock < 0) {
@@ -164,7 +188,7 @@ class InventoryStore extends ChangeNotifier {
     if (orderId.trim().isEmpty || outletId.trim().isEmpty) {
       throw ArgumentError('Order ID dan outlet wajib diisi.');
     }
-    if (_processedOrderIds.contains(orderId)) return false;
+    final processedKey = _orderKey(outletId, orderId);\n    if (_processedOrderIds.contains(processedKey) || _processedOrderIds.contains(orderId)) return false;
     if (ingredientQuantities.isEmpty) {
       throw ArgumentError('Kebutuhan bahan pesanan tidak boleh kosong.');
     }
@@ -197,13 +221,13 @@ class InventoryStore extends ChangeNotifier {
       ));
     }
     _movements.addAll(created);
-    _processedOrderIds.add(orderId);
+    _processedOrderIds.add(processedKey);
     try {
       await _persist();
     } catch (_) {
       oldStock.forEach((key, value) => _stock[key] = value);
       _movements.removeWhere((movement) => created.contains(movement));
-      _processedOrderIds.remove(orderId);
+      _processedOrderIds.remove(processedKey);
       _nextMovementId = oldNext;
       rethrow;
     }
@@ -211,9 +235,16 @@ class InventoryStore extends ChangeNotifier {
     return true;
   }
 
-  bool isOrderProcessed(String orderId) {
+  bool isOrderProcessed(String orderId, {String? outletId}) {
     _ready();
-    return _processedOrderIds.contains(orderId);
+    if (outletId != null) {
+      return _processedOrderIds.contains(_orderKey(outletId, orderId)) ||
+          _processedOrderIds.contains(orderId);
+    }
+    return _processedOrderIds.contains(orderId) ||
+        _processedOrderIds.any(
+          (key) => key.endsWith('\u0000$orderId'),
+        );
   }
 
 }
