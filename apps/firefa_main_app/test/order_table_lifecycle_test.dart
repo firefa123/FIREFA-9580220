@@ -38,11 +38,22 @@ void main() {
     final first = createDineInOrder();
     final second = createDineInOrder();
 
+    // Active orders prevent staff from manually freeing, renaming, or deleting
+    // a table that still has an open dine-in order.
+    expect(tables.setOccupied('TABLE-LIFECYCLE', table.id, false), isFalse);
+    expect(tables.rename('TABLE-LIFECYCLE', table.id, 'A2'), isFalse);
+    expect(tables.remove('TABLE-LIFECYCLE', table.id), isFalse);
+    expect(tables.forOutlet('TABLE-LIFECYCLE').single.name, 'A1');
+
     expect(await orders.cancelAndRestoreStock('TABLE-LIFECYCLE', first.id), isTrue);
     expect(tables.forOutlet('TABLE-LIFECYCLE').single.occupied, isTrue);
 
     expect(await orders.cancelAndRestoreStock('TABLE-LIFECYCLE', second.id), isTrue);
     expect(tables.forOutlet('TABLE-LIFECYCLE').single.occupied, isFalse);
+
+    // Once no active order remains, table administration is unlocked again.
+    expect(tables.rename('TABLE-LIFECYCLE', table.id, 'A2'), isTrue);
+    expect(tables.remove('TABLE-LIFECYCLE', table.id), isTrue);
 
     await orders.waitForPendingSave();
     await tables.waitForPendingSave();
