@@ -210,5 +210,36 @@ class FirefaMenuStore extends ChangeNotifier {
     }));
   }
 
+
+  Map<String, dynamic> exportLocalSnapshot() {
+    if (!_initialized) throw StateError('Menu belum diinisialisasi');
+    return {'version': 1, 'nextId': _nextId, 'items': _items.map((item) => item.toJson()).toList()};
+  }
+
+  void validateLocalSnapshot(Map<String, dynamic> snapshot) {
+    if (snapshot['version'] != 1 || snapshot['nextId'] is! int || snapshot['items'] is! List) {
+      throw const FormatException('Snapshot katalog menu tidak valid.');
+    }
+    final items = (snapshot['items'] as List).map((e) => FirefaMenuItem.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+    final ids = <String>{};
+    for (final item in items) {
+      if (item.id.trim().isEmpty || item.outletId.trim().isEmpty || item.name.trim().isEmpty ||
+          item.price <= 0 || !categories.contains(item.category) || !ids.add('${item.outletId}:${item.id}')) {
+        throw const FormatException('Data katalog menu pada backup tidak valid.');
+      }
+    }
+  }
+
+  Future<void> restoreLocalSnapshot(Map<String, dynamic> snapshot) async {
+    if (!_initialized) throw StateError('Menu belum diinisialisasi');
+    validateLocalSnapshot(snapshot);
+    final items = (snapshot['items'] as List).map((e) => FirefaMenuItem.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+    _items..clear()..addAll(items);
+    _nextId = snapshot['nextId'] as int;
+    notifyListeners();
+    _save();
+    await waitForPendingSave();
+  }
+
   Future<void> waitForPendingSave() => _pendingSave;
 }
