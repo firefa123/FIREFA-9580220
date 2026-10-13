@@ -258,6 +258,7 @@ class _PosPageState extends State<PosPage> {
     final completedTransaction = checkoutController.complete(paidTransaction);
 
     await orderRepository.savePayment(paidPayment);
+    await orderRepository.saveTransaction(paidTransaction);
     await orderRepository.saveTransaction(completedTransaction);
 
     if (!mounted) {
