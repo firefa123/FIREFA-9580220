@@ -56,6 +56,47 @@ void main() {
     await orders.waitForPendingSave();
   });
 
+  test('keep local conflict decision queues retained order snapshot', () async {
+    final orders = FirefaOrderStore.instance;
+    final queue = FirefaOfflineSyncQueue.instance;
+    await orders.initialize();
+    await queue.initialize();
+
+    final order = orders.createOrder(
+      outletId: 'conflict-keep-local-outlet',
+      orderType: 'Take Away',
+      tableId: null,
+      items: const [
+        FirefaOrderItem(productName: 'Bread', quantity: 1, unitPrice: 4000),
+      ],
+      subtotal: 4000,
+      discount: 0,
+      tax: 0,
+      service: 0,
+      total: 4000,
+    );
+    await orders.waitForPendingSave();
+
+    final event = queue.enqueueOrder(order, 'order.updated');
+    await queue.waitForPendingSave();
+
+    await orders.reconcileConflict(
+      eventId: event.eventId,
+      outletId: order.outletId,
+      orderId: order.id,
+      acceptServer: false,
+    );
+
+    expect(queue.findEvent(event.eventId), isNull);
+    final retained = queue.entriesForOutlet(order.outletId)
+        .where((entry) => entry.orderId == order.id && entry.eventType == 'order.updated')
+        .toList();
+    expect(retained, hasLength(1));
+    expect(retained.single.orderSnapshot['id'], order.id);
+    expect(retained.single.orderSnapshot['status'], order.status.name);
+    await orders.waitForPendingSave();
+  });
+
   test('accept server conflict snapshot updates order and retires stale event', () async {
     final orders = FirefaOrderStore.instance;
     final queue = FirefaOfflineSyncQueue.instance;
