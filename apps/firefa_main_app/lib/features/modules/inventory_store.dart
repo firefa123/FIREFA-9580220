@@ -273,11 +273,14 @@ class FirefaInventoryStore extends ChangeNotifier {
           movement.outletId.trim().isEmpty ||
           movement.itemId.trim().isEmpty ||
           movement.itemName.trim().isEmpty ||
-          movement.type.trim().isEmpty ||
+          !const {'in', 'out', 'correction'}.contains(movement.type) ||
           movement.before < 0 ||
           movement.before > 999999999 ||
           movement.after < 0 ||
           movement.after > 999999999 ||
+          movement.before == movement.after ||
+          (movement.type == 'in' && movement.after <= movement.before) ||
+          (movement.type == 'out' && movement.after >= movement.before) ||
           movement.note.length > 240 ||
           DateTime.tryParse(movement.timestamp) == null ||
           !movementIds.add(movement.id)) {
