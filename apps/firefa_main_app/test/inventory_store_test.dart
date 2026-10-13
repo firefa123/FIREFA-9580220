@@ -123,6 +123,58 @@ void main() {
   });
 
 
+  test('domain inventory scopes processed order IDs by outlet across restart', () async {
+    final store = InventoryStore();
+    await store.initialize();
+    await store.addItem(
+      const InventoryCatalogItem(id: 'beans-scope', name: 'Beans', unit: 'kg'),
+    );
+    await store.receiveStock(outletId: 'A', itemId: 'beans-scope', quantity: 5);
+    await store.receiveStock(outletId: 'B', itemId: 'beans-scope', quantity: 5);
+
+    expect(
+      await store.consumeOrderIngredients(
+        orderId: 'SHARED-ORDER-ID',
+        outletId: 'A',
+        ingredientQuantities: {'beans-scope': 2},
+      ),
+      isTrue,
+    );
+    expect(
+      await store.consumeOrderIngredients(
+        orderId: 'SHARED-ORDER-ID',
+        outletId: 'B',
+        ingredientQuantities: {'beans-scope': 3},
+      ),
+      isTrue,
+    );
+    expect(store.stockFor('A', 'beans-scope'), 3);
+    expect(store.stockFor('B', 'beans-scope'), 2);
+
+    final restored = InventoryStore();
+    await restored.initialize();
+    expect(restored.isOrderProcessed('SHARED-ORDER-ID', outletId: 'A'), isTrue);
+    expect(restored.isOrderProcessed('SHARED-ORDER-ID', outletId: 'B'), isTrue);
+    expect(
+      await restored.consumeOrderIngredients(
+        orderId: 'SHARED-ORDER-ID',
+        outletId: 'A',
+        ingredientQuantities: {'beans-scope': 2},
+      ),
+      isFalse,
+    );
+    expect(
+      await restored.consumeOrderIngredients(
+        orderId: 'SHARED-ORDER-ID',
+        outletId: 'B',
+        ingredientQuantities: {'beans-scope': 3},
+      ),
+      isFalse,
+    );
+    expect(restored.stockFor('A', 'beans-scope'), 3);
+    expect(restored.stockFor('B', 'beans-scope'), 2);
+  });
+
   test('domain inventory uses a separate storage key from the legacy UI store', () {
     expect(InventoryStore().storageKey, 'firefa_inventory_domain_v1');
     expect(InventoryStore().storageKey, isNot('firefa_inventory_v1'));
