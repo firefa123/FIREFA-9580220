@@ -462,9 +462,26 @@ class FirefaOrderStore extends ChangeNotifier {
         rethrow;
       }
 
-      queue.enqueueOrder(order, 'order.updated');
-      _scheduleSave();
-      await waitForPendingSave();
+      try {
+        queue.enqueueOrder(order, 'order.updated');
+        _scheduleSave();
+        await waitForPendingSave();
+      } catch (error, stackTrace) {
+        // Inventory restoration may already be durable. Restore the order's
+        // prior status and enqueue a compensating snapshot so a stale
+        // cancellation event cannot remain the final local intent.
+        order.status = previousStatus;
+        try {
+          queue.enqueueOrder(order, 'order.updated');
+          _scheduleSave();
+          await waitForPendingSave();
+        } catch (_) {
+          // Preserve the original failure; startup reconciliation repairs the
+          // outbox from the durable order snapshot when storage recovers.
+        }
+        notifyListeners();
+        Error.throwWithStackTrace(error, stackTrace);
+      }
       notifyListeners();
       return true;
     } finally {
