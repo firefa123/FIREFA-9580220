@@ -113,7 +113,6 @@ class InventoryStore extends ChangeNotifier {
             !restoredItemIds.contains(movement.itemId) ||
             !movement.quantity.isFinite ||
             movement.quantity <= 0 ||
-            DateTime.tryParse(movement.createdAt.toIso8601String()) == null ||
             !movementIds.add(movement.id)) {
           throw const FormatException('Riwayat pergerakan inventory tidak valid.');
         }
