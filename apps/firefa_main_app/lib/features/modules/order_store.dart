@@ -73,7 +73,20 @@ class FirefaOrderStore extends ChangeNotifier {
     if (combinedRaw == null || repairs > 0) {
       _scheduleSave();
     }
+    _registerTableOrderChecker();
     notifyListeners();
+  }
+
+  void _registerTableOrderChecker() {
+    FirefaTableStore.instance.setActiveOrderChecker((outletId, tableName) {
+      return _orders.any((order) =>
+        order.outletId == outletId &&
+        order.orderType == 'Dine In' &&
+        order.tableId == tableName &&
+        order.status != FirefaOrderStatus.completed &&
+        order.status != FirefaOrderStatus.cancelled
+      );
+    });
   }
 
   void _ensureInitialized() {
