@@ -638,7 +638,8 @@ class _PosPageState extends State<PosPage> {
       final tables = tableStore.forOutlet(sourceOutlet);
       final valid = tables.isEmpty
           ? const ['A01', 'A02', 'A03', 'B01'].contains(config.table)
-          : tables.any((table) => table.name == config.table);
+          : tables.any((table) =>
+              table.name == config.table && !table.occupied);
       if (!valid) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Pilih meja yang tersedia di daftar outlet sebelum checkout.')),
@@ -1154,7 +1155,10 @@ class _PosPageState extends State<PosPage> {
               final tables = tableStore.forOutlet(outletId);
               final names = tables.isEmpty
                   ? const ['A01', 'A02', 'A03', 'B01']
-                  : tables.map((table) => table.name).toList();
+                  : tables
+                      .where((table) => !table.occupied)
+                      .map((table) => table.name)
+                      .toList();
               final selected = names.contains(config.table)
                   ? config.table
                   : null;
