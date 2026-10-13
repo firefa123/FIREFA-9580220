@@ -72,6 +72,34 @@ void main() {
     expect(snapshot['payments'].single['status'], 'paid');
   });
 
+  test('history is newest first and payment lookup restores the latest payment', () async {
+    final repository = LocalOrderRepository();
+    final older = transaction(id: 'trx-old').copyWith(
+      createdAt: DateTime.utc(2026, 10, 10),
+    );
+    final newer = transaction(id: 'trx-new').copyWith(
+      createdAt: DateTime.utc(2026, 10, 12),
+    );
+    await repository.saveTransaction(older);
+    await repository.saveTransaction(newer);
+    await repository.savePayment(payment(
+      id: 'pay-old',
+      transactionId: 'trx-old',
+    ));
+    await repository.savePayment(payment(
+      id: 'pay-new',
+      transactionId: 'trx-new',
+    ));
+
+    final history = await repository.getTransactions();
+    expect(history.map((item) => item.id), ['trx-new', 'trx-old']);
+    expect(
+      (await repository.getPaymentForTransaction('trx-new'))!.id,
+      'pay-new',
+    );
+    expect(await repository.getPaymentForTransaction('missing'), isNull);
+  });
+
   test('conflicting updates are rejected without changing persisted snapshot', () async {
     final repository = LocalOrderRepository();
     await repository.saveTransaction(transaction());
