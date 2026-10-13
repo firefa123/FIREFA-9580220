@@ -74,6 +74,39 @@ class InMemoryOrderRepository implements OrderRepository {
         throw StateError('Perubahan pembayaran bertentangan dengan state tersimpan.');
       }
     }
+
+    // One payment attempt per transaction is the current local POS contract.
+    // This prevents duplicate IDs from representing multiple successful
+    // payments for the same checkout. A retry flow needs an explicit attempt
+    // model rather than silently creating another payment record.
+    final otherPayment = _payments.values.where(
+      (stored) =>
+          stored.transactionId == payment.transactionId &&
+          stored.id != payment.id,
+    );
+    if (otherPayment.isNotEmpty) {
+      throw StateError('Transaksi sudah memiliki catatan pembayaran.');
+    }
+
+    switch (payment.status) {
+      case PaymentStatus.pending:
+      case PaymentStatus.failed:
+        if (transaction.status != TransactionStatus.awaitingPayment &&
+            transaction.status != TransactionStatus.pending) {
+          throw StateError('Status transaksi tidak mengizinkan pembayaran ini.');
+        }
+      case PaymentStatus.paid:
+        if (transaction.status != TransactionStatus.awaitingPayment &&
+            transaction.status != TransactionStatus.paid &&
+            transaction.status != TransactionStatus.completed) {
+          throw StateError('Pembayaran lunas tidak sesuai status transaksi.');
+        }
+      case PaymentStatus.refunded:
+        if (transaction.status != TransactionStatus.completed) {
+          throw StateError('Refund hanya diizinkan untuk transaksi selesai.');
+        }
+    }
+
     _payments[payment.id] = payment;
   }
 
