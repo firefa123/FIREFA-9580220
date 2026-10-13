@@ -36,6 +36,8 @@ class _PosPageState extends State<PosPage> {
   ReceiptModel? receipt;
   List<TransactionModel> recentTransactions = const [];
   bool _loadingHistory = false;
+  bool _checkoutInProgress = false;
+  bool _paymentInProgress = false;
 
   @override
   void initState() {
@@ -130,9 +132,17 @@ class _PosPageState extends State<PosPage> {
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton(
-                          onPressed:
-                              posController.cart.isEmpty ? null : _checkout,
-                          child: const Text('Checkout'),
+                          onPressed: posController.cart.isEmpty ||
+                                  _checkoutInProgress
+                              ? null
+                              : _checkout,
+                          child: _checkoutInProgress
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Text('Checkout'),
                         ),
                       )
                     else if (payment == null)
@@ -170,7 +180,9 @@ class _PosPageState extends State<PosPage> {
           children: PaymentMethod.values
               .map(
                 (method) => OutlinedButton(
-                  onPressed: () => _createPayment(method),
+                  onPressed: _paymentInProgress
+                      ? null
+                      : () => _createPayment(method),
                   child: Text(_paymentMethodLabel(method)),
                 ),
               )
@@ -203,10 +215,17 @@ class _PosPageState extends State<PosPage> {
         Text('Status: ${payment!.status.name}'),
         const SizedBox(height: 8),
         FilledButton(
-          onPressed: payment!.status == PaymentStatus.pending
+          onPressed: payment!.status == PaymentStatus.pending &&
+                  !_paymentInProgress
               ? _markPaymentPaid
               : null,
-          child: const Text('Tandai Lunas'),
+          child: _paymentInProgress
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Tandai Lunas'),
         ),
         const SizedBox(height: 8),
         OutlinedButton(
@@ -345,81 +364,107 @@ class _PosPageState extends State<PosPage> {
   }
 
   Future<void> _checkout() async {
-    final created = checkoutController.checkout(posController.cart);
-    if (created == null) {
-      return;
+    if (_checkoutInProgress || transaction != null) return;
+    setState(() => _checkoutInProgress = true);
+    try {
+      final created = checkoutController.checkout(posController.cart);
+      if (created == null) return;
+
+      await orderRepository.saveTransaction(created);
+      if (!mounted) return;
+      setState(() {
+        transaction = created;
+        payment = null;
+        receipt = null;
+        recentTransactions = [created, ...recentTransactions];
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Checkout gagal disimpan. Coba lagi.')),
+      );
+    } finally {
+      if (mounted) setState(() => _checkoutInProgress = false);
     }
-
-    await orderRepository.saveTransaction(created);
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      transaction = created;
-      payment = null;
-      receipt = null;
-      recentTransactions = [created, ...recentTransactions];
-    });
   }
 
   Future<void> _createPayment(PaymentMethod method) async {
     final currentTransaction = transaction;
-    if (currentTransaction == null) {
+    if (_paymentInProgress ||
+        currentTransaction == null ||
+        payment != null ||
+        currentTransaction.status != TransactionStatus.awaitingPayment) {
       return;
     }
 
-    final createdPayment = paymentController.createPayment(
-      transaction: currentTransaction,
-      method: method,
-    );
-
-    await orderRepository.savePayment(createdPayment);
-
-    if (!mounted) {
-      return;
+    setState(() => _paymentInProgress = true);
+    try {
+      final createdPayment = paymentController.createPayment(
+        transaction: currentTransaction,
+        method: method,
+      );
+      await orderRepository.savePayment(createdPayment);
+      if (!mounted) return;
+      setState(() {
+        payment = createdPayment;
+        receipt = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pembayaran gagal disimpan. Coba lagi.')),
+      );
+    } finally {
+      if (mounted) setState(() => _paymentInProgress = false);
     }
-
-    setState(() {
-      payment = createdPayment;
-      receipt = null;
-    });
   }
 
   Future<void> _markPaymentPaid() async {
     final currentPayment = payment;
     final currentTransaction = transaction;
-    if (currentPayment == null || currentTransaction == null) {
+    if (_paymentInProgress ||
+        currentPayment == null ||
+        currentTransaction == null ||
+        currentPayment.status != PaymentStatus.pending ||
+        currentTransaction.status != TransactionStatus.awaitingPayment) {
       return;
     }
 
-    final paidPayment = paymentController.markPaid(currentPayment);
-    final paidTransaction = checkoutController.markPaid(currentTransaction);
-    final generatedReceipt = receiptController.generate(
-      transaction: paidTransaction,
-      payment: paidPayment,
-    );
+    setState(() => _paymentInProgress = true);
+    try {
+      final paidPayment = paymentController.markPaid(currentPayment);
+      final paidTransaction = checkoutController.markPaid(currentTransaction);
+      if (paidPayment.status != PaymentStatus.paid ||
+          paidTransaction.status != TransactionStatus.paid) {
+        throw StateError('Transisi pembayaran tidak valid.');
+      }
+      final completedTransaction = checkoutController.complete(paidTransaction);
+      final generatedReceipt = receiptController.generate(
+        transaction: completedTransaction,
+        payment: paidPayment,
+      );
 
-    final completedTransaction = checkoutController.complete(paidTransaction);
-
-    await orderRepository.savePayment(paidPayment);
-    await orderRepository.saveTransaction(paidTransaction);
-    await orderRepository.saveTransaction(completedTransaction);
-
-    if (!mounted) {
-      return;
+      await orderRepository.savePayment(paidPayment);
+      await orderRepository.saveTransaction(paidTransaction);
+      await orderRepository.saveTransaction(completedTransaction);
+      if (!mounted) return;
+      setState(() {
+        payment = paidPayment;
+        transaction = completedTransaction;
+        receipt = generatedReceipt;
+        recentTransactions = [
+          completedTransaction,
+          ...recentTransactions.where((item) => item.id != completedTransaction.id),
+        ];
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pembayaran belum berhasil disimpan. Periksa riwayat transaksi.')),
+      );
+    } finally {
+      if (mounted) setState(() => _paymentInProgress = false);
     }
-
-    setState(() {
-      payment = paidPayment;
-      transaction = completedTransaction;
-      receipt = generatedReceipt;
-      recentTransactions = [
-        completedTransaction,
-        ...recentTransactions.where((item) => item.id != completedTransaction.id),
-      ];
-    });
   }
 
   Future<void> _cancelTransaction() async {
