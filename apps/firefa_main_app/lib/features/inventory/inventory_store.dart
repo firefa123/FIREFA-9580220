@@ -43,6 +43,21 @@ class InventoryStore extends ChangeNotifier {
   }) : _persistString = persistString;
   final String storageKey;
   final Future<bool> Function(String key, String value)? _persistString;
+  Future<void> _mutationTail = Future<void>.value();
+
+  Future<T> _serializeMutation<T>(Future<T> Function() action) {
+    final previous = _mutationTail;
+    final release = Completer<void>();
+    _mutationTail = release.future;
+    return (() async {
+      try {
+        await previous;
+        return await action();
+      } finally {
+        release.complete();
+      }
+    })();
+  }
   final Map<String, InventoryCatalogItem> _items = {};
   final Map<String, double> _stock = {};
   final List<InventoryMovement> _movements = [];
