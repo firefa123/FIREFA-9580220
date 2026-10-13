@@ -125,4 +125,29 @@ void main() {
     expect(await repository.getPaymentForTransaction(transaction.id), isNull);
   });
 
+  test('failed payment can be retained as audit history after cancellation', () async {
+    final checkout = CheckoutController();
+    final paymentController = PaymentController();
+    final repository = InMemoryOrderRepository();
+    final transaction = checkout.checkout([
+      CartItemModel(id: 'meal', name: 'Meal', price: 12000),
+    ])!;
+    await repository.saveTransaction(transaction);
+
+    final pendingPayment = paymentController.createPayment(
+      transaction: transaction,
+      method: PaymentMethod.cash,
+    );
+    await repository.savePayment(pendingPayment);
+    final failedPayment = paymentController.markFailed(pendingPayment);
+    await repository.savePayment(failedPayment);
+    final cancelled = checkout.cancel(transaction);
+    await repository.saveTransaction(cancelled);
+
+    expect((await repository.getPaymentForTransaction(transaction.id))!.status,
+        PaymentStatus.failed);
+    expect((await repository.getTransaction(transaction.id))!.status,
+        TransactionStatus.cancelled);
+  });
+
 }
