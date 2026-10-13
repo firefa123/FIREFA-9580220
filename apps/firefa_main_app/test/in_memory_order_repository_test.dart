@@ -62,7 +62,7 @@ void main() {
       throwsStateError,
     );
     await expectLater(
-      repository.savePayment(const PaymentModel(
+      repository.savePayment(PaymentModel(
         id: 'pay-missing',
         transactionId: 'missing',
         method: PaymentMethod.cash,
@@ -73,7 +73,7 @@ void main() {
       throwsStateError,
     );
     await expectLater(
-      repository.savePayment(const PaymentModel(
+      repository.savePayment(PaymentModel(
         id: 'pay-wrong-amount',
         transactionId: 'trx-1',
         method: PaymentMethod.cash,
