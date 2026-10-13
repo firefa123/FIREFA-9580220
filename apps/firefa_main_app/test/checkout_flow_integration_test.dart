@@ -19,6 +19,11 @@ void main() {
       CartItemModel(id: 'tea', name: 'Tea', price: 5000),
     ])!;
     expect(transaction.totalAmount, 35000);
+    expect(transaction.itemDetails, hasLength(2));
+    expect(transaction.itemDetails.first.name, 'Coffee');
+    expect(transaction.itemDetails.first.unitPrice, 15000);
+    expect(transaction.itemDetails.first.quantity, 2);
+    expect(transaction.itemDetails.last.subtotal, 5000);
     await repository.saveTransaction(transaction);
 
     final pendingPayment = paymentController.createPayment(
