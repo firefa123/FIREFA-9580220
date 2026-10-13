@@ -112,7 +112,16 @@ class FirefaInventoryStore extends ChangeNotifier {
   bool _initialized = false;
   int _nextId = 1;
 
-  Future<void> initialize() => _initializing ??= _load();
+  Future<void> initialize() {
+    if (_initialized) return Future<void>.value();
+    final pending = _initializing;
+    if (pending != null) return pending;
+    final future = _load();
+    _initializing = future;
+    return future.whenComplete(() {
+      if (!_initialized) _initializing = null;
+    });
+  }
 
   Future<void> _load() async {
     try {
