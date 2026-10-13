@@ -150,6 +150,14 @@ void main() {
     );
     expect(store.stockFor('A', 'beans-scope'), 3);
     expect(store.stockFor('B', 'beans-scope'), 2);
+    expect(
+      await store.consumeOrderIngredients(
+        orderId: 'SHARED-ORDER-ID',
+        outletId: 'A',
+        ingredientQuantities: {'beans-scope': 2},
+      ),
+      isFalse,
+    );
 
     final restored = InventoryStore();
     await restored.initialize();
