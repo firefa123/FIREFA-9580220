@@ -96,6 +96,9 @@ class FirefaInventoryStore extends ChangeNotifier {
   FirefaInventoryStore._();
   static final FirefaInventoryStore instance = FirefaInventoryStore._();
 
+  @visibleForTesting
+  static FirefaInventoryStore createForTesting() => FirefaInventoryStore._();
+
   static const storageKey = 'firefa_inventory_v1';
   static const units = <String>['pcs', 'pack', 'botol', 'kg', 'gram', 'liter', 'ml', 'box'];
 
