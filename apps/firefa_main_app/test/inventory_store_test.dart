@@ -225,7 +225,7 @@ void main() {
     final persisted = jsonDecode(prefs.getString('firefa_inventory_v1')!) as Map<String, dynamic>;
     expect(
       (persisted['reversedOrderIds'] as List).cast<String>(),
-      contains('LEGACY-A\\u0000POS-ORDER-1'),
+      contains('LEGACY-A${String.fromCharCode(36)}{String.fromCharCode(0)}POS-ORDER-1'),
     );
     final persistedCoffee = (persisted['items'] as List)
         .map((entry) => Map<String, dynamic>.from(entry as Map))
