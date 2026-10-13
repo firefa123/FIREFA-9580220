@@ -143,7 +143,6 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
   static final FirefaPurchaseOrderStore instance = FirefaPurchaseOrderStore._();
   static const storageKey = 'firefa_purchase_orders_v1';
   final List<FirefaPurchaseOrder> _orders = [];
-  final Set<String> _receiptsInProgress = <String>{};
   Future<void>? _initializing;
   Future<void> _pendingSave = Future<void>.value();
   bool _initialized = false;
@@ -408,10 +407,11 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
     return true;
   }
 
-  Future<bool> cancelDurably({
+  bool receive({
     required String outletId,
     required String orderId,
-  }) async {
+    int? quantity,
+  }) {
     if (!_initialized) return false;
     final index = _orders.indexWhere((po) =>
         po.outletId == outletId &&
@@ -419,115 +419,34 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
         (po.status == 'ordered' || po.status == 'partial'));
     if (index < 0) return false;
 
-    final previous = _orders[index];
-    _orders[index] = previous.withStatus(
-      'cancelled',
-      DateTime.now().toIso8601String(),
+    final order = _orders[index];
+    final amount = quantity ?? order.remainingQuantity;
+    if (amount <= 0 || amount > order.remainingQuantity) return false;
+
+    final inventory = FirefaInventoryStore.instance;
+    final items = inventory.forOutlet(outletId)
+        .where((item) => item.id == order.itemId);
+    if (items.isEmpty || items.first.unit != order.unit) return false;
+
+    final receipt = FirefaPurchaseReceipt(
+      id: '${order.id}-receipt-${order.receipts.length + 1}',
+      quantity: amount,
+      receivedAt: DateTime.now().toIso8601String(),
     );
-    _save();
-    try {
-      await waitForPendingSave();
-      notifyListeners();
-      return true;
-    } catch (_) {
-      _orders[index] = previous;
-      _save();
-      try {
-        await waitForPendingSave();
-      } catch (_) {
-        // Keep the in-memory order restored; persistence error is surfaced
-        // through false so the UI can ask the user to retry.
-      }
-      notifyListeners();
+    if (!inventory.adjust(
+      outletId: outletId,
+      id: order.itemId,
+      type: 'in',
+      amount: amount,
+      note: 'Penerimaan PO ${order.id}',
+    )) {
       return false;
     }
-  }
 
-  Future<bool> receiveDurably({
-    required String outletId,
-    required String orderId,
-    int? quantity,
-  }) async {
-    if (!_initialized) return false;
-    final identity = '$outletId\u0000$orderId';
-    if (!_receiptsInProgress.add(identity)) return false;
-    try {
-      final index = _orders.indexWhere((po) =>
-          po.outletId == outletId &&
-          po.id == orderId &&
-          (po.status == 'ordered' || po.status == 'partial'));
-      if (index < 0) return false;
-
-      final order = _orders[index];
-      final amount = quantity ?? order.remainingQuantity;
-      if (amount <= 0 || amount > order.remainingQuantity) return false;
-
-      final inventory = FirefaInventoryStore.instance;
-      final matches = inventory.forOutlet(outletId)
-          .where((item) => item.id == order.itemId);
-      if (matches.isEmpty ||
-          matches.first.unit != order.unit ||
-          matches.first.stock + amount > 999999999) {
-        return false;
-      }
-
-      final receipt = FirefaPurchaseReceipt(
-        id: '${order.id}-receipt-${order.receipts.length + 1}',
-        quantity: amount,
-        receivedAt: DateTime.now().toIso8601String(),
-      );
-      if (!inventory.adjust(
-        outletId: outletId,
-        id: order.itemId,
-        type: 'in',
-        amount: amount,
-        note: 'Penerimaan PO ${order.id} / ${receipt.id}',
-      )) {
-        return false;
-      }
-
-      try {
-        await inventory.waitForPendingSave();
-        _orders[index] = order.withReceipt(receipt);
-        _save();
-        await waitForPendingSave();
-        notifyListeners();
-        return true;
-      } catch (_) {
-        // Best-effort compensation keeps the two local stores aligned when
-        // either durable write fails. Never reverse stock if the inventory
-        // store already rolled its in-memory state back to the old quantity.
-        _orders[index] = order;
-        _save();
-        try {
-          await waitForPendingSave();
-        } catch (_) {
-          // Preserve the original failure; the next initialization will
-          // validate the persisted snapshot rather than trust memory.
-        }
-
-        final currentItems = inventory.forOutlet(outletId)
-            .where((item) => item.id == order.itemId);
-        if (currentItems.isNotEmpty &&
-            currentItems.first.stock == matches.first.stock + amount) {
-          inventory.adjust(
-            outletId: outletId,
-            id: order.itemId,
-            type: 'out',
-            amount: amount,
-            note: 'Kompensasi penerimaan PO ${order.id}',
-          );
-          try {
-            await inventory.waitForPendingSave();
-          } catch (_) {
-            // Leave a durable movement attempt in the audit trail for review.
-          }
-        }
-        return false;
-      }
-    } finally {
-      _receiptsInProgress.remove(identity);
-    }
+    _orders[index] = order.withReceipt(receipt);
+    notifyListeners();
+    _save();
+    return true;
   }
 
   void _save() {
