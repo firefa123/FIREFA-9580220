@@ -36,8 +36,12 @@ class InventoryMovement {
 
 /// Local-first inventory ledger with outlet-scoped quantities and persisted movements.
 class InventoryStore extends ChangeNotifier {
-  InventoryStore({this.storageKey = 'firefa_inventory_domain_v1'});
+  InventoryStore({
+    this.storageKey = 'firefa_inventory_domain_v1',
+    Future<bool> Function(String key, String value)? persistString,
+  }) : _persistString = persistString;
   final String storageKey;
+  final Future<bool> Function(String key, String value)? _persistString;
   final Map<String, InventoryCatalogItem> _items = {};
   final Map<String, double> _stock = {};
   final List<InventoryMovement> _movements = [];
@@ -185,11 +189,14 @@ class InventoryStore extends ChangeNotifier {
     if (!quantity.isFinite || quantity <= 0) throw ArgumentError('Kuantitas harus lebih besar dari nol.');
   }
   Future<void> _persist() async {
-    final prefs = await SharedPreferences.getInstance();
     final raw = jsonEncode({'version': 1, 'nextMovementId': _nextMovementId,
       'items': _items.values.map((v) => v.toJson()).toList(), 'stock': _stock,
       'movements': _movements.map((v) => v.toJson()).toList(), 'processedOrderIds': _processedOrderIds.toList()});
-    if (!await prefs.setString(storageKey, raw)) throw StateError('Gagal menyimpan inventory.');
+    final write = _persistString;
+    final saved = write != null
+        ? await write(storageKey, raw)
+        : await (await SharedPreferences.getInstance()).setString(storageKey, raw);
+    if (!saved) throw StateError('Gagal menyimpan inventory.');
   }
   List<InventoryCatalogItem> get items { _ready(); return List.unmodifiable(_items.values); }
   double stockFor(String outletId, String itemId) { _ready(); return _stock[_key(outletId, itemId)] ?? 0; }
