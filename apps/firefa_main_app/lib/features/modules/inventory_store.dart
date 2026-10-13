@@ -118,27 +118,201 @@ class FirefaInventoryStore extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(storageKey);
+
+      // Decode and validate into temporary collections. Corrupt persisted
+      // data must never leave the live store partially restored.
+      var restoredItems = <FirefaInventoryItem>[];
+      var restoredMovements = <FirefaStockMovement>[];
+      var restoredOpnames = <FirefaStockOpname>[];
+      var restoredRecipes = <FirefaRecipeLine>[];
+      var restoredProcessedOrders = <String>{};
+      var restoredReversedOrders = <String>{};
+      var nextId = 1;
+      var nextMovementId = 1;
+      var nextOpnameId = 1;
+
       if (raw != null && raw.isNotEmpty) {
-        final decoded = jsonDecode(raw) as Map<String, dynamic>;
-        final restored = (decoded['items'] as List<dynamic>)
+        final decoded = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+        if (decoded['version'] != 1) {
+          throw const FormatException('Versi inventory tidak didukung.');
+        }
+        final rawItems = decoded['items'];
+        if (rawItems is! List) {
+          throw const FormatException('Daftar item inventory tidak valid.');
+        }
+        restoredItems = rawItems
             .map((entry) => FirefaInventoryItem.fromJson(
-                Map<String, dynamic>.from(entry as Map)))
+                  Map<String, dynamic>.from(entry as Map),
+                ))
             .toList();
-        _items..clear()..addAll(restored);
-        _nextId = decoded['nextId'] as int;
-        _movements..clear()..addAll((decoded['movements'] as List<dynamic>? ?? []).map((entry) => FirefaStockMovement.fromJson(Map<String,dynamic>.from(entry as Map))));
-        _nextMovementId = decoded['nextMovementId'] as int? ?? 1;
-        _opnames..clear()..addAll((decoded['opnames'] as List<dynamic>? ?? []).map((entry) => FirefaStockOpname.fromJson(Map<String, dynamic>.from(entry as Map))));
-        _nextOpnameId = decoded['nextOpnameId'] as int? ?? 1;
-        _recipes..clear()..addAll((decoded['recipes'] as List<dynamic>? ?? []).map((entry) => FirefaRecipeLine.fromJson(Map<String, dynamic>.from(entry as Map))));
-        _processedOrderIds..clear()..addAll((decoded['processedOrderIds'] as List<dynamic>? ?? []).whereType<String>());
-        _reversedOrderIds..clear()..addAll((decoded['reversedOrderIds'] as List<dynamic>? ?? []).whereType<String>());
+        restoredMovements = (decoded['movements'] as List<dynamic>? ?? [])
+            .map((entry) => FirefaStockMovement.fromJson(
+                  Map<String, dynamic>.from(entry as Map),
+                ))
+            .toList();
+        restoredOpnames = (decoded['opnames'] as List<dynamic>? ?? [])
+            .map((entry) => FirefaStockOpname.fromJson(
+                  Map<String, dynamic>.from(entry as Map),
+                ))
+            .toList();
+        restoredRecipes = (decoded['recipes'] as List<dynamic>? ?? [])
+            .map((entry) => FirefaRecipeLine.fromJson(
+                  Map<String, dynamic>.from(entry as Map),
+                ))
+            .toList();
+        restoredProcessedOrders = _readStringSet(
+          decoded['processedOrderIds'],
+          'processedOrderIds',
+        );
+        restoredReversedOrders = _readStringSet(
+          decoded['reversedOrderIds'],
+          'reversedOrderIds',
+        );
+        nextId = _readPositiveSequence(decoded['nextId'], 'nextId');
+        nextMovementId = _readPositiveSequence(
+          decoded['nextMovementId'] ?? 1,
+          'nextMovementId',
+        );
+        nextOpnameId = _readPositiveSequence(
+          decoded['nextOpnameId'] ?? 1,
+          'nextOpnameId',
+        );
+
+        _validateRestoredInventory(
+          items: restoredItems,
+          movements: restoredMovements,
+          opnames: restoredOpnames,
+          recipes: restoredRecipes,
+          processedOrderIds: restoredProcessedOrders,
+          reversedOrderIds: restoredReversedOrders,
+        );
       }
+
+      _items
+        ..clear()
+        ..addAll(restoredItems);
+      _movements
+        ..clear()
+        ..addAll(restoredMovements);
+      _opnames
+        ..clear()
+        ..addAll(restoredOpnames);
+      _recipes
+        ..clear()
+        ..addAll(restoredRecipes);
+      _processedOrderIds
+        ..clear()
+        ..addAll(restoredProcessedOrders);
+      _reversedOrderIds
+        ..clear()
+        ..addAll(restoredReversedOrders);
+      _nextId = nextId;
+      _nextMovementId = nextMovementId;
+      _nextOpnameId = nextOpnameId;
       _initialized = true;
       notifyListeners();
     } catch (_) {
       _initializing = null;
       rethrow;
+    }
+  }
+
+  Set<String> _readStringSet(dynamic value, String field) {
+    if (value == null) return <String>{};
+    if (value is! List || value.any((entry) => entry is! String || entry.trim().isEmpty)) {
+      throw FormatException('Daftar $field pada inventory tidak valid.');
+    }
+    return value.cast<String>().toSet();
+  }
+
+  int _readPositiveSequence(dynamic value, String field) {
+    if (value is! int || value < 1) {
+      throw FormatException('Nomor urut $field pada inventory tidak valid.');
+    }
+    return value;
+  }
+
+  void _validateRestoredInventory({
+    required List<FirefaInventoryItem> items,
+    required List<FirefaStockMovement> movements,
+    required List<FirefaStockOpname> opnames,
+    required List<FirefaRecipeLine> recipes,
+    required Set<String> processedOrderIds,
+    required Set<String> reversedOrderIds,
+  }) {
+    final itemIds = <String>{};
+    for (final item in items) {
+      final identity = '${item.outletId}\\u0000${item.id}';
+      if (item.id.trim().isEmpty ||
+          item.outletId.trim().isEmpty ||
+          item.name.trim().isEmpty ||
+          item.name.trim().length > 80 ||
+          !units.contains(item.unit) ||
+          item.stock < 0 ||
+          item.stock > 999999999 ||
+          item.minimumStock < 0 ||
+          item.minimumStock > 999999999 ||
+          !itemIds.add(identity)) {
+        throw const FormatException('Item pada snapshot inventory tidak valid.');
+      }
+    }
+
+    final movementIds = <String>{};
+    for (final movement in movements) {
+      if (movement.id.trim().isEmpty ||
+          movement.outletId.trim().isEmpty ||
+          movement.itemId.trim().isEmpty ||
+          movement.itemName.trim().isEmpty ||
+          movement.type.trim().isEmpty ||
+          movement.before < 0 ||
+          movement.before > 999999999 ||
+          movement.after < 0 ||
+          movement.after > 999999999 ||
+          movement.note.length > 240 ||
+          DateTime.tryParse(movement.timestamp) == null ||
+          !movementIds.add(movement.id)) {
+        throw const FormatException('Riwayat pergerakan stok tidak valid.');
+      }
+    }
+
+    final opnameIds = <String>{};
+    for (final record in opnames) {
+      if (record.id.trim().isEmpty ||
+          record.outletId.trim().isEmpty ||
+          record.itemId.trim().isEmpty ||
+          record.itemName.trim().isEmpty ||
+          record.systemStock < 0 ||
+          record.systemStock > 999999999 ||
+          record.physicalStock < 0 ||
+          record.physicalStock > 999999999 ||
+          record.note.length > 200 ||
+          !['pending', 'approved', 'rejected'].contains(record.status) ||
+          DateTime.tryParse(record.createdAt) == null ||
+          (record.resolvedAt != null &&
+              DateTime.tryParse(record.resolvedAt!) == null) ||
+          (record.status == 'pending' && record.resolvedAt != null) ||
+          (record.status != 'pending' && record.resolvedAt == null) ||
+          !opnameIds.add(record.id)) {
+        throw const FormatException('Catatan stock opname tidak valid.');
+      }
+    }
+
+    final recipeKeys = <String>{};
+    for (final recipe in recipes) {
+      final key = '${recipe.outletId}\\u0000${recipe.menuId}\\u0000${recipe.ingredientId}';
+      if (recipe.outletId.trim().isEmpty ||
+          recipe.menuId.trim().isEmpty ||
+          recipe.ingredientId.trim().isEmpty ||
+          recipe.quantity <= 0 ||
+          recipe.quantity > 999999999 ||
+          !itemIds.contains('${recipe.outletId}\\u0000${recipe.ingredientId}') ||
+          !recipeKeys.add(key)) {
+        throw const FormatException('Resep inventory pada snapshot tidak valid.');
+      }
+    }
+
+    if (!processedOrderIds.containsAll(reversedOrderIds)) {
+      throw const FormatException('Penanda pembalikan stok tidak konsisten.');
     }
   }
 
