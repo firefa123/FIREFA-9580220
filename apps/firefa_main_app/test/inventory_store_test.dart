@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firefa_main_app/features/inventory/inventory_store.dart';
@@ -217,6 +218,19 @@ void main() {
     expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == coffee.id).stock, 100);
     expect(store.isOrderStockReversed('POS-ORDER-1', outletId: 'LEGACY-A'), isTrue);
     await store.waitForPendingSave();
+
+    // Verify the idempotency markers and restored stock reached durable storage,
+    // so a process restart cannot replay the deduction or cancellation.
+    final prefs = await SharedPreferences.getInstance();
+    final persisted = jsonDecode(prefs.getString('firefa_inventory_v1')!) as Map<String, dynamic>;
+    expect(
+      (persisted['reversedOrderIds'] as List).cast<String>(),
+      contains('LEGACY-A\\u0000POS-ORDER-1'),
+    );
+    final persistedCoffee = (persisted['items'] as List)
+        .map((entry) => Map<String, dynamic>.from(entry as Map))
+        .singleWhere((item) => item['id'] == coffee.id);
+    expect(persistedCoffee['stock'], 100);
   });
 
 }
