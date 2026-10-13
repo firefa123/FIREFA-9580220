@@ -107,5 +107,32 @@ class FirefaTableStore extends ChangeNotifier {
     unawaited(_pendingSave.catchError((Object e) { debugPrint('Table save failed: $e'); }));
   }
 
+
+  List<Map<String, dynamic>> exportLocalSnapshot() {
+    if (!_initialized) throw StateError('Meja belum diinisialisasi');
+    return _tables.map((table) => table.toJson()).toList();
+  }
+
+  void validateLocalSnapshot(List<dynamic> snapshot) {
+    final tables = snapshot.map((e) => FirefaTable.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+    final ids = <String>{};
+    for (final table in tables) {
+      if (table.id.trim().isEmpty || table.outletId.trim().isEmpty || table.name.trim().isEmpty ||
+          !ids.add('${table.outletId}:${table.id}')) {
+        throw const FormatException('Data meja pada backup tidak valid.');
+      }
+    }
+  }
+
+  Future<void> restoreLocalSnapshot(List<dynamic> snapshot) async {
+    if (!_initialized) throw StateError('Meja belum diinisialisasi');
+    validateLocalSnapshot(snapshot);
+    final tables = snapshot.map((e) => FirefaTable.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+    _tables..clear()..addAll(tables);
+    notifyListeners();
+    _save();
+    await waitForPendingSave();
+  }
+
   Future<void> waitForPendingSave() => _pendingSave;
 }
