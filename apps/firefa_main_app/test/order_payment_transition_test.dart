@@ -44,12 +44,11 @@ void main() {
       total: 8000,
     );
 
-    expect(order.advanceStatus(), isTrue);
-    expect(order.advanceStatus(), isTrue);
-    expect(order.advanceStatus(), isTrue);
-    expect(order.advanceStatus(), isTrue);
+    expect(order.advanceStatus(), isTrue); // preparing
+    expect(order.advanceStatus(), isTrue); // ready
+    expect(order.advanceStatus(), isTrue); // served
     expect(order.status, FirefaOrderStatus.served);
-    expect(order.advanceStatus(), isFalse);
+    expect(order.advanceStatus(), isFalse); // unpaid cannot complete
 
     expect(order.markPaid(), isTrue);
     expect(order.advanceStatus(), isTrue);
