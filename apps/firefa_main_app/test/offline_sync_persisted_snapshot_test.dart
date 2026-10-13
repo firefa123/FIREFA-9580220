@@ -55,6 +55,17 @@ void main() {
 
     final queue = FirefaOfflineSyncQueue.instance;
     await expectLater(queue.initialize(), throwsFormatException);
+
+    // A corrupt snapshot must not leave the singleton permanently poisoned.
+    await prefs.setString(
+      'firefa_sync_outbox_v1',
+      jsonEncode({
+        'version': 1,
+        'nextSequence': 1,
+        'entries': <Map<String, dynamic>>[],
+      }),
+    );
+    await expectLater(queue.initialize(), completes);
   });
 
   test('restore recovers interrupted sends as pending', () async {
