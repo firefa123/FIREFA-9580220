@@ -7,7 +7,7 @@ import '../../controllers/receipt_controller.dart';
 import '../../models/payment_model.dart';
 import '../../models/receipt_model.dart';
 import '../../models/transaction_model.dart';
-import '../../repositories/in_memory_order_repository.dart';
+import '../../repositories/local_order_repository.dart';
 
 class PosPage extends StatefulWidget {
   const PosPage({super.key});
@@ -21,7 +21,7 @@ class _PosPageState extends State<PosPage> {
   final checkoutController = CheckoutController();
   final paymentController = PaymentController();
   final receiptController = ReceiptController();
-  final orderRepository = InMemoryOrderRepository();
+  final orderRepository = LocalOrderRepository();
 
   final products = const [
     {'name': 'Nasi Goreng', 'price': 20000},
