@@ -17,8 +17,27 @@ class InMemoryOrderRepository implements OrderRepository {
             line.name.trim().isEmpty ||
             line.unitPrice < 0 ||
             line.quantity <= 0 ||
+            line.quantity > 999999999 ||
             line.unitPrice != 0 && line.quantity > 999999999 ~/ line.unitPrice)) {
       throw ArgumentError('Data transaksi tidak valid.');
+    }
+    if (transaction.itemDetails.isNotEmpty) {
+      var calculatedTotal = 0;
+      for (final line in transaction.itemDetails) {
+        final subtotal = line.unitPrice * line.quantity;
+        if (calculatedTotal > 999999999 - subtotal) {
+          throw ArgumentError('Total detail transaksi melebihi batas.');
+        }
+        calculatedTotal += subtotal;
+      }
+      if (calculatedTotal.toDouble() != transaction.totalAmount ||
+          transaction.itemIds.length != transaction.itemDetails.length ||
+          !_sameList(
+            transaction.itemIds,
+            transaction.itemDetails.map((line) => line.id).toList(),
+          )) {
+        throw ArgumentError('Detail item tidak sesuai dengan total transaksi.');
+      }
     }
 
     final existing = _transactions[transaction.id];
