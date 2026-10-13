@@ -58,6 +58,15 @@ void main() {
     final ingredientId = inventory.forOutlet('OUTLET-A').single.id;
     final menuId = menu.forOutlet('OUTLET-A').single.id;
     final tableId = tables.forOutlet('OUTLET-A').single.id;
+    // Deletion now protects non-zero stock. Clear the live stock after the
+    // backup is taken so this test can still verify restoration of 500 units.
+    expect(inventory.adjust(
+      outletId: 'OUTLET-A',
+      id: ingredientId,
+      type: 'out',
+      amount: 500,
+      note: 'Prepare empty catalog for restore test',
+    ), isTrue);
     expect(inventory.remove('OUTLET-A', ingredientId), isTrue);
     expect(menu.remove('OUTLET-A', menuId), isTrue);
     expect(tables.remove('OUTLET-A', tableId), isTrue);
