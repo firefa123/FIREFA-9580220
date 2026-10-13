@@ -21,7 +21,7 @@ void main() {
       quantity: 100,
     );
 
-    const service = OrderInventoryService(inventory: inventory);
+    final service = OrderInventoryService(inventory: inventory);
     const recipes = [
       RecipeIngredient(menuId: 'espresso', ingredientId: 'coffee-beans', quantity: 10),
       RecipeIngredient(menuId: 'espresso', ingredientId: 'coffee-beans', quantity: 2),
