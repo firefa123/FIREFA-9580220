@@ -113,6 +113,44 @@ class _ReportsPageState extends State<ReportsPage> {
     ));
   }
 
+  Future<void> _copyProductCsv(String outletId, List<FirefaOrder> paidOrders) async {
+    if (!allowed || outlet.selectedOutletId != outletId ||
+        paidOrders.any((order) => order.outletId != outletId ||
+            order.paymentStatus != FirefaPaymentStatus.paid ||
+            order.status == FirefaOrderStatus.cancelled)) {
+      return;
+    }
+
+    final products = <String, ({int quantity, int revenue})>{};
+    for (final order in paidOrders) {
+      for (final item in order.items) {
+        final current = products[item.productName] ??
+            (quantity: 0, revenue: 0);
+        products[item.productName] = (
+          quantity: current.quantity + item.quantity,
+          revenue: current.revenue + item.total,
+        );
+      }
+    }
+    final sorted = products.entries.toList()
+      ..sort((a, b) {
+        final revenue = b.value.revenue.compareTo(a.value.revenue);
+        return revenue != 0 ? revenue : a.key.compareTo(b.key);
+      });
+    final csv = <String>[
+      'Produk,Qty Terjual,Nilai Penjualan',
+      for (final entry in sorted)
+        [entry.key, entry.value.quantity.toString(),
+          entry.value.revenue.toString()].map(_csvCell).join(','),
+    ].join('\\r\\n');
+
+    if (!mounted || !allowed || outlet.selectedOutletId != outletId) return;
+    await Clipboard.setData(ClipboardData(text: csv));
+    if (!mounted || !allowed || outlet.selectedOutletId != outletId) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('CSV ${sorted.length} produk Paid disalin ke clipboard.'),
+    ));
+  }
   Future<void> _selectDates() async {
     final picked = await showDateRangePicker(
       context: context,
@@ -169,16 +207,22 @@ class _ReportsPageState extends State<ReportsPage> {
         final cancelled = visible.where((order) =>
             order.status == FirefaOrderStatus.cancelled).length;
         final paidTotal = paid.fold<int>(0, (sum, order) => sum + order.total);
-        final byProduct = <String, int>{};
+        final byProduct = <String, ({int quantity, int revenue})>{};
         for (final order in paid) {
           for (final item in order.items) {
-            byProduct.update(item.productName, (value) => value + item.quantity,
-                ifAbsent: () => item.quantity);
+            final current = byProduct[item.productName] ??
+                (quantity: 0, revenue: 0);
+            byProduct[item.productName] = (
+              quantity: current.quantity + item.quantity,
+              revenue: current.revenue + item.total,
+            );
           }
         }
         final topProducts = byProduct.entries.toList()
           ..sort((a, b) {
-            final qty = b.value.compareTo(a.value);
+            final revenue = b.value.revenue.compareTo(a.value.revenue);
+            if (revenue != 0) return revenue;
+            final qty = b.value.quantity.compareTo(a.value.quantity);
             return qty != 0 ? qty : a.key.compareTo(b.key);
           });
         return Column(
@@ -234,7 +278,12 @@ class _ReportsPageState extends State<ReportsPage> {
                 OutlinedButton.icon(
                   onPressed: () => _copyCsv(outletId, visible),
                   icon: const Icon(Icons.copy_all),
-                  label: Text('Salin CSV (${visible.length})'),
+                  label: Text('CSV pesanan (${visible.length})'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _copyProductCsv(outletId, paid),
+                  icon: const Icon(Icons.inventory_2_outlined),
+                  label: Text('CSV produk (${paid.length} Paid)'),
                 ),
               ],
             ),
@@ -260,8 +309,15 @@ class _ReportsPageState extends State<ReportsPage> {
                 child: Row(children: [
                   Expanded(child: Text(entry.key,
                       overflow: TextOverflow.ellipsis)),
-                  Text('${entry.value} item',
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('${entry.value.quantity} item',
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      Text(_money(entry.value.revenue),
+                          style: const TextStyle(color: muted, fontSize: 12)),
+                    ],
+                  ),
                 ]),
               ),
             const SizedBox(height: 22),
