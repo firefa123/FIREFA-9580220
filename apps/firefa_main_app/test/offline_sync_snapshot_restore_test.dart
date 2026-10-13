@@ -52,6 +52,30 @@ void main() {
     await queue.waitForPendingSave();
   });
 
+  test('malformed event payload is normalized and leaves queue intact', () async {
+    final queue = FirefaOfflineSyncQueue.instance;
+    final existing = queue.enqueueOrder(
+      makeOrder('malformed-restore-order', 'restore-outlet'),
+      'order.created',
+    );
+    await queue.waitForPendingSave();
+    final before = queue.exportSnapshot();
+
+    expect(
+      () => queue.restoreCombinedSnapshot({
+        'version': 1,
+        'nextSequence': 20,
+        'entries': [null],
+      }),
+      throwsFormatException,
+    );
+    expect(queue.findEvent(existing.eventId), isNotNull);
+    expect(queue.exportSnapshot()['entries'], before['entries']);
+
+    await queue.removeEvent(existing.eventId);
+    await queue.waitForPendingSave();
+  });
+
   test('restore validates identity and recovers interrupted sends', () async {
     final queue = FirefaOfflineSyncQueue.instance;
     final existing = queue.enqueueOrder(makeOrder('restore-order', 'restore-outlet'), 'order.created');
