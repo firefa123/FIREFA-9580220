@@ -467,7 +467,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       _save();
       await waitForPendingSave();
       return true;
-    } catch (error) {
+    } catch (error, stackTrace) {
       _items
         ..clear()
         ..addAll(itemsBefore);
@@ -486,7 +486,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       } catch (_) {
         // Preserve the original storage error for the caller.
       }
-      Error.throwWithStackTrace(error, StackTrace.current);
+      Error.throwWithStackTrace(error, stackTrace);
     }
   }
 
