@@ -22,6 +22,27 @@ void main() {
     ]), isNull);
   });
 
+  test('transaction transitions cannot skip payment or revive terminal states', () {
+    final controller = CheckoutController();
+    final awaiting = controller.checkout([
+      CartItemModel(id: 'coffee', name: 'Coffee', price: 1000),
+    ])!;
+
+    expect(controller.complete(awaiting).status, TransactionStatus.awaitingPayment);
+    final paid = controller.markPaid(awaiting);
+    expect(paid.status, TransactionStatus.paid);
+    expect(controller.markPaid(paid).status, TransactionStatus.paid);
+    expect(controller.cancel(paid).status, TransactionStatus.paid);
+    final completed = controller.complete(paid);
+    expect(completed.status, TransactionStatus.completed);
+    expect(controller.cancel(completed).status, TransactionStatus.completed);
+
+    final cancelled = controller.cancel(awaiting);
+    expect(cancelled.status, TransactionStatus.cancelled);
+    expect(controller.markPaid(cancelled).status, TransactionStatus.cancelled);
+    expect(controller.complete(cancelled).status, TransactionStatus.cancelled);
+  });
+
   test('checkout calculates total and generates distinct transaction IDs', () {
     final controller = CheckoutController();
     final cart = [
