@@ -4,7 +4,6 @@ import 'package:firefa_main_app/features/orders/controllers/payment_controller.d
 import 'package:firefa_main_app/features/orders/controllers/receipt_controller.dart';
 import 'package:firefa_main_app/features/orders/models/cart_item_model.dart';
 import 'package:firefa_main_app/features/orders/models/payment_model.dart';
-import 'package:firefa_main_app/features/orders/models/transaction_model.dart';
 
 void main() {
   test('receipt requires matching paid transaction and payment', () {
