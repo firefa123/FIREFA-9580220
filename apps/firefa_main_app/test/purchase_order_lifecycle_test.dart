@@ -52,7 +52,7 @@ void main() {
     expect(po.remainingQuantity, 8);
     expect(po.totalCost, 16000);
 
-    expect(orders.receive(
+    expect(await orders.receiveDurably(
       outletId: outletId,
       orderId: po.id,
       quantity: 3,
@@ -64,7 +64,7 @@ void main() {
     expect(po.receipts, hasLength(1));
     expect(inventory.forOutlet(outletId).single.stock, 13);
 
-    expect(orders.receive(
+    expect(await orders.receiveDurably(
       outletId: outletId,
       orderId: po.id,
       quantity: 6,
@@ -72,7 +72,7 @@ void main() {
     expect(inventory.forOutlet(outletId).single.stock, 13);
     expect(orders.forOutlet(outletId).single.receivedQuantity, 3);
 
-    expect(orders.receive(
+    expect(await orders.receiveDurably(
       outletId: outletId,
       orderId: po.id,
       quantity: 5,
@@ -94,7 +94,7 @@ void main() {
       note: 'Second delivery',
     ), isTrue);
     final second = orders.forOutlet(outletId).first;
-    expect(orders.receive(
+    expect(await orders.receiveDurably(
       outletId: outletId,
       orderId: second.id,
       quantity: 1,
@@ -106,7 +106,7 @@ void main() {
     expect(cancelled.status, 'cancelled');
     expect(cancelled.receivedQuantity, 1);
     expect(cancelled.remainingQuantity, 1);
-    expect(orders.receive(
+    expect(await orders.receiveDurably(
       outletId: outletId,
       orderId: second.id,
       quantity: 1,
