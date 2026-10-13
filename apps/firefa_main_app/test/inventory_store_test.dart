@@ -137,6 +137,7 @@ void main() {
     final milk = store.forOutlet('LEGACY-A').singleWhere((item) => item.name == 'Milk');
     expect(store.addRecipeLine(outletId: 'LEGACY-A', menuId: 'menu-latte', ingredientId: coffee.id, quantity: 18), isTrue);
     expect(store.addRecipeLine(outletId: 'LEGACY-A', menuId: 'menu-latte', ingredientId: milk.id, quantity: 200), isTrue);
+    expect(store.remove('LEGACY-A', coffee.id), isFalse);
     expect(() => store.validateOrderStock(outletId: 'LEGACY-A', menuLines: [(menuId: 'menu-latte', quantity: 2)]), throwsStateError);
     expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == coffee.id).stock, 100);
     expect(store.addRecipeLine(outletId: 'LEGACY-A', menuId: 'menu-latte', ingredientId: milk.id, quantity: 100), isTrue);
