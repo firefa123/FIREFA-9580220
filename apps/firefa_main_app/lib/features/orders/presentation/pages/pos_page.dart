@@ -52,15 +52,17 @@ class _PosPageState extends State<PosPage> {
                 final product = products[index];
                 return Card(
                   child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        posController.addItem(
-                          product['name'] as String,
-                          product['price'] as int,
-                        );
-                        _resetPaymentState();
-                      });
-                    },
+                    onTap: transaction != null
+                        ? null
+                        : () {
+                            setState(() {
+                              posController.addItem(
+                                product['name'] as String,
+                                product['price'] as int,
+                              );
+                              _resetPaymentState();
+                            });
+                          },
                     child: Center(
                       child: Text(
                         '${product['name']}\nRp ${product['price']}',
@@ -146,6 +148,11 @@ class _PosPageState extends State<PosPage> {
         const SizedBox(height: 8),
         const Text('Pilih metode pembayaran'),
         const SizedBox(height: 8),
+        OutlinedButton(
+          onPressed: _cancelTransaction,
+          child: const Text('Batalkan Transaksi'),
+        ),
+        const SizedBox(height: 8),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -170,8 +177,17 @@ class _PosPageState extends State<PosPage> {
         Text('Status: ${payment!.status.name}'),
         const SizedBox(height: 8),
         FilledButton(
-          onPressed: _markPaymentPaid,
+          onPressed: payment!.status == PaymentStatus.pending
+              ? _markPaymentPaid
+              : null,
           child: const Text('Tandai Lunas'),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton(
+          onPressed: payment!.status == PaymentStatus.pending
+              ? _cancelTransaction
+              : null,
+          child: const Text('Batalkan Transaksi'),
         ),
       ],
     );
@@ -269,6 +285,36 @@ class _PosPageState extends State<PosPage> {
       payment = paidPayment;
       transaction = completedTransaction;
       receipt = generatedReceipt;
+    });
+  }
+
+  Future<void> _cancelTransaction() async {
+    final currentTransaction = transaction;
+    final currentPayment = payment;
+    if (currentTransaction == null ||
+        (currentTransaction.status != TransactionStatus.awaitingPayment &&
+            currentTransaction.status != TransactionStatus.pending) ||
+        (currentPayment != null &&
+            currentPayment.status != PaymentStatus.pending)) {
+      return;
+    }
+
+    final cancelledTransaction =
+        checkoutController.cancel(currentTransaction);
+    final failedPayment = currentPayment == null
+        ? null
+        : paymentController.markFailed(currentPayment);
+
+    if (failedPayment != null) {
+      await orderRepository.savePayment(failedPayment);
+    }
+    await orderRepository.saveTransaction(cancelledTransaction);
+
+    if (!mounted) return;
+    setState(() {
+      transaction = null;
+      payment = null;
+      receipt = null;
     });
   }
 
