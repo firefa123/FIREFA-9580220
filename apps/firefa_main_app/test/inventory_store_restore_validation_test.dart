@@ -100,12 +100,26 @@ void main() {
       'reversedOrderIds': [],
     };
 
+    final orphanMovement = snapshot(type: 'in', before: 2, after: 3);
+    (orphanMovement['movements'] as List).single['itemId'] = 'missing-item';
+    final orphanRecipe = snapshot(type: 'in', before: 2, after: 3);
+    orphanRecipe['recipes'] = [
+      {
+        'outletId': 'outlet-a',
+        'menuId': 'menu-coffee',
+        'ingredientId': 'missing-item',
+        'quantity': 1,
+      },
+    ];
+
     final store = FirefaInventoryStore.instance;
     for (final invalid in [
       snapshot(type: 'unknown', before: 2, after: 3),
       snapshot(type: 'in', before: 5, after: 3),
       snapshot(type: 'out', before: 2, after: 4),
       snapshot(type: 'correction', before: 3, after: 3),
+      orphanMovement,
+      orphanRecipe,
     ]) {
       await prefs.setString(FirefaInventoryStore.storageKey, jsonEncode(invalid));
       await expectLater(store.initialize(), throwsFormatException);
