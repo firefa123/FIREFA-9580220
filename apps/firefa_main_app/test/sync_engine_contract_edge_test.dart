@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firefa_main_app/features/modules/sync_adapter.dart';
 import 'package:firefa_main_app/features/modules/sync_engine.dart';
-import 'package:firefa_main_app/features/modules/offline_sync_queue.dart';
 
 void main() {
   const engine = FirefaSyncEngine();
@@ -18,12 +17,12 @@ void main() {
   });
 
   test('acknowledgement requires exact event identity and nonblank reference', () {
-    const event = FirefaSyncEnvelope(
+    final event = FirefaSyncEnvelope(
       eventId: 'evt-123',
       outletId: 'outlet-1',
       orderId: 'order-1',
       eventType: 'order.created',
-      createdAt: null,
+      createdAt: DateTime.utc(2026, 10, 13),
       orderSnapshot: {},
     );
 
