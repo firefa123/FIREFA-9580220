@@ -30,6 +30,7 @@ class FirefaTableStore extends ChangeNotifier {
   static const _key = 'firefa_tables_v1';
   final List<FirefaTable> _tables = [];
   bool _initialized = false;
+  bool Function(String outletId, String tableName)? _hasActiveOrder;
   Future<void> _pendingSave = Future<void>.value();
 
   Future<void> initialize() async {
@@ -44,6 +45,15 @@ class FirefaTableStore extends ChangeNotifier {
     _initialized = true;
     notifyListeners();
   }
+
+  /// Registers the order store's source of truth for active dine-in orders.
+  /// Keeping this as a callback avoids coupling the two persistence stores.
+  void setActiveOrderChecker(bool Function(String outletId, String tableName)? checker) {
+    _hasActiveOrder = checker;
+  }
+
+  bool _hasActiveOrderFor(FirefaTable table) =>
+      _hasActiveOrder?.call(table.outletId, table.name) ?? false;
 
   List<FirefaTable> forOutlet(String outletId) {
     if (!_initialized) throw StateError('FirefaTableStore must be initialized');
@@ -66,6 +76,7 @@ class FirefaTableStore extends ChangeNotifier {
     final index = _tables.indexWhere((t) => t.id == id && t.outletId == outletId);
     if (index < 0) return false;
     if (_tables[index].occupied == occupied) return true;
+    if (!occupied && _hasActiveOrderFor(_tables[index])) return false;
     _tables[index] = _tables[index].copyWith(occupied: occupied);
     notifyListeners();
     _save();
@@ -76,7 +87,8 @@ class FirefaTableStore extends ChangeNotifier {
     if (!_initialized) return false;
     final normalized = name.trim();
     final index = _tables.indexWhere((t) => t.id == id && t.outletId == outletId);
-    if (index < 0 || normalized.isEmpty || normalized.length > 40) return false;
+    if (index < 0 || normalized.isEmpty || normalized.length > 40 ||
+        _hasActiveOrderFor(_tables[index])) return false;
     if (_tables.any((t) => t.outletId == outletId && t.id != id &&
         t.name.toLowerCase() == normalized.toLowerCase())) {
       return false;
@@ -91,7 +103,7 @@ class FirefaTableStore extends ChangeNotifier {
   bool remove(String outletId, String id) {
     if (!_initialized) return false;
     final index = _tables.indexWhere((t) => t.id == id && t.outletId == outletId);
-    if (index < 0) return false;
+    if (index < 0 || _hasActiveOrderFor(_tables[index])) return false;
     _tables.removeAt(index);
     notifyListeners();
     _save();
