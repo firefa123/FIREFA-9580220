@@ -213,6 +213,65 @@ class FirefaOrderStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Restores a validated backup and waits for the combined order/outbox
+  /// snapshot to persist. On failure, restore the previous in-memory state and
+  /// make a best-effort durable rollback before propagating the original error.
+  Future<void> restoreLocalSnapshotDurably(
+    Map<String, dynamic> snapshot,
+  ) async {
+    _ensureInitialized();
+    if (snapshot['version'] != 2) {
+      throw const FormatException('Versi backup tidak didukung.');
+    }
+    final nextNumber = snapshot['nextNumber'];
+    final rawOrders = snapshot['orders'];
+    final rawOutbox = snapshot['outbox'];
+    if (nextNumber is! int || rawOrders is! List || rawOutbox is! Map) {
+      throw const FormatException('Struktur backup FIREFA tidak valid.');
+    }
+    final restoredOrders = rawOrders
+        .map((entry) => FirefaOrder.fromJson(
+              Map<String, dynamic>.from(entry as Map),
+            ))
+        .toList();
+    final restoredOutbox = Map<String, dynamic>.from(rawOutbox);
+    _validateRestoredOrders(restoredOrders);
+    if (nextNumber < 1) {
+      throw const FormatException('Nomor urut order tidak valid.');
+    }
+
+    final queue = FirefaOfflineSyncQueue.instance;
+    final previousOrders = List<FirefaOrder>.from(_orders);
+    final previousNextNumber = _nextNumber;
+    final previousOutbox = queue.exportSnapshot();
+
+    await queue.restoreCombinedSnapshotDurably(restoredOutbox);
+    try {
+      _orders
+        ..clear()
+        ..addAll(restoredOrders);
+      _nextNumber = nextNumber;
+      queue.reconcileOrders(_orders);
+      _scheduleSave();
+      await waitForPendingSave();
+      notifyListeners();
+    } catch (error, stackTrace) {
+      _orders
+        ..clear()
+        ..addAll(previousOrders);
+      _nextNumber = previousNextNumber;
+      try {
+        await queue.restoreCombinedSnapshotDurably(previousOutbox);
+        _scheduleSave();
+        await waitForPendingSave();
+      } catch (_) {
+        // Preserve the initial failure; next startup reconciles local snapshots.
+      }
+      notifyListeners();
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
   List<FirefaOrder> ordersForOutlet(String outletId) {
     _ensureInitialized();
 
