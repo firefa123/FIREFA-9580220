@@ -272,7 +272,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       if (movement.id.trim().isEmpty ||
           movement.outletId.trim().isEmpty ||
           movement.itemId.trim().isEmpty ||
-          !itemIds.contains('${movement.outletId}\\u0000${movement.itemId}') ||
+          !itemIds.contains('${movement.outletId}\u0000${movement.itemId}') ||
           movement.itemName.trim().isEmpty ||
           !const {'in', 'out', 'correction'}.contains(movement.type) ||
           movement.before < 0 ||
@@ -294,7 +294,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       if (record.id.trim().isEmpty ||
           record.outletId.trim().isEmpty ||
           record.itemId.trim().isEmpty ||
-          !itemIds.contains('${record.outletId}\\u0000${record.itemId}') ||
+          !itemIds.contains('${record.outletId}\u0000${record.itemId}') ||
           record.itemName.trim().isEmpty ||
           record.systemStock < 0 ||
           record.systemStock > 999999999 ||
@@ -318,7 +318,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       if (recipe.outletId.trim().isEmpty ||
           recipe.menuId.trim().isEmpty ||
           recipe.ingredientId.trim().isEmpty ||
-          !itemIds.contains('${recipe.outletId}\\u0000${recipe.ingredientId}') ||
+          !itemIds.contains('${recipe.outletId}\u0000${recipe.ingredientId}') ||
           recipe.quantity <= 0 ||
           recipe.quantity > 999999999 ||
           !recipeKeys.add(key)) {
