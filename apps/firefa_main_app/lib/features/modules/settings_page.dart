@@ -104,8 +104,9 @@ class _SettingsPageState extends State<SettingsPage> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Restore Local Backup?'),
         content: const Text(
-          'Data order dan antrean sync aktif akan diganti dengan snapshot '
-          'backup terakhir. Gunakan hanya jika perlu memulihkan data lokal.',
+          'Data order, antrean sync, inventory, katalog menu, dan meja aktif '
+          'akan diganti dengan snapshot backup terakhir. Backup versi lama '
+          'hanya memulihkan order dan antrean sync.',
         ),
         actions: [
           TextButton(
@@ -324,8 +325,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                       const SizedBox(height: 10),
                       const Text(
-                        'Backup ini tersimpan di perangkat yang sama. '
-                        'Belum dikirim ke cloud.',
+                        'Backup mencakup order, antrean sync, inventory, katalog menu, dan meja. '
+                        'Tersimpan di perangkat ini; belum dikirim ke cloud.',
                         style: TextStyle(
                           color: muted,
                           fontSize: 11,
