@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/auth/role_permissions.dart';
 import '../../core/outlet/active_outlet_store.dart';
 import 'table_store.dart';
+import 'order_store.dart';
 
 class TablesPage extends StatefulWidget {
   const TablesPage({super.key});
@@ -17,6 +18,7 @@ class _TablesPageState extends State<TablesPage> {
   static const muted = Color(0xFF64748B);
   final outlet = FirefaActiveOutletStore.instance;
   final store = FirefaTableStore.instance;
+  final orderStore = FirefaOrderStore.instance;
   late final Future<void> ready;
   String search = '';
   String occupancyFilter = 'all';
@@ -24,7 +26,7 @@ class _TablesPageState extends State<TablesPage> {
   @override
   void initState() {
     super.initState();
-    ready = store.initialize();
+    ready = Future.wait<void>([store.initialize(), orderStore.initialize()]);
     outlet.addListener(refresh);
     store.addListener(refresh);
   }
