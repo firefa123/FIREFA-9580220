@@ -75,7 +75,12 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
 
   Future<void> initialize() {
     if (_initialized) return Future<void>.value();
-    return _initialization ??= _initialize();
+    return _initialization ??= _initialize().catchError((Object error) {
+      // A failed read/validation must not poison the singleton forever. This
+      // allows a corrected snapshot or a fresh local store to be initialized.
+      _initialization = null;
+      throw error;
+    });
   }
 
   Future<void> _initialize() async {
