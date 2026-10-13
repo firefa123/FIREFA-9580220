@@ -58,12 +58,16 @@ class _PosPageState extends State<PosPage> {
       ..serviceRate = saved.serviceRate;
   }
 
-  void _saveCart() {
-    final id = outletId;
+  void _saveCart() => _saveCartForOutlet(outletId);
+
+  void _saveCartForOutlet(String id) {
+    _restoreOutlet(id);
+    final outletCart = carts[id]!;
+    final outletConfig = settings[id]!;
     persistentStore.saveCart(
       id,
       FirefaCartData(
-        items: cart.map((item) => FirefaCartItemData(
+        items: outletCart.map((item) => FirefaCartItemData(
           productId: item.product.id,
           productName: item.product.name,
           size: item.size,
@@ -72,12 +76,12 @@ class _PosPageState extends State<PosPage> {
           unitPrice: item.unitPrice,
           quantity: item.quantity,
         )).toList(),
-        orderType: config.orderType,
-        table: config.table,
-        discountType: config.discountType,
-        discountInput: config.discountInput,
-        taxRate: config.taxRate,
-        serviceRate: config.serviceRate,
+        orderType: outletConfig.orderType,
+        table: outletConfig.table,
+        discountType: outletConfig.discountType,
+        discountInput: outletConfig.discountInput,
+        taxRate: outletConfig.taxRate,
+        serviceRate: outletConfig.serviceRate,
       ),
     );
   }
@@ -638,7 +642,8 @@ class _PosPageState extends State<PosPage> {
       final tables = tableStore.forOutlet(sourceOutlet);
       final valid = tables.isEmpty
           ? const ['A01', 'A02', 'A03', 'B01'].contains(config.table)
-          : tables.any((table) => table.name == config.table);
+          : tables.any((table) =>
+              table.name == config.table && !table.occupied);
       if (!valid) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Pilih meja yang tersedia di daftar outlet sebelum checkout.')),
@@ -737,32 +742,58 @@ class _PosPageState extends State<PosPage> {
     if (_checkoutBusy || cart.isEmpty || !outletStore.canAccessOutlet(sourceOutlet)) {
       return;
     }
+
+    // Freeze the transaction snapshot before the first storage await. The
+    // selected outlet may change while local persistence is completing.
+    final checkoutOrderType = config.orderType;
+    final checkoutTable = config.table;
+    final checkoutDiscountType = config.discountType;
+    final checkoutDiscountInput = config.discountInput;
+    final checkoutTaxRate = config.taxRate;
+    final checkoutServiceRate = config.serviceRate;
+    final checkoutItems = cart.map((item) => _CartItem(
+      product: item.product,
+      size: item.size,
+      extras: List<String>.from(item.extras),
+      note: item.note,
+      unitPrice: item.unitPrice,
+      quantity: item.quantity,
+    )).toList();
+    final checkoutSubtotal = checkoutItems.fold<int>(0, (sum, item) => sum + item.total);
+    final checkoutDiscountAmount = checkoutDiscountType == 'Percent'
+        ? (checkoutSubtotal * checkoutDiscountInput.clamp(0, 100) / 100).round()
+        : checkoutDiscountInput.clamp(0, checkoutSubtotal);
+    final checkoutDiscountedSubtotal = checkoutSubtotal - checkoutDiscountAmount;
+    final checkoutTaxAmount = (checkoutDiscountedSubtotal * checkoutTaxRate / 100).round();
+    final checkoutServiceAmount = (checkoutDiscountedSubtotal * checkoutServiceRate / 100).round();
+    final checkoutGrandTotal = checkoutDiscountedSubtotal + checkoutTaxAmount + checkoutServiceAmount;
+
     setState(() => _checkoutBusy = true);
     FirefaOrder? createdOrder;
     FirefaOrderStore? checkoutOrderStore;
     try {
       final inventory = FirefaInventoryStore.instance;
       await inventory.initialize();
-      final stockLines = cart.map((item) => (menuId: item.product.id, quantity: item.quantity)).toList();
+      final stockLines = checkoutItems.map((item) => (menuId: item.product.id, quantity: item.quantity)).toList();
       inventory.validateOrderStock(outletId: sourceOutlet, menuLines: stockLines);
       final store = FirefaOrderStore.instance;
       checkoutOrderStore = store;
       final order = store.createOrder(
         outletId: sourceOutlet,
-        orderType: config.orderType,
-        tableId: config.orderType == 'Dine In' ? config.table : null,
-        items: cart.map((item) => FirefaOrderItem(
+        orderType: checkoutOrderType,
+        tableId: checkoutOrderType == 'Dine In' ? checkoutTable : null,
+        items: checkoutItems.map((item) => FirefaOrderItem(
           productName: item.product.name,
           productId: item.product.id,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           details: item.details,
         )).toList(),
-        subtotal: subtotal,
-        discount: discountAmount,
-        tax: taxAmount,
-        service: serviceAmount,
-        total: grandTotal,
+        subtotal: checkoutSubtotal,
+        discount: checkoutDiscountAmount,
+        tax: checkoutTaxAmount,
+        service: checkoutServiceAmount,
+        total: checkoutGrandTotal,
       );
       createdOrder = order;
       await inventory.consumeOrderStock(orderId: order.id, outletId: sourceOutlet, menuLines: stockLines);
@@ -773,12 +804,28 @@ class _PosPageState extends State<PosPage> {
         }
       }
       await store.waitForPendingSave();
+      if (checkoutOrderType == 'Dine In') {
+        final selectedTable = tableStore
+            .forOutlet(sourceOutlet)
+            .where((table) => table.name == checkoutTable)
+            .firstOrNull;
+        if (selectedTable != null && !selectedTable.occupied) {
+          if (!tableStore.setOccupied(
+            sourceOutlet,
+            selectedTable.id,
+            true,
+          )) {
+            throw StateError('Status meja tidak dapat diperbarui.');
+          }
+          await tableStore.waitForPendingSave();
+        }
+      }
       if (!mounted) return;
       setState(() {
-        cart.clear();
-        config.resetCharges();
+        carts[sourceOutlet]?.clear();
+        settings[sourceOutlet]?.resetCharges();
       });
-      _saveCart();
+      _saveCartForOutlet(sourceOutlet);
       await persistentStore.waitForPendingSave();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1154,7 +1201,10 @@ class _PosPageState extends State<PosPage> {
               final tables = tableStore.forOutlet(outletId);
               final names = tables.isEmpty
                   ? const ['A01', 'A02', 'A03', 'B01']
-                  : tables.map((table) => table.name).toList();
+                  : tables
+                      .where((table) => !table.occupied)
+                      .map((table) => table.name)
+                      .toList();
               final selected = names.contains(config.table)
                   ? config.table
                   : null;
