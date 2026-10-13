@@ -121,10 +121,34 @@ class InventoryStore extends ChangeNotifier {
         throw const FormatException('Penanda order inventory tidak valid.');
       }
 
+      // Migrate legacy order-only markers using the durable movement ledger.
+      // New markers are outlet-scoped; only retain an unscoped marker when no
+      // matching consumption record exists to identify its outlet safely.
+      final migratedProcessedIds = <String>{};
+      for (final savedId in restoredProcessedIds) {
+        if (savedId.contains('\u0000')) {
+          migratedProcessedIds.add(savedId);
+          continue;
+        }
+        final matchingOutlets = restoredMovements
+            .where((movement) =>
+                movement.type == 'order_consumption' &&
+                movement.referenceOrderId == savedId)
+            .map((movement) => movement.outletId)
+            .toSet();
+        if (matchingOutlets.isEmpty) {
+          migratedProcessedIds.add(savedId);
+        } else {
+          migratedProcessedIds.addAll(
+            matchingOutlets.map((outlet) => _orderKey(outlet, savedId)),
+          );
+        }
+      }
+
       _items.addEntries(restoredItems.map((item) => MapEntry(item.id, item)));
       _stock.addAll(restoredStock);
       _movements.addAll(restoredMovements);
-      _processedOrderIds.addAll(restoredProcessedIds);
+      _processedOrderIds.addAll(migratedProcessedIds);
       _nextMovementId = nextMovementId;
     }
     _initialized = true;
