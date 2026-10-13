@@ -367,7 +367,14 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     for (final order in orders) {
       FirefaSyncEntry? latest;
       for (final entry in _entries) {
-        if (entry.outletId == order.outletId && entry.orderId == order.id) {
+        if (entry.outletId != order.outletId || entry.orderId != order.id) {
+          continue;
+        }
+        // Backups or migrations may not preserve list ordering. Select the
+        // newest event by its durable timestamp rather than assuming the last
+        // serialized entry always represents the latest local intent.
+        if (latest == null ||
+            !entry.createdAt.isBefore(latest.createdAt)) {
           latest = entry;
         }
       }
