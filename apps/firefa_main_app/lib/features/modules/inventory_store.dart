@@ -256,7 +256,7 @@ class FirefaInventoryStore extends ChangeNotifier {
   }) {
     final itemIds = <String>{};
     for (final item in items) {
-      final identity = '${item.outletId}\\u0000${item.id}';
+      final identity = '${item.outletId}\u0000${item.id}';
       if (item.id.trim().isEmpty ||
           item.outletId.trim().isEmpty ||
           item.name.trim().isEmpty ||
@@ -288,7 +288,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       if (movement.id.trim().isEmpty ||
           movement.outletId.trim().isEmpty ||
           movement.itemId.trim().isEmpty ||
-          !itemIds.contains('${movement.outletId}\\u0000${movement.itemId}') ||
+          !itemIds.contains('${movement.outletId}\u0000${movement.itemId}') ||
           movement.itemName.trim().isEmpty ||
           !const {'in', 'out', 'correction'}.contains(movement.type) ||
           movement.before < 0 ||
@@ -325,7 +325,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       if (record.id.trim().isEmpty ||
           record.outletId.trim().isEmpty ||
           record.itemId.trim().isEmpty ||
-          !itemIds.contains('${record.outletId}\\u0000${record.itemId}') ||
+          !itemIds.contains('${record.outletId}\u0000${record.itemId}') ||
           record.itemName.trim().isEmpty ||
           record.systemStock < 0 ||
           record.systemStock > 999999999 ||
@@ -349,11 +349,11 @@ class FirefaInventoryStore extends ChangeNotifier {
     final recipeKeys = <String>{};
     for (final recipe in recipes) {
       final key =
-          '${recipe.outletId}\\u0000${recipe.menuId}\\u0000${recipe.ingredientId}';
+          '${recipe.outletId}\u0000${recipe.menuId}\u0000${recipe.ingredientId}';
       if (recipe.outletId.trim().isEmpty ||
           recipe.menuId.trim().isEmpty ||
           recipe.ingredientId.trim().isEmpty ||
-          !itemIds.contains('${recipe.outletId}\\u0000${recipe.ingredientId}') ||
+          !itemIds.contains('${recipe.outletId}\u0000${recipe.ingredientId}') ||
           recipe.quantity <= 0 ||
           recipe.quantity > 999999999 ||
           !recipeKeys.add(key)) {
