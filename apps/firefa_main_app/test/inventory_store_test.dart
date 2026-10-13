@@ -17,6 +17,32 @@ void main() {
     expect(store.items, hasLength(1));
   });
 
+  test('legacy inventory deletion protects stock, recipes, and pending opname', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = legacy.FirefaInventoryStore.instance;
+    await store.initialize();
+
+    expect(store.add(outletId: 'DELETE-GUARD', name: 'Beans', unit: 'gram', stock: 0, minimumStock: 0), isTrue);
+    final beans = store.forOutlet('DELETE-GUARD').single;
+    expect(store.removalBlockReason('DELETE-GUARD', beans.id), isNull);
+    expect(store.remove('DELETE-GUARD', beans.id), isTrue);
+
+    expect(store.add(outletId: 'DELETE-GUARD', name: 'Milk', unit: 'ml', stock: 20, minimumStock: 0), isTrue);
+    final milk = store.forOutlet('DELETE-GUARD').singleWhere((item) => item.name == 'Milk');
+    expect(store.removalBlockReason('DELETE-GUARD', milk.id), contains('Sisa stok'));
+    expect(store.remove('DELETE-GUARD', milk.id), isFalse);
+
+    expect(store.addRecipeLine(outletId: 'DELETE-GUARD', menuId: 'menu-latte', ingredientId: milk.id, quantity: 5), isTrue);
+    expect(store.adjust(outletId: 'DELETE-GUARD', id: milk.id, type: 'out', amount: 20, note: 'Test clear stock'), isTrue);
+    expect(store.removalBlockReason('DELETE-GUARD', milk.id), contains('resep'));
+    expect(store.remove('DELETE-GUARD', milk.id), isFalse);
+
+    expect(store.removeRecipeLine(outletId: 'DELETE-GUARD', menuId: 'menu-latte', ingredientId: milk.id), isTrue);
+    expect(store.createOpname(outletId: 'DELETE-GUARD', itemId: milk.id, physicalStock: 0, note: 'Verify zero'), isTrue);
+    expect(store.removalBlockReason('DELETE-GUARD', milk.id), contains('opname'));
+    expect(store.remove('DELETE-GUARD', milk.id), isFalse);
+    await store.waitForPendingSave();
+  });
   test('stock-in and stock-out persist outlet-scoped quantities and ledger', () async {
     final store = InventoryStore(); await store.initialize();
     await store.addItem(const InventoryCatalogItem(id: 'milk', name: 'Milk', unit: 'L', minimumStock: 1));
