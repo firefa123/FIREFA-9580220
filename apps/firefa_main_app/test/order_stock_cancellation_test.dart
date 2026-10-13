@@ -124,7 +124,7 @@ void main() {
     expect(rawInventory, isNotNull);
     final savedInventory = jsonDecode(rawInventory!) as Map<String, dynamic>;
     expect((savedInventory['reversedOrderIds'] as List).cast<String>(),
-        contains('CANCEL-TEST\\u0000${order.id}'));
+        contains('CANCEL-TEST\u0000${order.id}'));
     final savedItems = (savedInventory['items'] as List)
         .map((value) => Map<String, dynamic>.from(value as Map))
         .toList();
