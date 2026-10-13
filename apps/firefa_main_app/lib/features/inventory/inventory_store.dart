@@ -51,46 +51,75 @@ class InventoryStore extends ChangeNotifier {
     final raw = prefs.getString(storageKey);
     if (raw != null && raw.isNotEmpty) {
       final data = Map<String, dynamic>.from(jsonDecode(raw) as Map);
-      if (data['version'] != 1) throw const FormatException('Versi inventory tidak didukung.');
-      final items = (data['items'] as List).map((v) => InventoryCatalogItem.fromJson(Map<String, dynamic>.from(v as Map))).toList();
-      final stock = Map<String, dynamic>.from(data['stock'] as Map);
-      final movements = (data['movements'] as List).map((v) => InventoryMovement.fromJson(Map<String, dynamic>.from(v as Map))).toList();
-      for (final item in items) {
-        _validateItem(item);
-        if (_items.containsKey(item.id)) throw const FormatException('ID item duplikat.');
-        _items[item.id] = item;
+      if (data['version'] != 1) {
+        throw const FormatException('Versi inventory tidak didukung.');
       }
-      for (final entry in stock.entries) {
-        final quantity = (entry.value as num).toDouble();
-        if (!quantity.isFinite || quantity < 0) throw const FormatException('Stok tersimpan tidak valid.');
-        _stock[entry.key] = quantity;
-      }
-      _movements.addAll(movements);
-      final savedProcessedIds =
+
+      // Decode and validate into temporary collections first. A corrupt
+      // snapshot must not leave this instance partially initialized.
+      final restoredItems = (data['items'] as List)
+          .map((value) => InventoryCatalogItem.fromJson(
+                Map<String, dynamic>.from(value as Map),
+              ))
+          .toList();
+      final restoredStock = <String, double>{};
+      final restoredMovements = (data['movements'] as List)
+          .map((value) => InventoryMovement.fromJson(
+                Map<String, dynamic>.from(value as Map),
+              ))
+          .toList();
+      final restoredProcessedIds =
           (data['processedOrderIds'] as List? ?? const []).cast<String>();
-      for (final savedId in savedProcessedIds) {
-        if (savedId.contains('\u0000')) {
-          _processedOrderIds.add(savedId);
-          continue;
+      final nextMovementId = data['nextMovementId'];
+      if (nextMovementId is! int || nextMovementId < 1) {
+        throw const FormatException('Nomor pergerakan inventory tidak valid.');
+      }
+
+      final itemIds = <String>{};
+      for (final item in restoredItems) {
+        try {
+          _validateItem(item);
+        } catch (_) {
+          throw const FormatException('Item pada snapshot inventory tidak valid.');
         }
-        // Migrate v1 order-only markers to outlet-scoped identities using the
-        // durable consumption ledger. Keep an unresolvable legacy marker as a
-        // compatibility fallback rather than silently allowing a duplicate.
-        final matchingOutlets = movements
-            .where((movement) =>
-                movement.type == 'order_consumption' &&
-                movement.referenceOrderId == savedId)
-            .map((movement) => movement.outletId)
-            .toSet();
-        if (matchingOutlets.isEmpty) {
-          _processedOrderIds.add(savedId);
-        } else {
-          _processedOrderIds.addAll(
-            matchingOutlets.map((outlet) => _orderKey(outlet, savedId)),
-          );
+        if (!itemIds.add(item.id)) {
+          throw const FormatException('ID item duplikat.');
         }
       }
-      _nextMovementId = data['nextMovementId'] as int;
+      final knownStockKeys = <String>{};
+      for (final entry in (data['stock'] as Map).entries) {
+        final key = entry.key as String;
+        final value = entry.value;
+        if (key.trim().isEmpty || value is! num) {
+          throw const FormatException('Kuantitas stok tersimpan tidak valid.');
+        }
+        final quantity = value.toDouble();
+        if (!quantity.isFinite || quantity < 0) {
+          throw const FormatException('Kuantitas stok tersimpan tidak valid.');
+        }
+        restoredStock[key] = quantity;
+        knownStockKeys.add(key);
+      }
+      final movementIds = <String>{};
+      for (final movement in restoredMovements) {
+        if (movement.id.trim().isEmpty ||
+            movement.outletId.trim().isEmpty ||
+            movement.itemId.trim().isEmpty ||
+            !movement.quantity.isFinite ||
+            movement.quantity <= 0 ||
+            !movementIds.add(movement.id)) {
+          throw const FormatException('Riwayat pergerakan inventory tidak valid.');
+        }
+      }
+      if (restoredProcessedIds.any((id) => id.trim().isEmpty)) {
+        throw const FormatException('Penanda order inventory tidak valid.');
+      }
+
+      _items.addEntries(restoredItems.map((item) => MapEntry(item.id, item)));
+      _stock.addAll(restoredStock);
+      _movements.addAll(restoredMovements);
+      _processedOrderIds.addAll(restoredProcessedIds);
+      _nextMovementId = nextMovementId;
     }
     _initialized = true;
     notifyListeners();
