@@ -60,5 +60,31 @@ void main() {
       store.movementsForOutlet('A').map((movement) => movement.id),
       ['INV-1', 'INV-2'],
     );
+
+    holdNextWrite = true;
+    writeStarted = Completer<void>();
+    releaseWrite = Completer<void>();
+    final failedConsumption = store.consumeOrderIngredients(
+      orderId: 'ORDER-CONCURRENT',
+      outletId: 'A',
+      ingredientQuantities: {'rice-concurrent': 2},
+    );
+    await writeStarted.future;
+
+    final succeedingConsumption = store.consumeOrderIngredients(
+      orderId: 'ORDER-CONCURRENT',
+      outletId: 'A',
+      ingredientQuantities: {'rice-concurrent': 3},
+    );
+    releaseWrite.complete();
+
+    await expectLater(failedConsumption, throwsStateError);
+    expect(await succeedingConsumption, isTrue);
+    expect(store.stockFor('A', 'rice-concurrent'), 9);
+    expect(store.isOrderProcessed('ORDER-CONCURRENT', outletId: 'A'), isTrue);
+    expect(
+      store.movementsForOutlet('A').map((movement) => movement.id),
+      ['INV-1', 'INV-2', 'INV-3'],
+    );
   });
 }
