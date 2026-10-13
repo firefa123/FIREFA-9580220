@@ -8,6 +8,7 @@ import 'offline_sync_queue.dart';
 import 'order_store.dart';
 import 'receipt_formatter.dart';
 import 'settings_store.dart';
+import 'table_store.dart';
 
 class OrdersPage extends StatefulWidget {
   const OrdersPage({super.key});
@@ -199,19 +200,46 @@ class _OrdersPageState extends State<OrdersPage> {
         order.outletId == outletId;
   }
 
-  void advance(FirefaOrder order) {
+  Future<void> _releaseTable(FirefaOrder order) async {
+    if (order.orderType != 'Dine In' || order.tableId == null) return;
+
+    final tables = FirefaTableStore.instance;
+    await tables.initialize();
+    final table = tables
+        .forOutlet(order.outletId)
+        .where((item) => item.name == order.tableId)
+        .firstOrNull;
+    if (table == null || !table.occupied) return;
+
+    if (!tables.setOccupied(order.outletId, table.id, false)) {
+      throw StateError('Status meja tidak dapat diperbarui.');
+    }
+    await tables.waitForPendingSave();
+  }
+
+  Future<void> advance(FirefaOrder order) async {
     if (!canActOn(order)) {
       message('Anda tidak memiliki izin untuk pesanan ini.');
       return;
     }
 
     final success = orderStore.advance(outletId, order.id);
+    if (!success) {
+      message('Status tidak dapat dilanjutkan.');
+      return;
+    }
 
-    message(
-      success
-          ? '${order.id} sekarang ${order.status.label}'
-          : 'Status tidak dapat dilanjutkan.',
-    );
+    try {
+      await orderStore.waitForPendingSave();
+      if (order.status == FirefaOrderStatus.completed) {
+        await _releaseTable(order);
+      }
+      if (!mounted) return;
+      message('${order.id} sekarang ${order.status.label}');
+    } catch (error) {
+      if (!mounted) return;
+      message('Status pesanan tersimpan, tetapi meja belum dapat diperbarui: $error');
+    }
   }
 
   Future<void> cancel(FirefaOrder order) async {
@@ -222,17 +250,19 @@ class _OrdersPageState extends State<OrdersPage> {
 
     try {
       final success = await orderStore.cancelAndRestoreStock(outletId, order.id);
+      if (!success) {
+        if (mounted) message('Pesanan tidak dapat dibatalkan.');
+        return;
+      }
+      await _releaseTable(order);
       if (!mounted) return;
-      message(
-        success
-            ? '${order.id} dibatalkan. Jika stok resep sebelumnya terpotong, stok telah dipulihkan.'
-            : 'Pesanan tidak dapat dibatalkan.',
-      );
+      message('${order.id} dibatalkan dan meja dikembalikan menjadi tersedia.');
     } catch (error) {
       if (!mounted) return;
-      message('Pembatalan gagal diproses: $error');
+      message('Pembatalan atau pembaruan meja gagal: $error');
     }
   }
+
 
   void markPaid(FirefaOrder order) {
     if (!canActOn(order)) {
