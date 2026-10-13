@@ -142,7 +142,7 @@ class _ReportsPageState extends State<ReportsPage> {
       for (final entry in sorted)
         [entry.key, entry.value.quantity.toString(),
           entry.value.revenue.toString()].map(_csvCell).join(','),
-    ].join('\\r\\n');
+    ].join('\r\n');
 
     if (!mounted || !allowed || outlet.selectedOutletId != outletId) return;
     await Clipboard.setData(ClipboardData(text: csv));
