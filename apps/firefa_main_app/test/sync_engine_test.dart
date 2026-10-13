@@ -246,6 +246,8 @@ void main() {
       local: entry, outletId: order.outletId, orderId: order.id,
       serverSnapshot: server,
     ), isTrue);
+    await queue.markSyncing(entry.eventId);
+    await queue.markConflict(entry.eventId);
 
     await store.reconcileConflict(
       eventId: entry.eventId, outletId: order.outletId, orderId: order.id,
@@ -304,6 +306,8 @@ void main() {
     );
     await store.waitForPendingSave();
     final entry = queue.entriesForOutlet(outletId).last;
+    await queue.markSyncing(entry.eventId);
+    await queue.markConflict(entry.eventId);
     final invalidServer = Map<String, dynamic>.from(order.toJson())
       ..['items'] = [
         FirefaOrderItem(productName: 'Rice', quantity: -1, unitPrice: 1500).toJson(),
@@ -376,6 +380,8 @@ void main() {
     );
     await store.waitForPendingSave();
     final event = queue.entriesForOutlet(outletId).last;
+    await queue.markSyncing(event.eventId);
+    await queue.markConflict(event.eventId);
     final invalidSnapshot = Map<String, dynamic>.from(order.toJson())
       ..['total'] = 500;
 
