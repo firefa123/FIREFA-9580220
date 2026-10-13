@@ -1,6 +1,27 @@
 import 'offline_sync_queue.dart';
 import 'conflict_management.dart';
 
+Object? _freezeEnvelopeValue(Object? value) {
+  if (value is Map) {
+    return Map<String, dynamic>.unmodifiable(
+      value.map(
+        (key, nested) => MapEntry(key.toString(), _freezeEnvelopeValue(nested)),
+      ),
+    );
+  }
+  if (value is List) {
+    return List<Object?>.unmodifiable(value.map(_freezeEnvelopeValue));
+  }
+  return value;
+}
+
+Map<String, dynamic> _freezeEnvelopeSnapshot(Map<String, dynamic> value) =>
+    Map<String, dynamic>.unmodifiable(
+      value.map(
+        (key, nested) => MapEntry(key, _freezeEnvelopeValue(nested)),
+      ),
+    );
+
 /// Immutable payload sent to the future FIREFA backend.
 /// eventId is the idempotency key; orderId is only unique within the local
 /// installation today and must not be treated as a global database key.
@@ -19,7 +40,7 @@ class FirefaSyncEnvelope {
     required this.eventType,
     required this.createdAt,
     required Map<String, dynamic> orderSnapshot,
-  }) : orderSnapshot = Map.unmodifiable(orderSnapshot);
+  }) : orderSnapshot = _freezeEnvelopeSnapshot(orderSnapshot);
 
   factory FirefaSyncEnvelope.fromEntry(FirefaSyncEntry entry) {
     return FirefaSyncEnvelope(
