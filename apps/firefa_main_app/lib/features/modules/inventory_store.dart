@@ -315,7 +315,6 @@ class FirefaInventoryStore extends ChangeNotifier {
           recipe.ingredientId.trim().isEmpty ||
           recipe.quantity <= 0 ||
           recipe.quantity > 999999999 ||
-          !itemIds.contains('${recipe.outletId}\u0000${recipe.ingredientId}') ||
           !recipeKeys.add(key)) {
         throw const FormatException('Resep inventory pada snapshot tidak valid.');
       }
