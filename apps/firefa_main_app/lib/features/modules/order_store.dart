@@ -497,8 +497,7 @@ class FirefaOrderStore extends ChangeNotifier {
       return false;
     }
 
-    // Lock the order before the first await. Otherwise markPaid/advance could
-    // mutate the same order while store initialization is in flight.
+    // Lock before awaiting so payment or status changes cannot race cancellation.
     _cancellationsInProgress.add(key);
     try {
       final inventory = FirefaInventoryStore.instance;
@@ -509,6 +508,27 @@ class FirefaOrderStore extends ChangeNotifier {
       final previousStatus = order.status;
       if (!order.cancel()) return false;
 
+      // Persist the cancellation intent first. If order persistence fails, stock
+      // is still untouched and the caller can safely retry the operation.
+      try {
+        queue.enqueueOrder(order, 'order.updated');
+        _scheduleSave();
+        await waitForPendingSave();
+      } catch (error, stackTrace) {
+        order.status = previousStatus;
+        try {
+          queue.enqueueOrder(order, 'order.updated');
+          _scheduleSave();
+          await waitForPendingSave();
+        } catch (_) {
+          // Keep the original error; startup reconciliation repairs the outbox.
+        }
+        notifyListeners();
+        Error.throwWithStackTrace(error, stackTrace);
+      }
+
+      // Stock restoration has its own durable rollback. If it fails, restore
+      // the previous order status and enqueue that compensating local snapshot.
       try {
         if (inventory.isOrderStockProcessed(orderId, outletId: outletId) &&
             !inventory.isOrderStockReversed(orderId, outletId: outletId)) {
@@ -517,34 +537,19 @@ class FirefaOrderStore extends ChangeNotifier {
             outletId: outletId,
           );
         }
-      } catch (_) {
-        // Keep the order cancellable if restoration could not be completed.
-        order.status = previousStatus;
-        _scheduleSave();
-        notifyListeners();
-        rethrow;
-      }
-
-      try {
-        queue.enqueueOrder(order, 'order.updated');
-        _scheduleSave();
-        await waitForPendingSave();
       } catch (error, stackTrace) {
-        // Inventory restoration may already be durable. Restore the order's
-        // prior status and enqueue a compensating snapshot so a stale
-        // cancellation event cannot remain the final local intent.
         order.status = previousStatus;
         try {
           queue.enqueueOrder(order, 'order.updated');
           _scheduleSave();
           await waitForPendingSave();
         } catch (_) {
-          // Preserve the original failure; startup reconciliation repairs the
-          // outbox from the durable order snapshot when storage recovers.
+          // Preserve the stock-restoration failure for the caller.
         }
         notifyListeners();
         Error.throwWithStackTrace(error, stackTrace);
       }
+
       notifyListeners();
       return true;
     } finally {
