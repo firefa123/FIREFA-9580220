@@ -180,6 +180,21 @@ class _PosPageState extends State<PosPage> {
   }
 
   Widget _paymentStatus() {
+    final currentTransaction = transaction!;
+    if (currentTransaction.status == TransactionStatus.cancelled ||
+        currentTransaction.status == TransactionStatus.completed) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Status transaksi: ${currentTransaction.status.name}'),
+          const SizedBox(height: 8),
+          FilledButton.tonal(
+            onPressed: _newTransaction,
+            child: const Text('Transaksi Baru'),
+          ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
