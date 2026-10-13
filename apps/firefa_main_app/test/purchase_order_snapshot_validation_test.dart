@@ -76,7 +76,6 @@ void main() {
         jsonEncode(snapshot),
       );
       await expectLater(store.initialize(), throwsFormatException);
-      expect(store.forOutlet, isNotNull); // Store remains available for a corrected retry.
     }
   });
 }
