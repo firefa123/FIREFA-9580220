@@ -68,6 +68,7 @@ class InventoryStore extends ChangeNotifier {
                 Map<String, dynamic>.from(value as Map),
               ))
           .toList();
+      final restoredItemIds = restoredItems.map((item) => item.id).toSet();
       final restoredProcessedIds =
           (data['processedOrderIds'] as List? ?? const []).cast<String>();
       final nextMovementId = data['nextMovementId'];
@@ -92,6 +93,12 @@ class InventoryStore extends ChangeNotifier {
         if (key.trim().isEmpty || value is! num) {
           throw const FormatException('Kuantitas stok tersimpan tidak valid.');
         }
+        final separator = key.lastIndexOf('::');
+        if (separator <= 0 ||
+            separator + 2 >= key.length ||
+            !restoredItemIds.contains(key.substring(separator + 2))) {
+          throw const FormatException('Referensi item pada stok tersimpan tidak valid.');
+        }
         final quantity = value.toDouble();
         if (!quantity.isFinite || quantity < 0) {
           throw const FormatException('Kuantitas stok tersimpan tidak valid.');
@@ -103,8 +110,10 @@ class InventoryStore extends ChangeNotifier {
         if (movement.id.trim().isEmpty ||
             movement.outletId.trim().isEmpty ||
             movement.itemId.trim().isEmpty ||
+            !restoredItemIds.contains(movement.itemId) ||
             !movement.quantity.isFinite ||
             movement.quantity <= 0 ||
+            DateTime.tryParse(movement.createdAt.toIso8601String()) == null ||
             !movementIds.add(movement.id)) {
           throw const FormatException('Riwayat pergerakan inventory tidak valid.');
         }
