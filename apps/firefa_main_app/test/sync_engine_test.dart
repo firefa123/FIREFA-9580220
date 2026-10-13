@@ -285,6 +285,8 @@ void main() {
       local: entry, outletId: order.outletId, orderId: order.id,
       serverSnapshot: server,
     ), isTrue);
+    await queue.markSyncing(entry.eventId);
+    await queue.markConflict(entry.eventId);
 
     await store.reconcileConflict(
       eventId: entry.eventId, outletId: order.outletId, orderId: order.id,
@@ -398,7 +400,7 @@ void main() {
 
     expect(store.findOrder(outletId, order.id)!.total, 1000);
     expect(queue.findEvent(event.eventId), isNotNull);
-    expect(queue.findEvent(event.eventId)!.status, FirefaSyncStatus.pending);
+    expect(queue.findEvent(event.eventId)!.status, FirefaSyncStatus.conflict);
 
     await queue.removeEvent(event.eventId);
     await store.waitForPendingSave();
