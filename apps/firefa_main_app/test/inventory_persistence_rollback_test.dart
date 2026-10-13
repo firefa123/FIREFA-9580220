@@ -9,7 +9,7 @@ void main() {
   test('inventory mutations roll back completely when persistence fails', () async {
     var failWrites = false;
     final store = InventoryStore(
-      persistString: (_, __) async => !failWrites,
+      persistString: (_, _) async => !failWrites,
     );
     await store.initialize();
     await store.addItem(
