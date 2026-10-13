@@ -36,6 +36,16 @@ class CheckoutController {
       status: TransactionStatus.awaitingPayment,
       syncStatus: SyncStatus.pending,
       itemIds: List.unmodifiable(cartItems.map((item) => item.id)),
+      itemDetails: List.unmodifiable(
+        cartItems.map(
+          (item) => TransactionLineItem(
+            id: item.id,
+            name: item.name,
+            unitPrice: item.price,
+            quantity: item.quantity,
+          ),
+        ),
+      ),
     );
   }
 
