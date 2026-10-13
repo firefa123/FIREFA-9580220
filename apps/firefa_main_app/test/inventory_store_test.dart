@@ -199,9 +199,12 @@ void main() {
     expect(store.forOutlet('LEGACY-B').single.stock, 9);
 
     // An unrelated outlet must not restore either outlet's stock.
-    await expectLater(
-      store.restoreCancelledOrderStock(orderId: 'POS-ORDER-1', outletId: 'LEGACY-C'),
-      throwsStateError,
+    expect(
+      await store.restoreCancelledOrderStock(
+        orderId: 'POS-ORDER-1',
+        outletId: 'LEGACY-C',
+      ),
+      isFalse,
     );
     expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == coffee.id).stock, 64);
     expect(store.isOrderStockReversed('POS-ORDER-1', outletId: 'LEGACY-A'), isFalse);
