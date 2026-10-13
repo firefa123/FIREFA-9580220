@@ -111,6 +111,23 @@ void main() {
         'quantity': 1,
       },
     ];
+    final movementSequenceCollision = snapshot(type: 'in', before: 2, after: 3)
+      ..['nextMovementId'] = 1;
+    final opnameSequenceCollision = snapshot(type: 'in', before: 2, after: 3)
+      ..['opnames'] = [
+        {
+          'id': 'opname-1',
+          'outletId': 'outlet-a',
+          'itemId': 'inventory-1',
+          'itemName': 'Beans',
+          'systemStock': 2,
+          'physicalStock': 3,
+          'note': 'audit',
+          'createdAt': '2026-10-13T00:00:00.000Z',
+          'status': 'pending',
+          'resolvedAt': null,
+        },
+      ];
 
     final store = FirefaInventoryStore.instance;
     for (final invalid in [
@@ -120,6 +137,8 @@ void main() {
       snapshot(type: 'correction', before: 3, after: 3),
       orphanMovement,
       orphanRecipe,
+      movementSequenceCollision,
+      opnameSequenceCollision,
     ]) {
       await prefs.setString(FirefaInventoryStore.storageKey, jsonEncode(invalid));
       await expectLater(store.initialize(), throwsFormatException);
