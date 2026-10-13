@@ -17,8 +17,8 @@ void main() {
       persistString: (_, _) async {
         if (holdNextWrite) {
           holdNextWrite = false;
-          writeStarted.complete();
-          await releaseWrite.future;
+          writeStarted!.complete();
+          await releaseWrite!.future;
           return false;
         }
         return true;
