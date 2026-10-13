@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firefa_main_app/features/orders/controllers/checkout_controller.dart';
+import 'package:firefa_main_app/features/orders/controllers/payment_controller.dart';
+import 'package:firefa_main_app/features/orders/models/payment_model.dart';
 import 'package:firefa_main_app/features/orders/models/cart_item_model.dart';
 import 'package:firefa_main_app/features/orders/models/transaction_model.dart';
 
@@ -41,6 +43,40 @@ void main() {
     expect(cancelled.status, TransactionStatus.cancelled);
     expect(controller.markPaid(cancelled).status, TransactionStatus.cancelled);
     expect(controller.complete(cancelled).status, TransactionStatus.cancelled);
+  });
+
+  test('payment creation and terminal transitions are guarded', () {
+    final checkout = CheckoutController();
+    final payments = PaymentController();
+    final transaction = checkout.checkout([
+      CartItemModel(id: 'coffee', name: 'Coffee', price: 1500),
+    ])!;
+    final first = payments.createPayment(
+      transaction: transaction,
+      method: PaymentMethod.qris,
+    );
+    final second = payments.createPayment(
+      transaction: transaction,
+      method: PaymentMethod.qris,
+    );
+
+    expect(first.id, isNot(second.id));
+    expect(first.amount, 1500);
+    expect(first.status, PaymentStatus.pending);
+    expect(payments.markPaid(first).status, PaymentStatus.paid);
+    final paid = payments.markPaid(first);
+    expect(payments.markFailed(paid).status, PaymentStatus.paid);
+    final failed = payments.markFailed(first);
+    expect(failed.status, PaymentStatus.failed);
+    expect(payments.markPaid(failed).status, PaymentStatus.failed);
+
+    expect(
+      () => payments.createPayment(
+        transaction: checkout.cancel(transaction),
+        method: PaymentMethod.cash,
+      ),
+      throwsArgumentError,
+    );
   });
 
   test('checkout calculates total and generates distinct transaction IDs', () {
