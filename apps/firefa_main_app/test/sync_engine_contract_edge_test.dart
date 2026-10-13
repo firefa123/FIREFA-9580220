@@ -16,6 +16,38 @@ void main() {
     expect(engine.retryDelay(20), const Duration(seconds: 256));
   });
 
+  test('sync envelope deeply freezes nested snapshot payloads', () {
+    final mutableSnapshot = <String, dynamic>{
+      'id': 'immutable-envelope',
+      'items': <dynamic>[
+        <String, dynamic>{'name': 'Coffee', 'quantity': 1},
+      ],
+    };
+    final envelope = FirefaSyncEnvelope(
+      eventId: 'evt-immutable',
+      outletId: 'outlet-immutable',
+      orderId: 'immutable-envelope',
+      eventType: 'order.created',
+      createdAt: DateTime.utc(2026, 10, 13),
+      orderSnapshot: mutableSnapshot,
+    );
+
+    mutableSnapshot['id'] = 'changed-after-construction';
+    (mutableSnapshot['items'] as List).add({'name': 'Injected'});
+
+    expect(envelope.orderSnapshot['id'], 'immutable-envelope');
+    final items = envelope.orderSnapshot['items'] as List;
+    expect(items, hasLength(1));
+    expect(
+      () => items.add({'name': 'Injected'}),
+      throwsUnsupportedError,
+    );
+    expect(
+      () => (items.single as Map)['quantity'] = 99,
+      throwsUnsupportedError,
+    );
+  });
+
   test('acknowledgement requires exact event identity and nonblank reference', () {
     final event = FirefaSyncEnvelope(
       eventId: 'evt-123',
