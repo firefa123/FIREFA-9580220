@@ -177,7 +177,7 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
     final ok = receive
         ? await orders.receiveDurably(
             outletId: sourceOutlet, orderId: po.id, quantity: result)
-        : orders.cancel(outletId: sourceOutlet, orderId: po.id);
+        : await orders.cancelDurably(outletId: sourceOutlet, orderId: po.id);
     if (!ok) {
       _message('Operasi gagal. Periksa sisa pesanan, stok, dan satuan barang.');
     }
