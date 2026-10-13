@@ -49,6 +49,35 @@ void main() {
     await queue.waitForPendingSave();
   });
 
+  test('queued order snapshot cannot be mutated through nested JSON values', () async {
+    final queue = FirefaOfflineSyncQueue.instance;
+    final event = queue.enqueueOrder(
+      order(id: 'deep-immutable-order'),
+      'order.created',
+    );
+    await queue.waitForPendingSave();
+
+    expect(
+      () => event.orderSnapshot['id'] = 'tampered-order',
+      throwsUnsupportedError,
+    );
+    final items = event.orderSnapshot['items'] as List;
+    expect(
+      () => items.add({'productName': 'Injected'}),
+      throwsUnsupportedError,
+    );
+    final firstItem = items.first as Map;
+    expect(
+      () => firstItem['quantity'] = 999,
+      throwsUnsupportedError,
+    );
+    expect(event.orderSnapshot['id'], 'deep-immutable-order');
+    expect((items.first as Map)['quantity'], 1);
+
+    await queue.removeEvent(event.eventId);
+    await queue.waitForPendingSave();
+  });
+
   test('enqueue creates unique immutable identity snapshot for valid event', () async {
     final queue = FirefaOfflineSyncQueue.instance;
     final first = queue.enqueueOrder(order(id: 'identity-order-1'), 'order.created');
