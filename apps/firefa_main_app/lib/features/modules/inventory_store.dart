@@ -252,7 +252,7 @@ class FirefaInventoryStore extends ChangeNotifier {
   }) {
     final itemIds = <String>{};
     for (final item in items) {
-      final identity = '${item.outletId}\\u0000${item.id}';
+      final identity = '${item.outletId}\u0000${item.id}';
       if (item.id.trim().isEmpty ||
           item.outletId.trim().isEmpty ||
           item.name.trim().isEmpty ||
@@ -309,13 +309,13 @@ class FirefaInventoryStore extends ChangeNotifier {
 
     final recipeKeys = <String>{};
     for (final recipe in recipes) {
-      final key = '${recipe.outletId}\\u0000${recipe.menuId}\\u0000${recipe.ingredientId}';
+      final key = '${recipe.outletId}\u0000${recipe.menuId}\u0000${recipe.ingredientId}';
       if (recipe.outletId.trim().isEmpty ||
           recipe.menuId.trim().isEmpty ||
           recipe.ingredientId.trim().isEmpty ||
           recipe.quantity <= 0 ||
           recipe.quantity > 999999999 ||
-          !itemIds.contains('${recipe.outletId}\\u0000${recipe.ingredientId}') ||
+          !itemIds.contains('${recipe.outletId}\u0000${recipe.ingredientId}') ||
           !recipeKeys.add(key)) {
         throw const FormatException('Resep inventory pada snapshot tidak valid.');
       }
@@ -533,7 +533,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       _reversedOrderIds.contains(_orderKey(outletId, orderId));
 
   String _orderKey(String outletId, String orderId) =>
-      '$outletId\\u0000$orderId';
+      '$outletId\u0000$orderId';
 
   Set<String> _scopeLegacyOrderIds(
     Set<String> savedIds,
@@ -542,7 +542,7 @@ class FirefaInventoryStore extends ChangeNotifier {
   }) {
     final scoped = <String>{};
     for (final savedId in savedIds) {
-      if (savedId.contains('\\u0000')) {
+      if (savedId.contains('\u0000')) {
         scoped.add(savedId);
         continue;
       }
