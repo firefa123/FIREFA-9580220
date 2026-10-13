@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firefa_main_app/features/inventory/inventory_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  SharedPreferences.setMockInitialValues({});
 
   test('concurrent stock mutations remain consistent after one write fails', () async {
     var holdNextWrite = false;
