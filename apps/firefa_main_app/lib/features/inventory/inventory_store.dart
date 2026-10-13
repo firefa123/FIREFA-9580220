@@ -117,7 +117,18 @@ class InventoryStore extends ChangeNotifier {
             !movementIds.add(movement.id)) {
           throw const FormatException('Riwayat pergerakan inventory tidak valid.');
         }
-        final sequenceMatch = RegExp(r'^INV-(\\d+)
+        final sequenceMatch = RegExp(r'^INV-([0-9]+)$').firstMatch(movement.id);
+        if (sequenceMatch != null) {
+          final sequence = int.tryParse(sequenceMatch.group(1)!);
+          if (sequence != null && sequence > maximumMovementSequence) {
+            maximumMovementSequence = sequence;
+          }
+        }
+      }
+      if (nextMovementId <= maximumMovementSequence) {
+        throw const FormatException('Nomor pergerakan inventory bertabrakan dengan riwayat.');
+      }
+      if (restoredProcessedIds.any((id) => id.trim().isEmpty)) {
         throw const FormatException('Penanda order inventory tidak valid.');
       }
 
