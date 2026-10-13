@@ -39,6 +39,39 @@ void main() {
     );
   });
 
+  test('repository persists safe cancellation before payment settlement', () async {
+    final repository = InMemoryOrderRepository();
+    final createdAt = DateTime.utc(2026, 10, 13);
+    final awaiting = TransactionModel(
+      id: 'trx-cancel',
+      createdAt: createdAt,
+      totalAmount: 8000,
+      status: TransactionStatus.awaitingPayment,
+      itemIds: const ['tea'],
+    );
+    await repository.saveTransaction(awaiting);
+    final pendingPayment = PaymentModel(
+      id: 'pay-cancel',
+      transactionId: awaiting.id,
+      method: PaymentMethod.cash,
+      status: PaymentStatus.pending,
+      amount: 8000,
+      createdAt: createdAt,
+    );
+    await repository.savePayment(pendingPayment);
+    await repository.savePayment(
+      pendingPayment.copyWith(status: PaymentStatus.failed),
+    );
+    await repository.saveTransaction(
+      awaiting.copyWith(status: TransactionStatus.cancelled),
+    );
+
+    expect(
+      (await repository.getTransaction(awaiting.id))!.status,
+      TransactionStatus.cancelled,
+    );
+  });
+
   test('repository rejects identity collisions and invalid state transitions', () async {
     final repository = InMemoryOrderRepository();
     final createdAt = DateTime.utc(2026, 10, 13);
