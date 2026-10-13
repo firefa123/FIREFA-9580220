@@ -662,6 +662,19 @@ class FirefaInventoryStore extends ChangeNotifier {
     if (!_initialized) return false;
     final index = _index(outletId, id);
     if (index < 0) return false;
+
+    // Keep recipe, stock-ledger and stock-opname references resolvable after
+    // restart. Historical ingredients must be adjusted/retired explicitly
+    // rather than deleting the identity that cancellation and audit depend on.
+    if (_recipes.any((line) =>
+            line.outletId == outletId && line.ingredientId == id) ||
+        _movements.any((movement) =>
+            movement.outletId == outletId && movement.itemId == id) ||
+        _opnames.any((record) =>
+            record.outletId == outletId && record.itemId == id)) {
+      return false;
+    }
+
     _items.removeAt(index);
     notifyListeners();
     _save();
