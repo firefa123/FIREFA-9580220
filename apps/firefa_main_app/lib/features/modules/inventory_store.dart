@@ -440,10 +440,48 @@ class FirefaInventoryStore extends ChangeNotifier {
     return true;
   }
 
-  bool remove(String outletId, String id) {
-    if (!_initialized) return false;
+  /// Explains why an inventory item cannot safely be deleted.
+  /// Historical movement rows are retained, but live references and stock
+  /// must be resolved before removing the catalog item.
+  String? removalBlockReason(String outletId, String id) {
+    if (!_initialized) return 'Inventory belum diinisialisasi.';
     final index = _index(outletId, id);
-    if (index < 0) return false;
+    if (index < 0) return 'Barang tidak ditemukan pada outlet ini.';
+    final item = _items[index];
+
+    if (item.stock != 0) {
+      return 'Sisa stok ${item.stock} ${item.unit}. Habiskan atau sesuaikan stok ke nol terlebih dahulu.';
+    }
+    if (_recipes.any((line) =>
+        line.outletId == outletId && line.ingredientId == id)) {
+      return 'Barang masih digunakan pada resep menu. Hapus atau ubah resep terkait terlebih dahulu.';
+    }
+    if (_opnames.any((record) =>
+        record.outletId == outletId &&
+        record.itemId == id &&
+        record.status == 'pending')) {
+      return 'Masih ada stock opname yang menunggu keputusan.';
+    }
+    final hasUnreversedPosConsumption = _movements.any((movement) {
+      if (movement.outletId != outletId ||
+          movement.itemId != id ||
+          movement.type != 'out' ||
+          !movement.note.startsWith('POS order ')) {
+        return false;
+      }
+      final orderId = movement.note.substring('POS order '.length);
+      return !_reversedOrderIds.contains(orderId);
+    });
+    if (hasUnreversedPosConsumption) {
+      return 'Barang masih terkait pemakaian stok pesanan POS yang belum dipulihkan.';
+    }
+    return null;
+  }
+
+  bool remove(String outletId, String id) {
+    final reason = removalBlockReason(outletId, id);
+    if (reason != null) return false;
+    final index = _index(outletId, id);
     _items.removeAt(index);
     notifyListeners();
     _save();
