@@ -191,6 +191,17 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
     }
   }
 
+  bool _isValidTimestamp(String value) {
+    if (DateTime.tryParse(value) == null) return false;
+    final match = RegExp(r'^([0-9]{4})-([0-9]{2})-([0-9]{2})T').firstMatch(value);
+    if (match == null) return false;
+    final year = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final day = int.parse(match.group(3)!);
+    final date = DateTime.utc(year, month, day);
+    return date.year == year && date.month == month && date.day == day;
+  }
+
   bool _isValidCalendarDate(String value) {
     if (!RegExp(r'^\\d{4}-\\d{2}-\\d{2}
     final ids = <String>{};
@@ -212,15 +223,15 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
           order.unitCost > 999999999 ||
           order.receivedQuantity < 0 ||
           order.receivedQuantity > order.quantity ||
-          DateTime.tryParse(order.createdAt) == null ||
+          !_isValidTimestamp(order.createdAt) ||
           (order.receivedAt != null &&
-              DateTime.tryParse(order.receivedAt!) == null) ||
+              !_isValidTimestamp(order.receivedAt!)) ||
           (order.cancelledAt != null &&
-              DateTime.tryParse(order.cancelledAt!) == null) ||
+              !_isValidTimestamp(order.cancelledAt!)) ||
           (order.followUpDate != null &&
               !_isValidCalendarDate(order.followUpDate!)) ||
           (order.followUpContactedAt != null &&
-              DateTime.tryParse(order.followUpContactedAt!) == null) ||
+              !_isValidTimestamp(order.followUpContactedAt!)) ||
           !const {'ordered', 'partial', 'received', 'cancelled'}
               .contains(order.status)) {
         throw const FormatException('Identitas atau kuantitas purchase order tidak valid.');
