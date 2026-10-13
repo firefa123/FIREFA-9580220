@@ -16,8 +16,12 @@ class InMemoryOrderRepository implements OrderRepository {
     }
 
     final existing = _transactions[transaction.id];
-    if (existing != null && !_sameTransaction(existing, transaction)) {
-      throw StateError('ID transaksi sudah digunakan oleh data berbeda.');
+    if (existing != null) {
+      if (!_sameTransactionIdentity(existing, transaction) ||
+          !_canTransitionTransaction(existing.status, transaction.status) ||
+          !_canTransitionSync(existing.syncStatus, transaction.syncStatus)) {
+        throw StateError('Perubahan transaksi bertentangan dengan state tersimpan.');
+      }
     }
     _transactions[transaction.id] = transaction;
   }
@@ -39,27 +43,55 @@ class InMemoryOrderRepository implements OrderRepository {
     }
 
     final existing = _payments[payment.id];
-    if (existing != null && !_samePayment(existing, payment)) {
-      throw StateError('ID pembayaran sudah digunakan oleh data berbeda.');
+    if (existing != null) {
+      if (!_samePaymentIdentity(existing, payment) ||
+          !_canTransitionPayment(existing.status, payment.status)) {
+        throw StateError('Perubahan pembayaran bertentangan dengan state tersimpan.');
+      }
     }
     _payments[payment.id] = payment;
   }
 
-  bool _sameTransaction(TransactionModel a, TransactionModel b) =>
+  bool _sameTransactionIdentity(TransactionModel a, TransactionModel b) =>
       a.id == b.id &&
       a.createdAt == b.createdAt &&
       a.totalAmount == b.totalAmount &&
-      a.status == b.status &&
-      a.syncStatus == b.syncStatus &&
       _sameList(a.itemIds, b.itemIds);
 
-  bool _samePayment(PaymentModel a, PaymentModel b) =>
+  bool _samePaymentIdentity(PaymentModel a, PaymentModel b) =>
       a.id == b.id &&
       a.transactionId == b.transactionId &&
       a.method == b.method &&
-      a.status == b.status &&
       a.amount == b.amount &&
       a.createdAt == b.createdAt;
+
+  bool _canTransitionTransaction(TransactionStatus from, TransactionStatus to) {
+    if (from == to) return true;
+    switch (from) {
+      case TransactionStatus.pending:
+        return to == TransactionStatus.awaitingPayment ||
+            to == TransactionStatus.cancelled;
+      case TransactionStatus.awaitingPayment:
+        return to == TransactionStatus.paid ||
+            to == TransactionStatus.cancelled;
+      case TransactionStatus.paid:
+        return to == TransactionStatus.completed;
+      case TransactionStatus.cancelled:
+      case TransactionStatus.completed:
+        return false;
+    }
+  }
+
+  bool _canTransitionPayment(PaymentStatus from, PaymentStatus to) {
+    if (from == to) return true;
+    return from == PaymentStatus.pending &&
+        (to == PaymentStatus.paid || to == PaymentStatus.failed);
+  }
+
+  bool _canTransitionSync(SyncStatus from, SyncStatus to) {
+    if (from == to) return true;
+    return from != SyncStatus.synced && to == SyncStatus.synced;
+  }
 
   bool _sameList(List<String> a, List<String> b) {
     if (a.length != b.length) return false;
