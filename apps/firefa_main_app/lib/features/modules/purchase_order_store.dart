@@ -193,7 +193,8 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
 
   bool _isValidTimestamp(String value) {
     if (DateTime.tryParse(value) == null) return false;
-    final match = RegExp(r'^([0-9]{4})-([0-9]{2})-([0-9]{2})T').firstMatch(value);
+    final match =
+        RegExp(r'^([0-9]{4})-([0-9]{2})-([0-9]{2})T').firstMatch(value);
     if (match == null) return false;
     final year = int.parse(match.group(1)!);
     final month = int.parse(match.group(2)!);
@@ -203,12 +204,25 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
   }
 
   bool _isValidCalendarDate(String value) {
-    if (!RegExp(r'^\\d{4}-\\d{2}-\\d{2}
+    if (!RegExp(r'^[0-9]{4}-[0-9]{2}-[0-9]{2}$').hasMatch(value)) {
+      return false;
+    }
+    final match =
+        RegExp(r'^([0-9]{4})-([0-9]{2})-([0-9]{2})$').firstMatch(value);
+    if (match == null) return false;
+    final year = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final day = int.parse(match.group(3)!);
+    final date = DateTime.utc(year, month, day);
+    return date.year == year && date.month == month && date.day == day;
+  }
+
+  void _validateOrders(List<FirefaPurchaseOrder> orders, int nextId) {
     final ids = <String>{};
     var largestSequence = 0;
 
     for (final order in orders) {
-      final match = RegExp(r'^po-[0-9]+').firstMatch(order.id);
+      final match = RegExp(r'^po-[0-9]+$').firstMatch(order.id);
       if (order.id.trim().isEmpty ||
           order.outletId.trim().isEmpty ||
           order.supplierId.trim().isEmpty ||
@@ -234,10 +248,12 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
               !_isValidTimestamp(order.followUpContactedAt!)) ||
           !const {'ordered', 'partial', 'received', 'cancelled'}
               .contains(order.status)) {
-        throw const FormatException('Identitas atau kuantitas purchase order tidak valid.');
+        throw const FormatException(
+          'Identitas atau kuantitas purchase order tidak valid.',
+        );
       }
 
-      if (match != null && match.group(0) == order.id) {
+      if (match != null) {
         final sequence = int.tryParse(order.id.substring(3));
         if (sequence == null || sequence < 1) {
           throw const FormatException('Nomor purchase order tidak valid.');
@@ -250,8 +266,12 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
               (order.receivedQuantity == 0 ||
                   order.receivedQuantity >= order.quantity)) ||
           (order.status == 'received' &&
-              order.receivedQuantity != order.quantity)) {
-        throw const FormatException('Status purchase order tidak sesuai kuantitas penerimaan.');
+              order.receivedQuantity != order.quantity) ||
+          (order.status == 'cancelled' && order.cancelledAt == null) ||
+          (order.status != 'cancelled' && order.cancelledAt != null)) {
+        throw const FormatException(
+          'Status purchase order tidak sesuai kuantitas penerimaan.',
+        );
       }
 
       if (order.receipts.isNotEmpty) {
@@ -262,13 +282,17 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
               !receiptIds.add(receipt.id) ||
               receipt.quantity <= 0 ||
               receipt.quantity > order.quantity - receiptTotal ||
-              DateTime.tryParse(receipt.receivedAt) == null) {
-            throw const FormatException('Riwayat penerimaan purchase order tidak valid.');
+              !_isValidTimestamp(receipt.receivedAt)) {
+            throw const FormatException(
+              'Riwayat penerimaan purchase order tidak valid.',
+            );
           }
           receiptTotal += receipt.quantity;
         }
         if (receiptTotal != order.receivedQuantity) {
-          throw const FormatException('Total penerimaan tidak cocok dengan riwayat receipt.');
+          throw const FormatException(
+            'Total penerimaan tidak cocok dengan riwayat receipt.',
+          );
         }
       }
     }
