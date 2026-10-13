@@ -41,8 +41,8 @@ void main() {
       ..['status'] = FirefaOrderStatus.served.name
       ..['total'] = 1;
 
-    expect(
-      () => orders.reconcileConflict(
+    await expectLater(
+      orders.reconcileConflict(
         eventId: event.eventId,
         outletId: order.outletId,
         orderId: order.id,
@@ -99,8 +99,8 @@ void main() {
     await queue.markSyncing(foreignEvent.eventId);
     await queue.markConflict(foreignEvent.eventId);
 
-    expect(
-      () => orders.reconcileConflict(
+    await expectLater(
+      orders.reconcileConflict(
         eventId: foreignEvent.eventId,
         outletId: target.outletId,
         orderId: target.id,
@@ -140,8 +140,8 @@ void main() {
     final event = queue.enqueueOrder(order, 'order.updated');
     await queue.waitForPendingSave();
 
-    expect(
-      () => orders.reconcileConflict(
+    await expectLater(
+      orders.reconcileConflict(
         eventId: event.eventId,
         outletId: order.outletId,
         orderId: order.id,
