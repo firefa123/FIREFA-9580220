@@ -155,19 +155,266 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(storageKey);
       if (raw != null && raw.isNotEmpty) {
-        final decoded = jsonDecode(raw) as Map<String, dynamic>;
-        final records = (decoded['orders'] as List<dynamic>)
-            .map((e) => FirefaPurchaseOrder.fromJson(
-                Map<String, dynamic>.from(e as Map)))
-            .toList();
-        _orders..clear()..addAll(records);
-        _nextId = decoded['nextId'] as int;
+        final decoded = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+        final rawOrders = decoded['orders'];
+        final nextId = decoded['nextId'];
+        if (decoded['version'] != 1 ||
+            rawOrders is! List ||
+            nextId is! int ||
+            nextId < 1) {
+          throw const FormatException('Snapshot purchase order tidak valid.');
+        }
+
+        late final List<FirefaPurchaseOrder> records;
+        try {
+          records = rawOrders
+              .map((value) => FirefaPurchaseOrder.fromJson(
+                    Map<String, dynamic>.from(value as Map),
+                  ))
+              .toList();
+          _validateOrders(records, nextId);
+        } on FormatException {
+          rethrow;
+        } catch (_) {
+          throw const FormatException('Isi purchase order tidak valid.');
+        }
+        _orders
+          ..clear()
+          ..addAll(records);
+        _nextId = nextId;
       }
       _initialized = true;
       notifyListeners();
     } catch (_) {
       _initializing = null;
       rethrow;
+    }
+  }
+
+  void _validateOrders(List<FirefaPurchaseOrder> orders, int nextId) {
+    final ids = <String>{};
+    var largestSequence = 0;
+
+    for (final order in orders) {
+      final match = RegExp(r'^po-(\\d+)
+    if (!_initialized) throw StateError('Purchase Orders belum diinisialisasi');
+    return List.unmodifiable(
+      _orders.where((po) => po.outletId == outletId).toList().reversed,
+    );
+  }
+
+  bool create({
+    required String outletId, required String supplierId,
+    required String itemId, required int quantity,
+    required int unitCost, required String note,
+  }) {
+    if (!_initialized || quantity <= 0 || quantity > 999999999 ||
+        unitCost < 0 || unitCost > 999999999 ||
+        note.trim().length > 200) {
+      return false;
+    }
+    final suppliers = FirefaSupplierStore.instance.forOutlet(outletId);
+    final inventory = FirefaInventoryStore.instance.forOutlet(outletId);
+    final matches = suppliers.where((s) => s.id == supplierId && s.isActive);
+    final items = inventory.where((item) => item.id == itemId);
+    if (matches.isEmpty || items.isEmpty) {
+      return false;
+    }
+    final supplier = matches.first;
+    final item = items.first;
+    _orders.add(FirefaPurchaseOrder(
+      id: 'po-${_nextId++}', outletId: outletId,
+      supplierId: supplier.id, supplierName: supplier.name,
+      itemId: item.id, itemName: item.name, unit: item.unit,
+      quantity: quantity, unitCost: unitCost, note: note.trim(),
+      status: 'ordered', createdAt: DateTime.now().toIso8601String(),
+      receivedAt: null,
+    ));
+    notifyListeners();
+    _save();
+    return true;
+  }
+
+  bool setFollowUp({
+    required String outletId, required String orderId,
+    required String note, String? date,
+  }) {
+    if (!_initialized || note.trim().length > 200) {
+      return false;
+    }
+    if (date != null) {
+      final parsed = DateTime.tryParse(date);
+      if (parsed == null || !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(date) ||
+          parsed.year.toString().padLeft(4, '0') != date.substring(0, 4) ||
+          parsed.month.toString().padLeft(2, '0') != date.substring(5, 7) ||
+          parsed.day.toString().padLeft(2, '0') != date.substring(8, 10)) {
+        return false;
+      }
+    }
+    final index = _orders.indexWhere((po) =>
+        po.outletId == outletId && po.id == orderId &&
+        (po.status == 'ordered' || po.status == 'partial'));
+    if (index < 0) {
+      return false;
+    }
+    final current = _orders[index];
+    final normalizedNote = note.trim();
+    if (current.followUpNote == normalizedNote && current.followUpDate == date) {
+      return true;
+    }
+    _orders[index] = current.withFollowUp(normalizedNote, date);
+    notifyListeners();
+    _save();
+    return true;
+  }
+
+  bool setFollowUpContacted({
+    required String outletId, required String orderId,
+    required bool contacted,
+  }) {
+    if (!_initialized) return false;
+    final index = _orders.indexWhere((po) =>
+        po.outletId == outletId && po.id == orderId &&
+        (po.status == 'ordered' || po.status == 'partial'));
+    if (index < 0) return false;
+    final current = _orders[index];
+    if ((current.followUpContactedAt != null) == contacted) return true;
+    _orders[index] = current.withContactedAt(
+        contacted ? DateTime.now().toIso8601String() : null);
+    notifyListeners();
+    _save();
+    return true;
+  }
+
+  bool cancel({required String outletId, required String orderId}) {
+    if (!_initialized) {
+      return false;
+    }
+    final index = _orders.indexWhere((po) =>
+        po.outletId == outletId && po.id == orderId && (po.status == 'ordered' || po.status == 'partial'));
+    if (index < 0) {
+      return false;
+    }
+    _orders[index] = _orders[index].withStatus('cancelled', DateTime.now().toIso8601String());
+    notifyListeners();
+    _save();
+    return true;
+  }
+
+  bool receive({
+    required String outletId, required String orderId, int? quantity,
+  }) {
+    if (!_initialized) {
+      return false;
+    }
+    final index = _orders.indexWhere((po) =>
+        po.outletId == outletId && po.id == orderId &&
+        (po.status == 'ordered' || po.status == 'partial'));
+    if (index < 0) {
+      return false;
+    }
+    final order = _orders[index];
+    final amount = quantity ?? order.remainingQuantity;
+    if (amount <= 0 || amount > order.remainingQuantity) {
+      return false;
+    }
+    final inventory = FirefaInventoryStore.instance;
+    final items = inventory.forOutlet(outletId)
+        .where((item) => item.id == order.itemId);
+    if (items.isEmpty || items.first.unit != order.unit ||
+        items.first.stock + amount > 999999999) {
+      return false;
+    }
+    final receipt = FirefaPurchaseReceipt(
+      id: '${order.id}-receipt-${order.receipts.length + 1}',
+      quantity: amount, receivedAt: DateTime.now().toIso8601String(),
+    );
+    final success = inventory.adjust(
+      outletId: outletId, id: order.itemId, type: 'in',
+      amount: amount, note: 'Penerimaan PO ${order.id} / ${receipt.id}',
+    );
+    if (!success) {
+      return false;
+    }
+    _orders[index] = order.withReceipt(receipt);
+    notifyListeners();
+    _save();
+    return true;
+  }
+
+  void _save() {
+    final snapshot = jsonEncode({
+      'version': 1, 'nextId': _nextId,
+      'orders': _orders.map((po) => po.toJson()).toList(),
+    });
+    _pendingSave = _pendingSave.catchError((Object error) {
+      debugPrint('PO save sebelumnya gagal: $error');
+    }).then((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      if (!await prefs.setString(storageKey, snapshot)) {
+        throw StateError('Gagal menyimpan purchase order lokal');
+      }
+    });
+    unawaited(_pendingSave.catchError((Object error) {
+      debugPrint('PO save gagal: $error');
+    }));
+  }
+
+  Future<void> waitForPendingSave() => _pendingSave;
+}).firstMatch(order.id);
+      if (order.id.trim().isEmpty ||
+          order.outletId.trim().isEmpty ||
+          order.supplierId.trim().isEmpty ||
+          order.itemId.trim().isEmpty ||
+          order.unit.trim().isEmpty ||
+          !ids.add(order.id) ||
+          order.quantity <= 0 ||
+          order.unitCost < 0 ||
+          order.receivedQuantity < 0 ||
+          order.receivedQuantity > order.quantity ||
+          !const {'ordered', 'partial', 'received', 'cancelled'}
+              .contains(order.status)) {
+        throw const FormatException('Identitas atau kuantitas purchase order tidak valid.');
+      }
+
+      if ((order.status == 'ordered' && order.receivedQuantity != 0) ||
+          (order.status == 'partial' &&
+              (order.receivedQuantity == 0 ||
+                  order.receivedQuantity >= order.quantity)) ||
+          (order.status == 'received' &&
+              order.receivedQuantity != order.quantity)) {
+        throw const FormatException('Status purchase order tidak sesuai kuantitas penerimaan.');
+      }
+
+      if (order.receipts.isNotEmpty) {
+        final receiptIds = <String>{};
+        var receiptTotal = 0;
+        for (final receipt in order.receipts) {
+          if (receipt.id.trim().isEmpty ||
+              !receiptIds.add(receipt.id) ||
+              receipt.quantity <= 0 ||
+              receipt.quantity > order.quantity - receiptTotal ||
+              DateTime.tryParse(receipt.receivedAt) == null) {
+            throw const FormatException('Riwayat penerimaan purchase order tidak valid.');
+          }
+          receiptTotal += receipt.quantity;
+        }
+        if (receiptTotal != order.receivedQuantity) {
+          throw const FormatException('Total penerimaan tidak cocok dengan riwayat receipt.');
+        }
+      }
+
+      if (match != null) {
+        final sequence = int.tryParse(match.group(1)!);
+        if (sequence == null || sequence < 1) {
+          throw const FormatException('Nomor purchase order tidak valid.');
+        }
+        if (sequence > largestSequence) largestSequence = sequence;
+      }
+    }
+
+    if (nextId <= largestSequence) {
+      throw const FormatException('Urutan ID purchase order akan bertabrakan.');
     }
   }
 
