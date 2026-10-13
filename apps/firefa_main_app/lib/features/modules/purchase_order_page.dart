@@ -175,7 +175,7 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
       return;
     }
     final ok = receive
-        ? orders.receive(
+        ? await orders.receiveDurably(
             outletId: sourceOutlet, orderId: po.id, quantity: result)
         : orders.cancel(outletId: sourceOutlet, orderId: po.id);
     if (!ok) {
