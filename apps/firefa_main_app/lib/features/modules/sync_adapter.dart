@@ -77,7 +77,7 @@ class FirefaSyncReceipt {
       outcome == FirefaSyncOutcome.acknowledged &&
       eventId == event.eventId &&
       serverReference != null &&
-      serverReference!.isNotEmpty;
+      serverReference!.trim().isNotEmpty;
 }
 
 /// Transport contract only. This interface performs no network I/O itself.
