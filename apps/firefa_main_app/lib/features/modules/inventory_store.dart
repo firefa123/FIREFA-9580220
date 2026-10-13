@@ -476,5 +476,63 @@ class FirefaInventoryStore extends ChangeNotifier {
     }));
   }
 
+
+  Map<String, dynamic> exportLocalSnapshot() {
+    if (!_initialized) throw StateError('Inventory belum diinisialisasi');
+    return {
+      'version': 1,
+      'nextId': _nextId,
+      'items': _items.map((item) => item.toJson()).toList(),
+      'nextMovementId': _nextMovementId,
+      'movements': _movements.map((m) => m.toJson()).toList(),
+      'nextOpnameId': _nextOpnameId,
+      'opnames': _opnames.map((record) => record.toJson()).toList(),
+      'recipes': _recipes.map((line) => line.toJson()).toList(),
+      'processedOrderIds': _processedOrderIds.toList(),
+      'reversedOrderIds': _reversedOrderIds.toList(),
+    };
+  }
+
+  void validateLocalSnapshot(Map<String, dynamic> snapshot) {
+    if (snapshot['items'] is! List || snapshot['nextId'] is! int) {
+      throw const FormatException('Snapshot inventory tidak valid.');
+    }
+    (snapshot['items'] as List).map((e) => FirefaInventoryItem.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+    (snapshot['movements'] as List? ?? []).map((e) => FirefaStockMovement.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+    (snapshot['opnames'] as List? ?? []).map((e) => FirefaStockOpname.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+    (snapshot['recipes'] as List? ?? []).map((e) => FirefaRecipeLine.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+    if (snapshot['nextMovementId'] != null && snapshot['nextMovementId'] is! int ||
+        snapshot['nextOpnameId'] != null && snapshot['nextOpnameId'] is! int) {
+      throw const FormatException('Counter inventory tidak valid.');
+    }
+    for (final key in ['processedOrderIds', 'reversedOrderIds']) {
+      final values = snapshot[key];
+      if (values != null && (values is! List || values.any((v) => v is! String))) {
+        throw const FormatException('Riwayat order inventory tidak valid.');
+      }
+    }
+  }
+
+  Future<void> restoreLocalSnapshot(Map<String, dynamic> snapshot) async {
+    if (!_initialized) throw StateError('Inventory belum diinisialisasi');
+    validateLocalSnapshot(snapshot);
+    final items = (snapshot['items'] as List).map((e) => FirefaInventoryItem.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+    final movements = (snapshot['movements'] as List? ?? []).map((e) => FirefaStockMovement.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+    final opnames = (snapshot['opnames'] as List? ?? []).map((e) => FirefaStockOpname.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+    final recipes = (snapshot['recipes'] as List? ?? []).map((e) => FirefaRecipeLine.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+    _items..clear()..addAll(items);
+    _movements..clear()..addAll(movements);
+    _opnames..clear()..addAll(opnames);
+    _recipes..clear()..addAll(recipes);
+    _processedOrderIds..clear()..addAll((snapshot['processedOrderIds'] as List? ?? []).cast<String>());
+    _reversedOrderIds..clear()..addAll((snapshot['reversedOrderIds'] as List? ?? []).cast<String>());
+    _nextId = snapshot['nextId'] as int;
+    _nextMovementId = snapshot['nextMovementId'] as int? ?? 1;
+    _nextOpnameId = snapshot['nextOpnameId'] as int? ?? 1;
+    notifyListeners();
+    _save();
+    await waitForPendingSave();
+  }
+
   Future<void> waitForPendingSave() => _pendingSave;
 }
