@@ -388,14 +388,18 @@ class FirefaOrderStore extends ChangeNotifier {
 
     final previousOrder = _orders[index];
     final queue = FirefaOfflineSyncQueue.instance;
-    final matchingEvent = queue.entriesForOutlet(outletId).where(
-      (entry) => entry.eventId == eventId && entry.orderId == orderId,
-    );
-    final hasConflictedEvent = matchingEvent.isNotEmpty;
-    if (!hasConflictedEvent &&
-        queue.entriesForOutlet(outletId).any((entry) => entry.eventId == eventId)) {
-      throw StateError('Event konflik ditemukan pada order yang berbeda.');
+    final existingEvent = queue.findEvent(eventId);
+    if (existingEvent != null &&
+        (existingEvent.outletId != outletId || existingEvent.orderId != orderId)) {
+      throw StateError('Identitas event konflik tidak cocok dengan order aktif.');
     }
+    if (existingEvent != null &&
+        existingEvent.status != FirefaSyncStatus.conflict) {
+      throw StateError('Hanya event berstatus konflik yang dapat direkonsiliasi.');
+    }
+    // A missing event is allowed for an idempotent retry after a previous
+    // attempt removed the outbox entry but failed to finish durable local save.
+    final hasConflictedEvent = existingEvent != null;
 
     // Idempotency: a prior attempt may have persisted the order but failed
     // before the inbox/audit update. Allow retry when the event is already gone.
