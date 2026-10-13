@@ -52,6 +52,24 @@ void main() {
     await queue.waitForPendingSave();
   });
 
+  test('enqueue rejects invalid identity before mutating outbox sequence', () async {
+    final queue = FirefaOfflineSyncQueue.instance;
+    final before = queue.exportSnapshot();
+
+    expect(
+      () => queue.enqueueOrder(makeOrder(' ', 'restore-outlet'), 'order.created'),
+      throwsArgumentError,
+    );
+    expect(
+      () => queue.enqueueOrder(makeOrder('valid-order', 'restore-outlet'), ' '),
+      throwsArgumentError,
+    );
+
+    final after = queue.exportSnapshot();
+    expect(after['entries'], before['entries']);
+    expect(after['nextSequence'], before['nextSequence']);
+  });
+
   test('malformed event payload is normalized and leaves queue intact', () async {
     final queue = FirefaOfflineSyncQueue.instance;
     final existing = queue.enqueueOrder(
