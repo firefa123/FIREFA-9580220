@@ -50,6 +50,37 @@ void main() {
     expect(store.movementsForOutlet('B').where((m) => m.type == 'transfer_in'), hasLength(1));
   });
 
+  test('order idempotency is scoped to each outlet', () async {
+    final store = InventoryStore();
+    await store.initialize();
+    await store.addItem(
+      const InventoryCatalogItem(id: 'outlet-beans', name: 'Beans', unit: 'g'),
+    );
+    await store.receiveStock(outletId: 'outlet-A', itemId: 'outlet-beans', quantity: 20);
+    await store.receiveStock(outletId: 'outlet-B', itemId: 'outlet-beans', quantity: 20);
+
+    expect(await store.consumeOrderIngredients(
+      orderId: 'ORD-SAME-ID',
+      outletId: 'outlet-A',
+      ingredientQuantities: {'outlet-beans': 3},
+    ), isTrue);
+    expect(await store.consumeOrderIngredients(
+      orderId: 'ORD-SAME-ID',
+      outletId: 'outlet-B',
+      ingredientQuantities: {'outlet-beans': 4},
+    ), isTrue);
+    expect(await store.consumeOrderIngredients(
+      orderId: 'ORD-SAME-ID',
+      outletId: 'outlet-A',
+      ingredientQuantities: {'outlet-beans': 3},
+    ), isFalse);
+
+    expect(store.stockFor('outlet-A', 'outlet-beans'), 17);
+    expect(store.stockFor('outlet-B', 'outlet-beans'), 16);
+    expect(store.isOrderProcessed('ORD-SAME-ID', outletId: 'outlet-A'), isTrue);
+    expect(store.isOrderProcessed('ORD-SAME-ID', outletId: 'outlet-B'), isTrue);
+  });
+
   test('low-stock list uses threshold and outlet-specific stock', () async {
     final store = InventoryStore(); await store.initialize();
     await store.addItem(const InventoryCatalogItem(id: 'cups', name: 'Cups', unit: 'pcs', minimumStock: 5));
