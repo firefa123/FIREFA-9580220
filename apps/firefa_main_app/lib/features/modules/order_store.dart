@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'order_models.dart';
 import 'offline_sync_queue.dart';
 import 'inventory_store.dart';
+import 'table_store.dart';
 
 class FirefaOrderStore extends ChangeNotifier {
   FirefaOrderStore._();
@@ -163,6 +164,37 @@ class FirefaOrderStore extends ChangeNotifier {
     FirefaOfflineSyncQueue.instance.reconcileOrders(_orders);
     _scheduleSave();
     notifyListeners();
+  }
+
+  /// Keeps table availability aligned with all active dine-in orders.
+  /// Table IDs in legacy POS orders are stored as table names, so matching is
+  /// intentionally outlet-scoped and name-based for backward compatibility.
+  Future<void> _syncTableOccupancyForOrder(FirefaOrder order) async {
+    if (order.orderType != 'Dine In' || order.tableId == null) return;
+
+    try {
+      final tables = FirefaTableStore.instance;
+      await tables.initialize();
+      final activeOrders = _orders.where((candidate) =>
+        candidate.outletId == order.outletId &&
+        candidate.orderType == 'Dine In' &&
+        candidate.tableId == order.tableId &&
+        candidate.status != FirefaOrderStatus.completed &&
+        candidate.status != FirefaOrderStatus.cancelled
+      );
+      final shouldBeOccupied = activeOrders.isNotEmpty;
+      for (final table in tables.forOutlet(order.outletId).where(
+        (candidate) => candidate.name == order.tableId,
+      )) {
+        if (table.occupied != shouldBeOccupied) {
+          tables.setOccupied(order.outletId, table.id, shouldBeOccupied);
+        }
+      }
+      await tables.waitForPendingSave();
+    } catch (error) {
+      // Orders remain authoritative; the next table/order action can retry.
+      debugPrint('FIREFA: sinkronisasi status meja tertunda: $error');
+    }
   }
 
   List<FirefaOrder> ordersForOutlet(String outletId) {
@@ -345,6 +377,9 @@ class FirefaOrderStore extends ChangeNotifier {
     FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
     _scheduleSave();
     notifyListeners();
+    if (order.status == FirefaOrderStatus.completed) {
+      unawaited(_syncTableOccupancyForOrder(order));
+    }
     return true;
   }
 
@@ -385,6 +420,7 @@ class FirefaOrderStore extends ChangeNotifier {
     _scheduleSave();
     await waitForPendingSave();
     notifyListeners();
+    await _syncTableOccupancyForOrder(order);
     return true;
   }
 
@@ -398,6 +434,7 @@ class FirefaOrderStore extends ChangeNotifier {
     FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
     _scheduleSave();
     notifyListeners();
+    unawaited(_syncTableOccupancyForOrder(order));
     return true;
   }
 
