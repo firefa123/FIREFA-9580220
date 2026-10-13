@@ -40,14 +40,25 @@ class CheckoutController {
   }
 
   TransactionModel markPaid(TransactionModel transaction) {
+    if (transaction.status == TransactionStatus.paid ||
+        transaction.status != TransactionStatus.awaitingPayment) {
+      return transaction;
+    }
     return transaction.copyWith(status: TransactionStatus.paid);
   }
 
   TransactionModel complete(TransactionModel transaction) {
+    if (transaction.status == TransactionStatus.completed) return transaction;
+    if (transaction.status != TransactionStatus.paid) return transaction;
     return transaction.copyWith(status: TransactionStatus.completed);
   }
 
   TransactionModel cancel(TransactionModel transaction) {
+    if (transaction.status == TransactionStatus.cancelled) return transaction;
+    if (transaction.status != TransactionStatus.pending &&
+        transaction.status != TransactionStatus.awaitingPayment) {
+      return transaction;
+    }
     return transaction.copyWith(status: TransactionStatus.cancelled);
   }
 
