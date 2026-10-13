@@ -415,6 +415,39 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     }
   }
 
+  /// Restore a combined snapshot and wait until it is durable.
+  ///
+  /// If persistence fails, the live queue is returned to its prior snapshot so
+  /// callers never continue with an uncommitted outbox replacement.
+  Future<void> restoreCombinedSnapshotDurably(
+    Map<String, dynamic> data,
+  ) async {
+    _ensureInitialized();
+    final previous = exportSnapshot();
+    restoreCombinedSnapshot(data);
+    try {
+      await waitForPendingSave();
+    } catch (error, stackTrace) {
+      final previousEntries = (previous['entries'] as List)
+          .map((value) => FirefaSyncEntry.fromJson(
+                Map<String, dynamic>.from(value as Map),
+              ))
+          .toList();
+      _entries
+        ..clear()
+        ..addAll(previousEntries);
+      _nextSequence = previous['nextSequence'] as int;
+      notifyListeners();
+      try {
+        _scheduleSave();
+        await waitForPendingSave();
+      } catch (_) {
+        // Keep the original persistence error for the caller.
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
   /// Used only when a validated combined snapshot is restored.
   void restoreCombinedSnapshot(Map<String, dynamic> data) {
     _ensureInitialized();
