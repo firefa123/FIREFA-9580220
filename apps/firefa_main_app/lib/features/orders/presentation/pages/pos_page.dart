@@ -33,6 +33,14 @@ class _PosPageState extends State<PosPage> {
   TransactionModel? transaction;
   PaymentModel? payment;
   ReceiptModel? receipt;
+  List<TransactionModel> recentTransactions = const [];
+  bool _loadingHistory = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -104,6 +112,8 @@ class _PosPageState extends State<PosPage> {
                                   .toList(),
                             ),
                     ),
+                    const Divider(),
+                    _historySection(),
                     const Divider(),
                     Align(
                       alignment: Alignment.centerLeft,
@@ -215,6 +225,97 @@ class _PosPageState extends State<PosPage> {
     );
   }
 
+  Widget _historySection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Riwayat Transaksi',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            if (_loadingHistory)
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else
+              IconButton(
+                tooltip: 'Muat ulang riwayat',
+                onPressed: _loadHistory,
+                icon: const Icon(Icons.refresh, size: 18),
+              ),
+          ],
+        ),
+        if (!_loadingHistory && recentTransactions.isEmpty)
+          const Text('Belum ada transaksi tersimpan.')
+        else
+          ...recentTransactions.take(4).map(
+                (item) => ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    item.id,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    '${item.status.name} · Rp ${item.totalAmount.toStringAsFixed(0)}',
+                  ),
+                  trailing: const Icon(Icons.open_in_new, size: 16),
+                  onTap: () => _resumeTransaction(item),
+                ),
+              ),
+      ],
+    );
+  }
+
+  Future<void> _loadHistory() async {
+    if (_loadingHistory) return;
+    setState(() => _loadingHistory = true);
+    try {
+      final transactions = await orderRepository.getTransactions();
+      if (!mounted) return;
+      setState(() {
+        recentTransactions = transactions;
+        _loadingHistory = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingHistory = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Riwayat transaksi gagal dimuat.')),
+      );
+    }
+  }
+
+  Future<void> _resumeTransaction(TransactionModel selected) async {
+    final selectedPayment =
+        await orderRepository.getPaymentForTransaction(selected.id);
+    ReceiptModel? restoredReceipt;
+    if (selectedPayment?.status == PaymentStatus.paid &&
+        (selected.status == TransactionStatus.paid ||
+            selected.status == TransactionStatus.completed)) {
+      restoredReceipt = receiptController.generate(
+        transaction: selected,
+        payment: selectedPayment!,
+      );
+    }
+    if (!mounted) return;
+    setState(() {
+      transaction = selected;
+      payment = selectedPayment;
+      receipt = restoredReceipt;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Transaksi lokal berhasil dibuka kembali.')),
+    );
+  }
+
   Future<void> _checkout() async {
     final created = checkoutController.checkout(posController.cart);
     if (created == null) {
@@ -231,6 +332,7 @@ class _PosPageState extends State<PosPage> {
       transaction = created;
       payment = null;
       receipt = null;
+      recentTransactions = [created, ...recentTransactions];
     });
   }
 
@@ -285,6 +387,10 @@ class _PosPageState extends State<PosPage> {
       payment = paidPayment;
       transaction = completedTransaction;
       receipt = generatedReceipt;
+      recentTransactions = [
+        completedTransaction,
+        ...recentTransactions.where((item) => item.id != completedTransaction.id),
+      ];
     });
   }
 
@@ -312,6 +418,10 @@ class _PosPageState extends State<PosPage> {
 
     if (!mounted) return;
     setState(() {
+      recentTransactions = [
+        cancelledTransaction,
+        ...recentTransactions.where((item) => item.id != cancelledTransaction.id),
+      ];
       transaction = null;
       payment = null;
       receipt = null;
