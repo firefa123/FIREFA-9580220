@@ -178,9 +178,29 @@ void main() {
     expect(await store.consumeOrderStock(orderId: 'POS-ORDER-1', outletId: 'LEGACY-A', menuLines: [(menuId: 'menu-latte', quantity: 2)]), isFalse);
     expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == coffee.id).stock, 64);
     expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == milk.id).stock, 100);
-    // A wrong outlet must not restore stock or mark this order as reversed.
+    // The same order ID may exist at another outlet; stock idempotency must
+    // be scoped by both outlet and order identity.
+    expect(
+      store.add(outletId: 'LEGACY-B', name: 'Coffee B', unit: 'gram', stock: 10, minimumStock: 0),
+      isTrue,
+    );
+    final coffeeB = store.forOutlet('LEGACY-B').single;
+    expect(store.addRecipeLine(
+      outletId: 'LEGACY-B',
+      menuId: 'menu-latte',
+      ingredientId: coffeeB.id,
+      quantity: 1,
+    ), isTrue);
+    expect(await store.consumeOrderStock(
+      orderId: 'POS-ORDER-1',
+      outletId: 'LEGACY-B',
+      menuLines: [(menuId: 'menu-latte', quantity: 1)],
+    ), isTrue);
+    expect(store.forOutlet('LEGACY-B').single.stock, 9);
+
+    // An unrelated outlet must not restore either outlet's stock.
     await expectLater(
-      store.restoreCancelledOrderStock(orderId: 'POS-ORDER-1', outletId: 'LEGACY-B'),
+      store.restoreCancelledOrderStock(orderId: 'POS-ORDER-1', outletId: 'LEGACY-C'),
       throwsStateError,
     );
     expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == coffee.id).stock, 64);
@@ -188,9 +208,10 @@ void main() {
     expect(await store.restoreCancelledOrderStock(orderId: 'POS-ORDER-1', outletId: 'LEGACY-A'), isTrue);
     expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == coffee.id).stock, 100);
     expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == milk.id).stock, 300);
+    expect(store.forOutlet('LEGACY-B').single.stock, 9);
     expect(await store.restoreCancelledOrderStock(orderId: 'POS-ORDER-1', outletId: 'LEGACY-A'), isFalse);
     expect(store.forOutlet('LEGACY-A').singleWhere((item) => item.id == coffee.id).stock, 100);
-    expect(store.isOrderStockReversed('POS-ORDER-1'), isTrue);
+    expect(store.isOrderStockReversed('POS-ORDER-1', outletId: 'LEGACY-A'), isTrue);
     await store.waitForPendingSave();
   });
 
