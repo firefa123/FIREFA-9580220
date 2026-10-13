@@ -88,7 +88,9 @@ class FirefaTableStore extends ChangeNotifier {
     final normalized = name.trim();
     final index = _tables.indexWhere((t) => t.id == id && t.outletId == outletId);
     if (index < 0 || normalized.isEmpty || normalized.length > 40 ||
-        _hasActiveOrderFor(_tables[index])) return false;
+        _hasActiveOrderFor(_tables[index])) {
+      return false;
+    }
     if (_tables.any((t) => t.outletId == outletId && t.id != id &&
         t.name.toLowerCase() == normalized.toLowerCase())) {
       return false;
