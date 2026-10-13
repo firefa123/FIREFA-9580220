@@ -329,24 +329,45 @@ class _PosPageState extends State<PosPage> {
   }
 
   Future<void> _resumeTransaction(TransactionModel selected) async {
+    var restoredTransaction = selected;
     final selectedPayment =
         await orderRepository.getPaymentForTransaction(selected.id);
     ReceiptModel? restoredReceipt;
+
+    // Recover the interrupted local sequence where payment was saved as paid
+    // but the transaction status had not yet advanced.
     if (selectedPayment?.status == PaymentStatus.paid &&
-        (selected.status == TransactionStatus.paid ||
-            selected.status == TransactionStatus.completed)) {
+        selected.status == TransactionStatus.awaitingPayment) {
+      final paid = checkoutController.markPaid(selected);
+      final completed = checkoutController.complete(paid);
+      await orderRepository.saveTransaction(paid);
+      await orderRepository.saveTransaction(completed);
+      restoredTransaction = completed;
+    } else if (selectedPayment?.status == PaymentStatus.paid &&
+        selected.status == TransactionStatus.paid) {
+      restoredTransaction = checkoutController.complete(selected);
+      await orderRepository.saveTransaction(restoredTransaction);
+    }
+
+    if (selectedPayment?.status == PaymentStatus.paid &&
+        (restoredTransaction.status == TransactionStatus.paid ||
+            restoredTransaction.status == TransactionStatus.completed)) {
       restoredReceipt = receiptController.generate(
-        transaction: selected,
+        transaction: restoredTransaction,
         payment: selectedPayment!,
       );
     }
     if (!mounted) return;
     setState(() {
-      transaction = selected;
+      transaction = restoredTransaction;
       payment = selectedPayment;
       receipt = restoredReceipt;
+      recentTransactions = [
+        restoredTransaction,
+        ...recentTransactions.where((item) => item.id != restoredTransaction.id),
+      ];
       posController.restoreCart(
-        selected.itemDetails
+        restoredTransaction.itemDetails
             .map(
               (line) => CartItemModel(
                 id: line.id,
