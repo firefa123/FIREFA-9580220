@@ -14,11 +14,11 @@ void main() {
     Completer<void>? releaseWrite;
 
     final store = InventoryStore(
-      persistString: (_, __) async {
+      persistString: (_, _) async {
         if (holdNextWrite) {
           holdNextWrite = false;
-          writeStarted!.complete();
-          await releaseWrite!.future;
+          writeStarted.complete();
+          await releaseWrite.future;
           return false;
         }
         return true;
@@ -43,14 +43,14 @@ void main() {
       itemId: 'rice-concurrent',
       quantity: 1,
     );
-    await writeStarted!.future;
+    await writeStarted.future;
 
     final succeedingMutation = store.receiveStock(
       outletId: 'A',
       itemId: 'rice-concurrent',
       quantity: 2,
     );
-    releaseWrite!.complete();
+    releaseWrite.complete();
 
     await expectLater(failedMutation, throwsStateError);
     await succeedingMutation;
