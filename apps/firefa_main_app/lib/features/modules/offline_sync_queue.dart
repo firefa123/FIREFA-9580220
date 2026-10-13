@@ -9,6 +9,25 @@ import 'order_models.dart';
 
 enum FirefaSyncStatus { pending, syncing, synced, failed, conflict }
 
+Object? _freezeJsonValue(Object? value) {
+  if (value is Map) {
+    return Map<String, dynamic>.unmodifiable(
+      value.map(
+        (key, nested) => MapEntry(key.toString(), _freezeJsonValue(nested)),
+      ),
+    );
+  }
+  if (value is List) {
+    return List<Object?>.unmodifiable(value.map(_freezeJsonValue));
+  }
+  return value;
+}
+
+Map<String, dynamic> _immutableJsonMap(Map<String, dynamic> value) =>
+    Map<String, dynamic>.unmodifiable(
+      value.map((key, nested) => MapEntry(key, _freezeJsonValue(nested))),
+    );
+
 class FirefaSyncEntry {
   final String eventId;
   final String outletId;
@@ -26,11 +45,11 @@ class FirefaSyncEntry {
     required this.orderId,
     required this.eventType,
     required this.createdAt,
-    required this.orderSnapshot,
+    required Map<String, dynamic> orderSnapshot,
     this.status = FirefaSyncStatus.pending,
     this.attempts = 0,
     this.nextAttemptAt,
-  });
+  }) : orderSnapshot = _immutableJsonMap(orderSnapshot);
 
   Map<String, dynamic> toJson() => {
     'eventId': eventId,
