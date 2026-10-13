@@ -35,6 +35,8 @@ void main() {
 
     final event = queue.enqueueOrder(order, 'order.updated');
     await queue.waitForPendingSave();
+    await queue.markSyncing(event.eventId);
+    await queue.markConflict(event.eventId);
     final invalidServerSnapshot = Map<String, dynamic>.from(order.toJson())
       ..['status'] = FirefaOrderStatus.served.name
       ..['total'] = 1;
@@ -175,6 +177,8 @@ void main() {
 
     final event = queue.enqueueOrder(order, 'order.updated');
     await queue.waitForPendingSave();
+    await queue.markSyncing(event.eventId);
+    await queue.markConflict(event.eventId);
 
     await orders.reconcileConflict(
       eventId: event.eventId,
@@ -216,6 +220,8 @@ void main() {
 
     final event = queue.enqueueOrder(order, 'order.updated');
     await queue.waitForPendingSave();
+    await queue.markSyncing(event.eventId);
+    await queue.markConflict(event.eventId);
     final serverSnapshot = Map<String, dynamic>.from(order.toJson())
       ..['status'] = FirefaOrderStatus.preparing.name;
 
