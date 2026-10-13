@@ -72,6 +72,38 @@ void main() {
     expect(snapshot['payments'].single['status'], 'paid');
   });
 
+  test('checkout line details persist and are restored after repository recreation', () async {
+    final first = LocalOrderRepository();
+    final awaiting = transaction().copyWith(
+      itemDetails: const [
+        TransactionLineItem(
+          id: 'coffee',
+          name: 'Coffee',
+          unitPrice: 15000,
+          quantity: 2,
+        ),
+        TransactionLineItem(
+          id: 'tea',
+          name: 'Tea',
+          unitPrice: 5000,
+          quantity: 1,
+        ),
+      ],
+      itemIds: const ['coffee', 'tea'],
+      totalAmount: 35000,
+    );
+    await first.saveTransaction(awaiting);
+
+    final second = LocalOrderRepository();
+    final restored = await second.getTransaction('trx-1');
+    expect(restored!.itemDetails, hasLength(2));
+    expect(restored.itemDetails.first.name, 'Coffee');
+    expect(restored.itemDetails.first.unitPrice, 15000);
+    expect(restored.itemDetails.first.quantity, 2);
+    expect(restored.itemDetails.first.subtotal, 30000);
+    expect(restored.itemDetails.last.subtotal, 5000);
+  });
+
   test('history is newest first and payment lookup restores the latest payment', () async {
     final repository = LocalOrderRepository();
     final older = transaction(id: 'trx-old').copyWith(
