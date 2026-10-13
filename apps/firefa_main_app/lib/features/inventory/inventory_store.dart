@@ -39,10 +39,10 @@ class InventoryMovement {
 class InventoryStore extends ChangeNotifier {
   InventoryStore({
     this.storageKey = 'firefa_inventory_domain_v1',
-    Future<bool> Function(String key, String value)? persistString,
-  }) : _persistString = persistString;
+    this.persistString,
+  });
   final String storageKey;
-  final Future<bool> Function(String key, String value)? _persistString;
+  final Future<bool> Function(String key, String value)? persistString;
   Future<void> _mutationTail = Future<void>.value();
 
   Future<T> _serializeMutation<T>(Future<T> Function() action) {
@@ -208,7 +208,7 @@ class InventoryStore extends ChangeNotifier {
     final raw = jsonEncode({'version': 1, 'nextMovementId': _nextMovementId,
       'items': _items.values.map((v) => v.toJson()).toList(), 'stock': _stock,
       'movements': _movements.map((v) => v.toJson()).toList(), 'processedOrderIds': _processedOrderIds.toList()});
-    final write = _persistString;
+    final write = persistString;
     final saved = write != null
         ? await write(storageKey, raw)
         : await (await SharedPreferences.getInstance()).setString(storageKey, raw);
