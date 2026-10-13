@@ -160,13 +160,23 @@ class FirefaInventoryStore extends ChangeNotifier {
                   Map<String, dynamic>.from(entry as Map),
                 ))
             .toList();
-        restoredProcessedOrders = _readStringSet(
+        final savedProcessedOrders = _readStringSet(
           decoded['processedOrderIds'],
           'processedOrderIds',
         );
-        restoredReversedOrders = _readStringSet(
+        final savedReversedOrders = _readStringSet(
           decoded['reversedOrderIds'],
           'reversedOrderIds',
+        );
+        restoredProcessedOrders = _scopeLegacyOrderIds(
+          savedProcessedOrders,
+          restoredMovements,
+          isReversal: false,
+        );
+        restoredReversedOrders = _scopeLegacyOrderIds(
+          savedReversedOrders,
+          restoredMovements,
+          isReversal: true,
         );
         nextId = _readPositiveSequence(decoded['nextId'], 'nextId');
         nextMovementId = _readPositiveSequence(
@@ -420,8 +430,11 @@ class FirefaInventoryStore extends ChangeNotifier {
   }
 
   Future<bool> consumeOrderStock({required String orderId, required String outletId, required List<({String menuId, int quantity})> menuLines}) async {
-    if (orderId.trim().isEmpty) throw ArgumentError('ID order wajib diisi.');
-    if (_processedOrderIds.contains(orderId)) return false;
+    if (orderId.trim().isEmpty || outletId.trim().isEmpty) {
+      throw ArgumentError('ID order dan outlet wajib diisi.');
+    }
+    final orderKey = _orderKey(outletId, orderId);
+    if (_processedOrderIds.contains(orderKey)) return false;
     if (!validateOrderStock(outletId: outletId, menuLines: menuLines)) return false;
     final requiredQuantities = <String, int>{};
     final recipes = _recipes.where((line) => line.outletId == outletId).toList();
@@ -441,7 +454,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       _items[index] = FirefaInventoryItem(id: old.id, outletId: old.outletId, name: old.name, unit: old.unit, stock: after, minimumStock: old.minimumStock);
       _movements.add(FirefaStockMovement(id: 'movement-${_nextMovementId++}', outletId: outletId, itemId: old.id, itemName: old.name, type: 'out', before: old.stock, after: after, note: 'POS order $orderId', timestamp: DateTime.now().toIso8601String()));
     }
-    _processedOrderIds.add(orderId);
+    _processedOrderIds.add(orderKey);
     notifyListeners();
     _save();
     await waitForPendingSave();
@@ -459,8 +472,9 @@ class FirefaInventoryStore extends ChangeNotifier {
     if (orderId.trim().isEmpty || outletId.trim().isEmpty) {
       throw ArgumentError('Order dan outlet wajib diisi.');
     }
-    if (_reversedOrderIds.contains(orderId)) return false;
-    if (!_processedOrderIds.contains(orderId)) return false;
+    final orderKey = _orderKey(outletId, orderId);
+    if (_reversedOrderIds.contains(orderKey)) return false;
+    if (!_processedOrderIds.contains(orderKey)) return false;
 
     final sourceMovements = _movements.where((movement) =>
       movement.outletId == outletId &&
@@ -505,15 +519,45 @@ class FirefaInventoryStore extends ChangeNotifier {
         timestamp: DateTime.now().toIso8601String(),
       ));
     }
-    _reversedOrderIds.add(orderId);
+    _reversedOrderIds.add(orderKey);
     notifyListeners();
     _save();
     await waitForPendingSave();
     return true;
   }
 
-  bool isOrderStockProcessed(String orderId) => _processedOrderIds.contains(orderId);
-  bool isOrderStockReversed(String orderId) => _reversedOrderIds.contains(orderId);
+  bool isOrderStockProcessed(String orderId, {required String outletId}) =>
+      _processedOrderIds.contains(_orderKey(outletId, orderId));
+
+  bool isOrderStockReversed(String orderId, {required String outletId}) =>
+      _reversedOrderIds.contains(_orderKey(outletId, orderId));
+
+  String _orderKey(String outletId, String orderId) =>
+      '$outletId\\u0000$orderId';
+
+  Set<String> _scopeLegacyOrderIds(
+    Set<String> savedIds,
+    List<FirefaStockMovement> movements, {
+    required bool isReversal,
+  }) {
+    final scoped = <String>{};
+    for (final savedId in savedIds) {
+      if (savedId.contains('\\u0000')) {
+        scoped.add(savedId);
+        continue;
+      }
+      final expectedNote = isReversal
+          ? 'Pembatalan POS order $savedId'
+          : 'POS order $savedId';
+      for (final movement in movements) {
+        if (movement.note == expectedNote &&
+            (isReversal ? movement.type == 'in' : movement.type == 'out')) {
+          scoped.add(_orderKey(movement.outletId, savedId));
+        }
+      }
+    }
+    return scoped;
+  }
 
   List<FirefaStockMovement> historyForOutlet(String outletId) {
     if (!_initialized) throw StateError('Inventory belum diinisialisasi');
