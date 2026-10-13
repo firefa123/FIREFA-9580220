@@ -49,6 +49,25 @@ void main() {
       {
         'version': 1,
         'nextId': 2,
+        'orders': [order(status: 'cancelled', receivedQuantity: 0)],
+      },
+      {
+        'version': 1,
+        'nextId': 2,
+        'orders': [
+          {...order(), 'createdAt': '2026-02-30T00:00:00.000Z'},
+        ],
+      },
+      {
+        'version': 1,
+        'nextId': 2,
+        'orders': [
+          {...order(), 'followUpDate': '2026-02-30'},
+        ],
+      },
+      {
+        'version': 1,
+        'nextId': 2,
         'orders': [
           order(
             receivedQuantity: 2,
