@@ -63,7 +63,7 @@ void main() {
       itemId: 'milk-service',
       quantity: 200,
     );
-    const service = OrderInventoryService(inventory: inventory);
+    final service = OrderInventoryService(inventory: inventory);
 
     await expectLater(
       service.consumeOrder(
