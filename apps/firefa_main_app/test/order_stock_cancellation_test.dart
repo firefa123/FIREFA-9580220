@@ -80,7 +80,7 @@ void main() {
 
     expect(await orders.cancelAndRestoreStock('CANCEL-TEST', order.id), isFalse);
     expect(inventory.forOutlet('CANCEL-TEST').single.stock, 20);
-    expect(inventory.isOrderStockReversed(order.id), isTrue);
+    expect(inventory.isOrderStockReversed(order.id, outletId: 'CANCEL-TEST'), isTrue);
 
     // A paid order must not be cancelled or have its stock restored.
     final paidOrder = orders.createOrder(
@@ -113,7 +113,7 @@ void main() {
     expect(await orders.cancelAndRestoreStock('CANCEL-TEST', paidOrder.id), isFalse);
     expect(paidOrder.status, isNot(FirefaOrderStatus.cancelled));
     expect(inventory.forOutlet('CANCEL-TEST').single.stock, 16);
-    expect(inventory.isOrderStockReversed(paidOrder.id), isFalse);
+    expect(inventory.isOrderStockReversed(paidOrder.id, outletId: 'CANCEL-TEST'), isFalse);
 
     await orders.waitForPendingSave();
     await inventory.waitForPendingSave();
@@ -124,7 +124,7 @@ void main() {
     expect(rawInventory, isNotNull);
     final savedInventory = jsonDecode(rawInventory!) as Map<String, dynamic>;
     expect((savedInventory['reversedOrderIds'] as List).cast<String>(),
-        contains(order.id));
+        contains('CANCEL-TEST\\u0000${order.id}'));
     final savedItems = (savedInventory['items'] as List)
         .map((value) => Map<String, dynamic>.from(value as Map))
         .toList();
