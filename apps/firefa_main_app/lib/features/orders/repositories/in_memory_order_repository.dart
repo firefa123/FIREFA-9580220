@@ -11,7 +11,13 @@ class InMemoryOrderRepository implements OrderRepository {
     if (transaction.id.trim().isEmpty ||
         !transaction.totalAmount.isFinite ||
         transaction.totalAmount < 0 ||
-        transaction.itemIds.any((id) => id.trim().isEmpty)) {
+        transaction.itemIds.any((id) => id.trim().isEmpty) ||
+        transaction.itemDetails.any((line) =>
+            line.id.trim().isEmpty ||
+            line.name.trim().isEmpty ||
+            line.unitPrice < 0 ||
+            line.quantity <= 0 ||
+            line.unitPrice != 0 && line.quantity > 999999999 ~/ line.unitPrice)) {
       throw ArgumentError('Data transaksi tidak valid.');
     }
 
@@ -56,7 +62,8 @@ class InMemoryOrderRepository implements OrderRepository {
       a.id == b.id &&
       a.createdAt == b.createdAt &&
       a.totalAmount == b.totalAmount &&
-      _sameList(a.itemIds, b.itemIds);
+      _sameList(a.itemIds, b.itemIds) &&
+      _sameLineItems(a.itemDetails, b.itemDetails);
 
   bool _samePaymentIdentity(PaymentModel a, PaymentModel b) =>
       a.id == b.id &&
@@ -64,6 +71,24 @@ class InMemoryOrderRepository implements OrderRepository {
       a.method == b.method &&
       a.amount == b.amount &&
       a.createdAt == b.createdAt;
+
+  bool _sameLineItems(
+    List<TransactionLineItem> a,
+    List<TransactionLineItem> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      final left = a[i];
+      final right = b[i];
+      if (left.id != right.id ||
+          left.name != right.name ||
+          left.unitPrice != right.unitPrice ||
+          left.quantity != right.quantity) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   bool _canTransitionTransaction(TransactionStatus from, TransactionStatus to) {
     if (from == to) return true;
