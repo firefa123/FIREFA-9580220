@@ -144,9 +144,13 @@ class _ReportsPageState extends State<ReportsPage> {
           entry.value.revenue.toString()].map(_csvCell).join(','),
     ].join('\r\n');
 
-    if (!mounted || !allowed || outlet.selectedOutletId != outletId) return;
+    if (!mounted || !allowed || outlet.selectedOutletId != outletId) {
+      return;
+    }
     await Clipboard.setData(ClipboardData(text: csv));
-    if (!mounted || !allowed || outlet.selectedOutletId != outletId) return;
+    if (!mounted || !allowed || outlet.selectedOutletId != outletId) {
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text('CSV ${sorted.length} produk Paid disalin ke clipboard.'),
     ));
