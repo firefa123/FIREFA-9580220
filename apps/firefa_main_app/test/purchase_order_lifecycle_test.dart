@@ -94,11 +94,20 @@ void main() {
       note: 'Second delivery',
     ), isTrue);
     final second = orders.forOutlet(outletId).first;
-    expect(await orders.receiveDurably(
-      outletId: outletId,
-      orderId: second.id,
-      quantity: 1,
-    ), isTrue);
+    final concurrentReceipts = await Future.wait([
+      orders.receiveDurably(
+        outletId: outletId,
+        orderId: second.id,
+        quantity: 1,
+      ),
+      orders.receiveDurably(
+        outletId: outletId,
+        orderId: second.id,
+        quantity: 1,
+      ),
+    ]);
+    expect(concurrentReceipts.where((success) => success), hasLength(1));
+    expect(orders.forOutlet(outletId).first.receivedQuantity, 1);
     expect(inventory.forOutlet(outletId).single.stock, 19);
 
     expect(orders.cancel(outletId: outletId, orderId: second.id), isTrue);
