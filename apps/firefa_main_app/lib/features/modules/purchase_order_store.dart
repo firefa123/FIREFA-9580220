@@ -408,6 +408,41 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
     return true;
   }
 
+  Future<bool> cancelDurably({
+    required String outletId,
+    required String orderId,
+  }) async {
+    if (!_initialized) return false;
+    final index = _orders.indexWhere((po) =>
+        po.outletId == outletId &&
+        po.id == orderId &&
+        (po.status == 'ordered' || po.status == 'partial'));
+    if (index < 0) return false;
+
+    final previous = _orders[index];
+    _orders[index] = previous.withStatus(
+      'cancelled',
+      DateTime.now().toIso8601String(),
+    );
+    _save();
+    try {
+      await waitForPendingSave();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      _orders[index] = previous;
+      _save();
+      try {
+        await waitForPendingSave();
+      } catch (_) {
+        // Keep the in-memory order restored; persistence error is surfaced
+        // through false so the UI can ask the user to retry.
+      }
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<bool> receiveDurably({
     required String outletId,
     required String orderId,
