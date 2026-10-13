@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:firefa_main_app/features/modules/order_store.dart';
+import 'package:firefa_main_app/features/modules/order_models.dart';
 import 'package:firefa_main_app/features/modules/offline_sync_queue.dart';
 
 void main() {
