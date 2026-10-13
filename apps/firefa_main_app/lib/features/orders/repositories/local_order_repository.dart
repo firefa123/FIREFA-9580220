@@ -75,6 +75,15 @@ class LocalOrderRepository implements OrderRepository {
             status: status,
             syncStatus: syncStatus,
             itemIds: (json['itemIds'] as List).cast<String>(),
+            itemDetails: json['itemDetails'] == null
+                ? const []
+                : (json['itemDetails'] as List)
+                    .map(
+                      (line) => TransactionLineItem.fromJson(
+                        Map<String, dynamic>.from(line as Map),
+                      ),
+                    )
+                    .toList(growable: false),
           );
           if (restoredTransactions.containsKey(id)) {
             throw const FormatException('ID transaksi lokal duplikat.');
@@ -152,6 +161,7 @@ class LocalOrderRepository implements OrderRepository {
         'status': transaction.status.name,
         'syncStatus': transaction.syncStatus.name,
         'itemIds': transaction.itemIds,
+        'itemDetails': transaction.itemDetails.map((line) => line.toJson()).toList(),
       }).toList(),
       'payments': payments.values.map((payment) => {
         'id': payment.id,
@@ -183,7 +193,8 @@ class LocalOrderRepository implements OrderRepository {
       a.id == b.id &&
       a.createdAt == b.createdAt &&
       a.totalAmount == b.totalAmount &&
-      _sameList(a.itemIds, b.itemIds);
+      _sameList(a.itemIds, b.itemIds) &&
+      _sameLineItems(a.itemDetails, b.itemDetails);
 
   bool _samePaymentIdentity(PaymentModel a, PaymentModel b) =>
       a.id == b.id &&
@@ -191,6 +202,24 @@ class LocalOrderRepository implements OrderRepository {
       a.method == b.method &&
       a.amount == b.amount &&
       a.createdAt == b.createdAt;
+
+  bool _sameLineItems(
+    List<TransactionLineItem> a,
+    List<TransactionLineItem> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      final left = a[i];
+      final right = b[i];
+      if (left.id != right.id ||
+          left.name != right.name ||
+          left.unitPrice != right.unitPrice ||
+          left.quantity != right.quantity) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   bool _sameList(List<String> a, List<String> b) {
     if (a.length != b.length) return false;
