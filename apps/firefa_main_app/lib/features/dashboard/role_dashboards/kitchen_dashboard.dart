@@ -50,7 +50,16 @@ class _KitchenDashboardState extends State<KitchenDashboard> {
               title: Text(order.id),
               subtitle: Text(order.items.map((item) => '${item.productName} x${item.quantity}').join(', ')),
               trailing: FilledButton(
-                onPressed: () => orderStore.advance(order.outletId, order.id),
+                onPressed: () async {
+                  try {
+                    await orderStore.advanceAndPersist(order.outletId, order.id);
+                  } catch (error) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Status order gagal disimpan: $error')),
+                    );
+                  }
+                },
                 child: Text(order.status.label),
               ),
             ),
