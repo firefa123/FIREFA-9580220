@@ -137,6 +137,18 @@ class FirefaLocalStore extends ChangeNotifier {
   SharedPreferences? _preferences;
   bool _initialized = false;
   int _orderSequence = 1;
+  String businessName = 'FIREFA Demo Restaurant';
+  String receiptFooter = 'Terima kasih atas kunjungan Anda.';
+  final Map<String, String> printerTargets = {
+    'Kasir': '',
+    'Kitchen': '',
+    'Bar': '',
+  };
+  final Map<String, bool> printerEnabled = {
+    'Kasir': false,
+    'Kitchen': false,
+    'Bar': false,
+  };
 
   final List<MenuProduct> products = [
     MenuProduct(id: 'P01', name: 'Cappuccino', category: 'Coffee', price: 28000, stock: 40),
@@ -178,6 +190,20 @@ class FirefaLocalStore extends ChangeNotifier {
             ..addAll(savedOrders);
         }
         _orderSequence = (data['orderSequence'] as num?)?.toInt() ?? 1;
+        businessName = data['businessName'] as String? ?? businessName;
+        receiptFooter = data['receiptFooter'] as String? ?? receiptFooter;
+        final savedTargets = data['printerTargets'];
+        if (savedTargets is Map) {
+          for (final role in printerTargets.keys) {
+            printerTargets[role] = savedTargets[role] as String? ?? '';
+          }
+        }
+        final savedEnabled = data['printerEnabled'];
+        if (savedEnabled is Map) {
+          for (final role in printerEnabled.keys) {
+            printerEnabled[role] = savedEnabled[role] as bool? ?? false;
+          }
+        }
       } catch (_) {
         // Invalid local data must not stop the app from opening with defaults.
       }
@@ -192,6 +218,10 @@ class FirefaLocalStore extends ChangeNotifier {
       'products': products.map((product) => product.toJson()).toList(),
       'orders': orders.map((order) => order.toJson()).toList(),
       'orderSequence': _orderSequence,
+      'businessName': businessName,
+      'receiptFooter': receiptFooter,
+      'printerTargets': printerTargets,
+      'printerEnabled': printerEnabled,
     });
     final saved = await prefs.setString(_storeKey, encoded);
     if (!saved) throw StateError('Gagal menyimpan data lokal.');
@@ -303,6 +333,108 @@ class FirefaLocalStore extends ChangeNotifier {
         final matches = products.where((item) => item.id == line.productId);
         if (matches.isNotEmpty) matches.first.stock -= line.quantity;
       }
+      rethrow;
+    }
+    notifyListeners();
+  }
+
+  Future<void> saveMenuProduct({
+    String? id,
+    required String name,
+    required String category,
+    required int price,
+    required int openingStock,
+  }) async {
+    final normalizedName = name.trim();
+    final normalizedCategory = category.trim();
+    if (normalizedName.isEmpty || normalizedCategory.isEmpty) {
+      throw StateError('Nama menu dan kategori wajib diisi.');
+    }
+    if (price < 1 || openingStock < 0) {
+      throw StateError('Harga harus lebih dari nol dan stok tidak boleh negatif.');
+    }
+    if (id == null && products.any((item) => item.name.toLowerCase() == normalizedName.toLowerCase())) {
+      throw StateError('Nama menu sudah digunakan.');
+    }
+    final existing = id == null ? null : products.firstWhere(
+      (item) => item.id == id,
+      orElse: () => throw StateError('Menu tidak ditemukan.'),
+    );
+    final oldName = existing?.name;
+    final oldCategory = existing?.category;
+    final oldPrice = existing?.price;
+    final oldStock = existing?.stock;
+    if (existing == null) {
+      final nextId = 'P${products.length + 1}'.padLeft(3, '0');
+      products.add(MenuProduct(
+        id: nextId,
+        name: normalizedName,
+        category: normalizedCategory,
+        price: price,
+        stock: openingStock,
+      ));
+    } else {
+      existing
+        ..name = normalizedName
+        ..category = normalizedCategory
+        ..price = price
+        ..stock = openingStock;
+    }
+    try {
+      await _save();
+    } catch (_) {
+      if (existing == null) {
+        products.removeLast();
+      } else {
+        existing
+          ..name = oldName!
+          ..category = oldCategory!
+          ..price = oldPrice!
+          ..stock = oldStock!;
+      }
+      rethrow;
+    }
+    notifyListeners();
+  }
+
+  Future<void> saveBusinessSettings({
+    required String name,
+    required String footer,
+  }) async {
+    final cleanName = name.trim();
+    if (cleanName.isEmpty) throw StateError('Nama restoran wajib diisi.');
+    final previousName = businessName;
+    final previousFooter = receiptFooter;
+    businessName = cleanName;
+    receiptFooter = footer.trim();
+    try {
+      await _save();
+    } catch (_) {
+      businessName = previousName;
+      receiptFooter = previousFooter;
+      rethrow;
+    }
+    notifyListeners();
+  }
+
+  Future<void> savePrinterSettings({
+    required String role,
+    required bool enabled,
+    required String target,
+  }) async {
+    if (!printerTargets.containsKey(role)) throw StateError('Jenis printer tidak dikenal.');
+    if (enabled && target.trim().isEmpty) {
+      throw StateError('Isi nama/alamat printer sebelum mengaktifkannya.');
+    }
+    final previousEnabled = printerEnabled[role]!;
+    final previousTarget = printerTargets[role]!;
+    printerEnabled[role] = enabled;
+    printerTargets[role] = target.trim();
+    try {
+      await _save();
+    } catch (_) {
+      printerEnabled[role] = previousEnabled;
+      printerTargets[role] = previousTarget;
       rethrow;
     }
     notifyListeners();
@@ -503,6 +635,8 @@ class _MainShellState extends State<MainShell> {
       _NavItem('Menu', Icons.restaurant_menu),
       _NavItem('Inventory', Icons.inventory_2_outlined),
       _NavItem('Laporan', Icons.bar_chart),
+      _NavItem('Printer', Icons.print_outlined),
+      _NavItem('Pengaturan', Icons.settings_outlined),
     ];
   }
 
@@ -538,6 +672,10 @@ class _MainShellState extends State<MainShell> {
         return InventoryView(store: widget.store);
       case 'Laporan':
         return ReportsView(store: widget.store);
+      case 'Printer':
+        return PrinterView(store: widget.store);
+      case 'Pengaturan':
+        return BusinessSettingsView(store: widget.store);
       default:
         return const SizedBox.shrink();
     }
@@ -844,18 +982,193 @@ class MenuView extends StatelessWidget {
   final FirefaLocalStore store;
   const MenuView({super.key, required this.store});
 
+  Future<void> _edit(BuildContext context, {MenuProduct? product}) async {
+    final name = TextEditingController(text: product?.name ?? '');
+    final category = TextEditingController(text: product?.category ?? 'Food');
+    final price = TextEditingController(text: product?.price.toString() ?? '');
+    final stock = TextEditingController(text: product?.stock.toString() ?? '0');
+    final formKey = GlobalKey<FormState>();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(product == null ? 'Tambah Menu' : 'Ubah Menu'),
+        content: SizedBox(
+          width: 420,
+          child: Form(
+            key: formKey,
+            child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextFormField(controller: name, decoration: const InputDecoration(labelText: 'Nama menu'), validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null),
+              const SizedBox(height: 10),
+              TextFormField(controller: category, decoration: const InputDecoration(labelText: 'Kategori'), validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null),
+              const SizedBox(height: 10),
+              TextFormField(controller: price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Harga (Rupiah)'), validator: (v) => int.tryParse(v ?? '') == null || int.parse(v!) < 1 ? 'Masukkan harga valid' : null),
+              const SizedBox(height: 10),
+              TextFormField(controller: stock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Stok awal/tersedia'), validator: (v) => int.tryParse(v ?? '') == null || int.parse(v!) < 0 ? 'Masukkan stok valid' : null),
+            ])),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Batal')),
+          FilledButton(onPressed: () {
+            if (formKey.currentState!.validate()) Navigator.pop(dialogContext, true);
+          }, child: const Text('Simpan')),
+        ],
+      ),
+    );
+    if (result == true) {
+      try {
+        await store.saveMenuProduct(
+          id: product?.id,
+          name: name.text,
+          category: category.text,
+          price: int.parse(price.text),
+          openingStock: int.parse(stock.text),
+        );
+      } catch (error) {
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Menu gagal disimpan: $error')));
+      }
+    }
+    name.dispose();
+    category.dispose();
+    price.dispose();
+    stock.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => PageFrame(
     title: 'Menu Management',
-    subtitle: 'Daftar menu yang digunakan oleh POS.',
-    child: Card(child: Column(children: [
-      for (final product in store.products) ListTile(
-        leading: const CircleAvatar(backgroundColor: Color(0xFFE0F2F1), child: Icon(Icons.restaurant_menu, color: _teal)),
-        title: Text(product.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text('${product.category} • Stok ${product.stock}'),
-        trailing: Text(_rupiah(product.price), style: const TextStyle(color: _teal, fontWeight: FontWeight.w700)),
+    subtitle: 'Tambah dan ubah menu yang digunakan langsung oleh POS.',
+    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _edit(context), icon: const Icon(Icons.add), label: const Text('Tambah Menu'))),
+      const SizedBox(height: 12),
+      Card(child: Column(children: [
+        for (final product in store.products) ListTile(
+          leading: const CircleAvatar(backgroundColor: Color(0xFFE0F2F1), child: Icon(Icons.restaurant_menu, color: _teal)),
+          title: Text(product.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+          subtitle: Text('${product.category} • Stok ${product.stock}'),
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(_rupiah(product.price), style: const TextStyle(color: _teal, fontWeight: FontWeight.w700)),
+            IconButton(tooltip: 'Ubah menu', onPressed: () => _edit(context, product: product), icon: const Icon(Icons.edit_outlined)),
+          ]),
+        ),
+      ])),
+    ]),
+  );
+}
+
+class PrinterView extends StatelessWidget {
+  final FirefaLocalStore store;
+  const PrinterView({super.key, required this.store});
+
+  @override
+  Widget build(BuildContext context) => PageFrame(
+    title: 'Printer Management',
+    subtitle: 'Atur target printer kasir, kitchen, dan bar. Tes cetak di sini masih berupa simulasi.',
+    child: Column(children: [
+      for (final role in store.printerTargets.keys) Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: _PrinterConfigForm(store: store, role: role),
+        ),
       ),
-    ])),
+      const Card(child: Padding(padding: EdgeInsets.all(16), child: Row(children: [
+        Icon(Icons.info_outline, color: _muted),
+        SizedBox(width: 10),
+        Expanded(child: Text('Printer fisik belum terhubung. Pengaturan ini menyimpan target lokal dan belum mengirim pekerjaan cetak ke perangkat.')),
+      ]))),
+    ]),
+  );
+}
+
+class _PrinterConfigForm extends StatefulWidget {
+  final FirefaLocalStore store;
+  final String role;
+  const _PrinterConfigForm({required this.store, required this.role});
+
+  @override
+  State<_PrinterConfigForm> createState() => _PrinterConfigFormState();
+}
+
+class _PrinterConfigFormState extends State<_PrinterConfigForm> {
+  late final TextEditingController target;
+  late bool enabled;
+
+  @override
+  void initState() {
+    super.initState();
+    target = TextEditingController(text: widget.store.printerTargets[widget.role]);
+    enabled = widget.store.printerEnabled[widget.role]!;
+  }
+
+  @override
+  void dispose() {
+    target.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    Text('Printer ${widget.role}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _ink)),
+    SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Aktifkan konfigurasi'), value: enabled, onChanged: (value) => setState(() => enabled = value)),
+    TextField(controller: target, decoration: const InputDecoration(labelText: 'Nama / alamat printer', hintText: 'Contoh: printer-kasir atau 192.168.1.20')),
+    const SizedBox(height: 10),
+    Align(alignment: Alignment.centerRight, child: FilledButton(onPressed: () async {
+      try {
+        await widget.store.savePrinterSettings(role: widget.role, enabled: enabled, target: target.text);
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Konfigurasi printer ${widget.role} tersimpan.')));
+      } catch (error) {
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal menyimpan printer: $error')));
+      }
+    }, child: const Text('Simpan Konfigurasi'))),
+  ]);
+}
+
+class BusinessSettingsView extends StatefulWidget {
+  final FirefaLocalStore store;
+  const BusinessSettingsView({super.key, required this.store});
+
+  @override
+  State<BusinessSettingsView> createState() => _BusinessSettingsViewState();
+}
+
+class _BusinessSettingsViewState extends State<BusinessSettingsView> {
+  late final TextEditingController name;
+  late final TextEditingController footer;
+
+  @override
+  void initState() {
+    super.initState();
+    name = TextEditingController(text: widget.store.businessName);
+    footer = TextEditingController(text: widget.store.receiptFooter);
+  }
+
+  @override
+  void dispose() {
+    name.dispose();
+    footer.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => PageFrame(
+    title: 'Pengaturan Bisnis',
+    subtitle: 'Identitas restoran digunakan pada tampilan struk lokal.',
+    child: Card(child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      TextField(controller: name, decoration: const InputDecoration(labelText: 'Nama restoran')),
+      const SizedBox(height: 14),
+      TextField(controller: footer, maxLines: 3, decoration: const InputDecoration(labelText: 'Pesan di bagian bawah struk')),
+      const SizedBox(height: 14),
+      FilledButton.icon(onPressed: () async {
+        try {
+          await widget.store.saveBusinessSettings(name: name.text, footer: footer.text);
+          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pengaturan bisnis tersimpan.')));
+        } catch (error) {
+          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Pengaturan gagal disimpan: $error')));
+        }
+      }, icon: const Icon(Icons.save_outlined), label: const Text('Simpan Pengaturan')),
+      const SizedBox(height: 10),
+      const Text('Pengaturan ini tersimpan di perangkat lokal. Sinkronisasi cloud belum aktif.', style: TextStyle(color: _muted, fontSize: 12)),
+    ]))),
   );
 }
 
