@@ -17,9 +17,9 @@ void main() {
 
 class MenuProduct {
   final String id;
-  final String name;
-  final String category;
-  final int price;
+  String name;
+  String category;
+  int price;
   int stock;
 
   MenuProduct({
@@ -365,7 +365,7 @@ class FirefaLocalStore extends ChangeNotifier {
     final oldPrice = existing?.price;
     final oldStock = existing?.stock;
     if (existing == null) {
-      final nextId = 'P${products.length + 1}'.padLeft(3, '0');
+      final nextId = 'P${products.length + 1}';
       products.add(MenuProduct(
         id: nextId,
         name: normalizedName,
