@@ -215,7 +215,7 @@ class _PrinterPageState extends State<PrinterPage> {
 
     if (!mounted || simulate != true) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text(
           'Preview printer ' + config.role.label.toLowerCase() + ' disimulasikan. Printer fisik belum dihubungkan.',
         ),
@@ -236,13 +236,12 @@ class _PrinterPageState extends State<PrinterPage> {
         }
 
         final configs = store.configsForOutlet(outlet.selectedOutletId);
-        final config = configs.single;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Printer ' + config.role.label,
+              'Konfigurasi Printer',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -251,21 +250,25 @@ class _PrinterPageState extends State<PrinterPage> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Satu konfigurasi printer struk untuk ${outlet.selectedOutletName}.',
+              'Konfigurasi printer kasir, dapur, dan bar untuk ${outlet.selectedOutletName}.',
               style: const TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 13,
               ),
             ),
             const SizedBox(height: 20),
-            SizedBox(
-              width: 480,
-              child: _PrinterCard(
-                config: config,
-                onEdit: () => _edit(config),
-                onTest: () => _testPrint(config),
+            for (final config in configs)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: _PrinterCard(
+                    config: config,
+                    onEdit: () => _edit(config),
+                    onTest: () => _testPrint(config),
+                  ),
+                ),
               ),
-            ),
           ],
         );
       },
@@ -326,7 +329,7 @@ class _PrinterCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'PRINTER ' + config.role.label.toUpperCase(),
               style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
             ),
