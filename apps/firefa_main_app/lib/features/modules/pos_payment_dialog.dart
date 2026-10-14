@@ -181,6 +181,7 @@ class _PosPaymentDialogState extends State<PosPaymentDialog> {
                   methodChip('Cash', Icons.payments_outlined),
                   methodChip('QRIS', Icons.qr_code_2),
                   methodChip('Transfer', Icons.account_balance_outlined),
+                  if (widget.allowBon) methodChip('BON', Icons.receipt_long_outlined),
                   methodChip('Split', Icons.call_split_outlined),
                 ],
               ),
@@ -188,6 +189,7 @@ class _PosPaymentDialogState extends State<PosPaymentDialog> {
               if (method == 'Cash') buildCash(),
               if (method == 'QRIS') buildNonCash('QRIS'),
               if (method == 'Transfer') buildNonCash('Transfer'),
+              if (method == 'BON') buildBon(),
               if (method == 'Split') buildSplit(),
               const SizedBox(height: 24),
               SizedBox(
@@ -202,7 +204,7 @@ class _PosPaymentDialogState extends State<PosPaymentDialog> {
                     ),
                   ),
                   icon: const Icon(Icons.check_circle_outline),
-                  label: const Text('Confirm Demo Payment'),
+                  label: Text(method == 'BON' ? 'Simpan sebagai BON' : 'Konfirmasi Pembayaran Demo'),
                 ),
               ),
               const SizedBox(height: 12),
@@ -329,6 +331,31 @@ class _PosPaymentDialogState extends State<PosPaymentDialog> {
             'Belum ada QR pembayaran, rekening tujuan, '
             'atau verifikasi transaksi. Konfirmasi di sini '
             'hanya untuk menguji tampilan dan alur POS.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: muted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget buildBon() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7E6),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFF3D49B)),
+      ),
+      child: const Column(
+        children: [
+          Icon(Icons.receipt_long_outlined, size: 42, color: Color(0xFF946200)),
+          SizedBox(height: 10),
+          Text('BON / Piutang', style: TextStyle(fontWeight: FontWeight.bold)),
+          SizedBox(height: 6),
+          Text(
+            'Pesanan disimpan sebagai piutang dan tidak dihitung sebagai penjualan lunas. Pembayaran dapat dicatat kemudian melalui daftar pesanan.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: muted),
           ),
