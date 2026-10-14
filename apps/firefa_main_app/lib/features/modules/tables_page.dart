@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/auth/role_permissions.dart';
 import '../../core/outlet/active_outlet_store.dart';
 import 'table_store.dart';
+import 'order_models.dart';
 import 'order_store.dart';
 
 class TablesPage extends StatefulWidget {
