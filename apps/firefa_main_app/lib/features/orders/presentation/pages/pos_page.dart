@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../controllers/checkout_controller.dart';
 import '../../controllers/payment_controller.dart';
@@ -210,9 +211,29 @@ class _PosPageState extends State<PosPage> {
           ),
         ),
         const SizedBox(height: 8),
-        FilledButton.tonal(
-          onPressed: _newTransaction,
-          child: const Text('Transaksi Baru'),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: receiptText));
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Struk berhasil disalin.')),
+                  );
+                },
+                icon: const Icon(Icons.copy_outlined),
+                label: const Text('Salin Struk'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: FilledButton.tonal(
+                onPressed: _newTransaction,
+                child: const Text('Transaksi Baru'),
+              ),
+            ),
+          ],
         ),
       ],
     );
