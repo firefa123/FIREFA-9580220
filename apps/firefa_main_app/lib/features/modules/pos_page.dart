@@ -816,6 +816,26 @@ class _PosPageState extends State<PosPage> {
     try {
       final inventory = FirefaInventoryStore.instance;
       await inventory.initialize();
+
+      // The payment dialog is asynchronous; revalidate the exact checkout
+      // snapshot after it closes, immediately before creating the order.
+      final latestMenu = {
+        for (final item in menuStore.forOutlet(sourceOutlet))
+          item.id: item,
+      };
+      final changedMenuItems = checkoutItems.where((item) {
+        final latest = latestMenu[item.product.id];
+        return latest == null ||
+            !latest.isActive ||
+            latest.price != item.product.price;
+      }).toList();
+      if (changedMenuItems.isNotEmpty) {
+        throw StateError(
+          'Menu berubah selama checkout. Tidak ada pesanan yang dibuat; '
+          'muat ulang keranjang dan pilih harga terbaru.',
+        );
+      }
+
       final stockLines = checkoutItems.map((item) => (menuId: item.product.id, quantity: item.quantity)).toList();
       final stockIsConfigured = inventory.validateOrderStock(
         outletId: sourceOutlet,
