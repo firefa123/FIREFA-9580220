@@ -21,6 +21,7 @@ Removed from the tracked repository:
 - 8 unused settings prototypes: branding persistence/state DTOs, a multi-outlet branding scope DTO, duplicate owner permission/access/navigation helpers, an empty staff-management controller, and a duplicate theme controller. The active settings store/controller and core role permissions remain.
 - 4 unused dashboard widgets: a duplicate singular recent-order card, an unused header, operation status widget, and quick-action card. Widgets imported by the active dashboard remain.
 - 3 final isolated stubs: an in-memory notification model/store with no active notification UI, plus a duplicate customer-cart count/subtotal DTO not used by the real customer cart store.
+- Removed the unused `cupertino_icons` direct dependency from `pubspec.yaml` and `pubspec.lock`; code search found no `CupertinoIcons` usage. `shared_preferences` and Flutter lint dependencies remain.
 
 ## Current cleanup totals
 
