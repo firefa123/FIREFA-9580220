@@ -123,15 +123,115 @@ class _PrinterPageState extends State<PrinterPage> {
     }
   }
 
-  void _testPrint(FirefaPrinterConfig config) {
-    final message = !config.enabled
-        ? 'Printer ${config.role.label} belum diaktifkan.'
-        : config.target.trim().isEmpty
-            ? 'Isi target/alamat printer terlebih dahulu.'
-            : 'Test print ${config.name} disimulasikan ke ${config.target}.';
+  Future<void> _testPrint(FirefaPrinterConfig config) async {
+    if (!config.enabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Printer ${config.role.label} belum diaktifkan.')),
+      );
+      return;
+    }
+    if (config.target.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Isi target/alamat printer terlebih dahulu.')),
+      );
+      return;
+    }
 
+    final lines = switch (config.role) {
+      FirefaPrinterRole.cashier => [
+          'FIREFA - TEST RECEIPT',
+          '--------------------------------',
+          'Outlet: Demo Outlet',
+          'No. Pesanan: TEST-0001',
+          '1x Item Demo             Rp10.000',
+          '--------------------------------',
+          'TOTAL                    Rp10.000',
+          'Metode: SIMULASI',
+          'Terima kasih',
+        ],
+      FirefaPrinterRole.kitchen => [
+          'FIREFA - KITCHEN TICKET',
+          '--------------------------------',
+          'Pesanan: TEST-0001',
+          'Jenis: Dine In',
+          '1x Item Demo',
+          'CATATAN: Tiket uji coba',
+          '--------------------------------',
+          'BUKAN PESANAN AKTUAL',
+        ],
+      FirefaPrinterRole.bar => [
+          'FIREFA - BAR TICKET',
+          '--------------------------------',
+          'Pesanan: TEST-0001',
+          '1x Minuman Demo',
+          'CATATAN: Tiket uji coba',
+          '--------------------------------',
+          'BUKAN PESANAN AKTUAL',
+        ],
+    };
+
+    if (!mounted) return;
+    final simulate = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Preview test print - ${config.role.label}'),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Printer: ${config.name}'),
+              const SizedBox(height: 4),
+              Text(
+                'Target: ${config.target}',
+                style: const TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: SelectableText(
+                  lines.join('\\n'),
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Mode demo: preview ini belum mengirim data ke perangkat printer fisik.',
+                style: TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Tutup'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.play_arrow_outlined),
+            label: const Text('Simulasikan'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted || simulate != true) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+      SnackBar(
+        content: Text(
+          'Preview ${config.role.label} berhasil disimulasikan. Printer fisik belum dihubungkan.',
+        ),
+      ),
     );
   }
 
