@@ -63,6 +63,10 @@ class _OrdersPageState extends State<OrdersPage> {
           order.paymentStatus != FirefaPaymentStatus.unpaid) {
         return false;
       }
+      if (paymentFilter == 'refunded' &&
+          order.paymentStatus != FirefaPaymentStatus.refunded) {
+        return false;
+      }
       if (dateRange != null) {
         final day = DateUtils.dateOnly(order.createdAt);
         if (day.isBefore(dateRange!.start) || day.isAfter(dateRange!.end)) {
@@ -99,13 +103,15 @@ class _OrdersPageState extends State<OrdersPage> {
       return;
     }
     final csv = <String>[
-      'Order ID,Outlet ID,Tanggal,Tipe,Meja,Status Pembayaran,Metode Pembayaran,Kas Tunai,Item Qty,Subtotal,Diskon,Pajak,Service,Total,Produk',
+      'Order ID,Outlet ID,Tanggal,Tipe,Meja,Status Pembayaran,Metode Pembayaran,Kas Tunai,Refund At,Metode Refund,Refund Tunai,Alasan Refund,Item Qty,Subtotal,Diskon,Pajak,Service,Total,Produk',
       for (final order in rows)
         [
           order.id, order.outletId, order.createdAt.toIso8601String(),
           order.orderType, order.tableId ?? '', order.status.label,
           order.paymentStatus.name, order.paymentMethod ?? '',
-          order.cashPaidAmount.toString(), order.itemCount.toString(),
+          order.cashPaidAmount.toString(), order.refundedAt?.toIso8601String() ?? '',
+          order.refundMethod ?? '', order.cashRefundAmount.toString(),
+          order.refundReason ?? '', order.itemCount.toString(),
           order.subtotal.toString(), order.discount.toString(),
           order.tax.toString(), order.service.toString(),
           order.total.toString(),
@@ -288,6 +294,80 @@ class _OrdersPageState extends State<OrdersPage> {
       );
     } catch (error) {
       if (mounted) message('Status pembayaran gagal disimpan: $error');
+    }
+  }
+
+  Future<void> refund(FirefaOrder order) async {
+    final sourceOutlet = outletId;
+    if (!canActOn(order) || order.paymentStatus != FirefaPaymentStatus.paid) {
+      message('Refund hanya tersedia untuk pesanan Paid pada outlet aktif.');
+      return;
+    }
+    final reasonController = TextEditingController();
+    final result = await showDialog<({String method, String reason})>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Refund ${order.id}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Refund penuh sebesar ${rupiah(order.total)}. Pilih cara pengembalian dana dan isi alasan.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonController,
+              autofocus: true,
+              maxLength: 200,
+              decoration: const InputDecoration(
+                labelText: 'Alasan refund',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text('Refund tunai mengurangi estimasi kas shift. Refund non-tunai tidak mengubah kas fisik.', style: TextStyle(fontSize: 12, color: muted)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Batal'),
+          ),
+          OutlinedButton(
+            onPressed: () => Navigator.pop(dialogContext, (method: 'Non-tunai', reason: reasonController.text.trim())),
+            child: const Text('Refund Non-tunai'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, (method: 'Cash', reason: reasonController.text.trim())),
+            child: const Text('Refund Tunai'),
+          ),
+        ],
+      ),
+    );
+    reasonController.dispose();
+    if (!mounted || result == null) return;
+    if (result.reason.isEmpty) {
+      message('Alasan refund wajib diisi.');
+      return;
+    }
+    if (sourceOutlet != outletId || order.outletId != sourceOutlet ||
+        !outletStore.canAccessOutlet(sourceOutlet)) {
+      message('Outlet berubah. Refund dibatalkan.');
+      return;
+    }
+    try {
+      final success = await orderStore.refundPaidAndPersist(
+        sourceOutlet,
+        order.id,
+        refundMethod: result.method,
+        reason: result.reason,
+      );
+      if (!mounted) return;
+      message(success
+          ? '${order.id} direfund penuh via ${result.method}. Stok bahan tidak otomatis dipulihkan.'
+          : 'Refund tidak dapat diproses; pastikan order belum direfund.');
+    } catch (error) {
+      if (mounted) message('Refund gagal disimpan: $error');
     }
   }
 
@@ -477,6 +557,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 DropdownMenuItem(value: 'all', child: Text('Semua pembayaran')),
                 DropdownMenuItem(value: 'paid', child: Text('Paid')),
                 DropdownMenuItem(value: 'unpaid', child: Text('Unpaid')),
+                DropdownMenuItem(value: 'refunded', child: Text('Refunded')),
               ],
               onChanged: (value) {
                 if (value != null) setState(() => paymentFilter = value);
@@ -769,15 +850,21 @@ class _OrdersPageState extends State<OrdersPage> {
               ),
               chip(order.status.label, statusColor(order.status)),
               chip(
-                order.paymentStatus == FirefaPaymentStatus.paid
-                    ? 'Paid'
-                    : 'Unpaid',
-                order.paymentStatus == FirefaPaymentStatus.paid
-                    ? Colors.green
-                    : Colors.orange,
+                switch (order.paymentStatus) {
+                  FirefaPaymentStatus.unpaid => 'Unpaid',
+                  FirefaPaymentStatus.paid => 'Paid',
+                  FirefaPaymentStatus.refunded => 'Refunded',
+                },
+                switch (order.paymentStatus) {
+                  FirefaPaymentStatus.unpaid => Colors.orange,
+                  FirefaPaymentStatus.paid => Colors.green,
+                  FirefaPaymentStatus.refunded => Colors.redAccent,
+                },
               ),
               if (order.paymentMethod != null)
                 chip('Metode: ${order.paymentMethod}', Colors.blueGrey),
+              if (order.refundMethod != null)
+                chip('Refund: ${order.refundMethod}', Colors.redAccent),
             ],
           ),
           const SizedBox(height: 10),
@@ -888,6 +975,12 @@ class _OrdersPageState extends State<OrdersPage> {
                     onPressed: canActOn(order) ? () => markPaid(order) : null,
                     icon: const Icon(Icons.payments_outlined, size: 16),
                     label: const Text('Mark Paid (Demo)'),
+                  ),
+                if (order.paymentStatus == FirefaPaymentStatus.paid)
+                  OutlinedButton.icon(
+                    onPressed: canActOn(order) ? () => refund(order) : null,
+                    icon: const Icon(Icons.currency_exchange, size: 16),
+                    label: const Text('Refund Penuh'),
                   ),
                 if (order.status.canCancel &&
                     order.paymentStatus == FirefaPaymentStatus.unpaid)
