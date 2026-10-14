@@ -212,7 +212,7 @@ class _PrinterPageState extends State<PrinterPage> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: SelectableText(
-                  lines.join('\\n'),
+                  lines.join('\n'),
                   style: const TextStyle(
                     fontFamily: 'monospace',
                     fontSize: 12,
