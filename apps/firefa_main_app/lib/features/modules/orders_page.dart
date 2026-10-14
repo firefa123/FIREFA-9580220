@@ -893,7 +893,7 @@ class _OrdersPageState extends State<OrdersPage> {
               chip(order.status.label, statusColor(order.status)),
               chip(
                 switch (order.paymentStatus) {
-                  FirefaPaymentStatus.unpaid => 'Unpaid',
+                  FirefaPaymentStatus.unpaid => order.paymentMethod == 'BON' ? 'BON / Piutang' : 'Unpaid',
                   FirefaPaymentStatus.paid => order.paymentMethod == 'BON' ? 'BON / Piutang' : (order.hasPartialRefund ? 'Paid • Partial Refund' : 'Paid'),
                   FirefaPaymentStatus.refunded => 'Refunded',
                 },

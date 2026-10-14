@@ -524,7 +524,7 @@ class _DashboardPageState extends State<DashboardPage> {
     final paidToday = today.where(
       (order) => order.paymentStatus == FirefaPaymentStatus.paid,
     );
-    final paidTotal = paidToday.fold<int>(0, (sum, order) => sum + order.total);
+    final paidTotal = paidToday.fold<int>(0, (sum, order) => sum + order.total - order.refundAmount);
     final active = orders.where((order) =>
         order.status != FirefaOrderStatus.completed &&
         order.status != FirefaOrderStatus.cancelled).length;
