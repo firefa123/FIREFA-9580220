@@ -12,7 +12,7 @@ void main() {
 
   test('stock processing and reversal are isolated by outlet for reused order IDs', () async {
     SharedPreferences.setMockInitialValues({});
-    final store = FirefaInventoryStore.instance;
+    final store = legacy.FirefaInventoryStore.instance;
     await store.initialize();
 
     for (final outlet in ['SCOPE-A', 'SCOPE-B']) {
