@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/outlet/active_outlet_store.dart';
 import 'printer_store.dart';
 
 class PrinterPage extends StatefulWidget {
@@ -12,6 +13,7 @@ class PrinterPage extends StatefulWidget {
 
 class _PrinterPageState extends State<PrinterPage> {
   final store = FirefaPrinterStore.instance;
+  final outlet = FirefaActiveOutletStore.instance;
   late final Future<void> ready;
 
   @override
@@ -19,11 +21,13 @@ class _PrinterPageState extends State<PrinterPage> {
     super.initState();
     ready = store.initialize();
     store.addListener(_refresh);
+    outlet.addListener(_refresh);
   }
 
   @override
   void dispose() {
     store.removeListener(_refresh);
+    outlet.removeListener(_refresh);
     super.dispose();
   }
 
@@ -112,7 +116,7 @@ class _PrinterPageState extends State<PrinterPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Konfigurasi ${result.role.label} tersimpan lokal.'),
+          content: Text('Konfigurasi ${result.role.label} ${outlet.selectedOutletName} tersimpan lokal.'),
         ),
       );
     } catch (error) {
@@ -141,7 +145,7 @@ class _PrinterPageState extends State<PrinterPage> {
       FirefaPrinterRole.cashier => [
           'FIREFA - TEST RECEIPT',
           '--------------------------------',
-          'Outlet: Demo Outlet',
+          'Outlet: ${outlet.selectedOutletName}',
           'No. Pesanan: TEST-0001',
           '1x Item Demo             Rp10.000',
           '--------------------------------',
@@ -257,7 +261,7 @@ class _PrinterPageState extends State<PrinterPage> {
             ),
             const SizedBox(height: 6),
             const Text(
-              'Konfigurasi printer outlet disimpan lokal pada perangkat ini.',
+              'Konfigurasi printer ${outlet.selectedOutletName} disimpan lokal pada perangkat ini.',
               style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 13,
@@ -276,7 +280,7 @@ class _PrinterPageState extends State<PrinterPage> {
                   spacing: 16,
                   runSpacing: 16,
                   children: [
-                    for (final config in store.configs)
+                    for (final config in store.configsForOutlet(outlet.selectedOutletId))
                       SizedBox(
                         width: cardWidth,
                         child: _PrinterCard(
