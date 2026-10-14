@@ -878,12 +878,6 @@ class _PosPageState extends State<PosPage> {
         );
       }
       await inventory.waitForPendingSave();
-      if (payment != null) {
-        if (!store.markPaid(sourceOutlet, order.id)) {
-          throw StateError('Status pembayaran tidak dapat diperbarui.');
-        }
-      }
-      await store.waitForPendingSave();
       if (checkoutOrderType == 'Dine In') {
         final selectedTable = tableStore
             .forOutlet(sourceOutlet)
@@ -900,6 +894,12 @@ class _PosPageState extends State<PosPage> {
           await tableStore.waitForPendingSave();
         }
       }
+      if (payment != null) {
+        if (!store.markPaid(sourceOutlet, order.id)) {
+          throw StateError('Status pembayaran tidak dapat diperbarui.');
+        }
+      }
+      await store.waitForPendingSave();
       if (!mounted) return;
       setState(() {
         carts[sourceOutlet]?.clear();
