@@ -445,11 +445,19 @@ class FirefaOrderStore extends ChangeNotifier {
 
   /// Persists the local/demo payment state and its outbox event before returning.
   /// This does not contact a payment provider or settle a bank transaction.
-  Future<bool> markPaidAndPersist(String outletId, String orderId) async {
+  Future<bool> markPaidAndPersist(
+    String outletId,
+    String orderId, {
+    String? paymentMethod,
+    int cashPaidAmount = 0,
+  }) async {
     return _mutateOrderAndPersist(
       outletId,
       orderId,
-      mutation: (order) => order.markPaid(),
+      mutation: (order) => order.markPaid(
+        method: paymentMethod,
+        cashAmount: cashPaidAmount,
+      ),
     );
   }
 
@@ -465,6 +473,9 @@ class FirefaOrderStore extends ChangeNotifier {
     final previousStatus = order.status;
     final previousPaymentStatus = order.paymentStatus;
     final previousCompletedAt = order.completedAt;
+    final previousPaidAt = order.paidAt;
+    final previousPaymentMethod = order.paymentMethod;
+    final previousCashPaidAmount = order.cashPaidAmount;
     if (!mutation(order)) return false;
 
     FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
@@ -476,6 +487,9 @@ class FirefaOrderStore extends ChangeNotifier {
       order.status = previousStatus;
       order.paymentStatus = previousPaymentStatus;
       order.completedAt = previousCompletedAt;
+      order.paidAt = previousPaidAt;
+      order.paymentMethod = previousPaymentMethod;
+      order.cashPaidAmount = previousCashPaidAmount;
       FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
       _scheduleSave();
       notifyListeners();
