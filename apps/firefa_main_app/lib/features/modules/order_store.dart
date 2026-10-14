@@ -197,6 +197,31 @@ class FirefaOrderStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Repairs missed table reservations after an interrupted local write or app restart.
+  /// Active orders are authoritative for reservation; manually occupied tables
+  /// without an active order are intentionally left unchanged.
+  Future<void> synchronizeTableOccupancy() async {
+    _ensureInitialized();
+    final tables = FirefaTableStore.instance;
+    await tables.initialize();
+
+    var changed = false;
+    for (final order in _orders.where((candidate) =>
+        candidate.orderType == 'Dine In' &&
+        candidate.tableId != null &&
+        candidate.status != FirefaOrderStatus.completed &&
+        candidate.status != FirefaOrderStatus.cancelled)) {
+      for (final table in tables.forOutlet(order.outletId).where(
+        (candidate) => candidate.name == order.tableId,
+      )) {
+        if (!table.occupied) {
+          changed = tables.setOccupied(order.outletId, table.id, true) || changed;
+        }
+      }
+    }
+    if (changed) await tables.waitForPendingSave();
+  }
+
   /// Keeps table availability aligned with all active dine-in orders.
   /// Table IDs in legacy POS orders are stored as table names, so matching is
   /// intentionally outlet-scoped and name-based for backward compatibility.
