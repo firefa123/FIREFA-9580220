@@ -97,8 +97,8 @@ void main() {
       tax: 0,
       service: 0,
       total: 5000,
-      status: FirefaOrderStatus.cancelled,
     );
+    expect(store.cancel('LIFECYCLE-INVALID', order.id), isTrue);
     await store.waitForPendingSave();
     final eventCount = queue.entriesForOutlet('LIFECYCLE-INVALID').length;
 
