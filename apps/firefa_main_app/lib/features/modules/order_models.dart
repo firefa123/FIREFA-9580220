@@ -94,7 +94,7 @@ class FirefaOrder {
   final String orderType;
   final String? tableId;
   final DateTime createdAt;
-  final DateTime? completedAt;
+  DateTime? completedAt;
   final List<FirefaOrderItem> items;
   final int subtotal;
   final int discount;
@@ -141,12 +141,11 @@ class FirefaOrder {
     if (nextStatus == FirefaOrderStatus.completed) {
       // Record an actual completion time for operational reporting.
       // Existing persisted orders remain compatible when this field is absent.
-      _completedAt = DateTime.now();
+      completedAt = DateTime.now();
     }
     return true;
   }
 
-  DateTime? _completedAt;
 
   bool cancel() {
     if (!status.canCancel || paymentStatus == FirefaPaymentStatus.paid) {
@@ -174,8 +173,7 @@ class FirefaOrder {
         'orderType': orderType,
         'tableId': tableId,
         'createdAt': createdAt.toIso8601String(),
-        'completedAt': completedAt?.toIso8601String() ??
-            _completedAt?.toIso8601String(),
+        'completedAt': completedAt?.toIso8601String(),
         'items': items.map((item) => item.toJson()).toList(),
         'subtotal': subtotal,
         'discount': discount,
@@ -212,7 +210,6 @@ class FirefaOrder {
         json['paymentStatus'] as String,
       ),
     );
-    order._completedAt = order.completedAt;
     return order;
   }
 }
