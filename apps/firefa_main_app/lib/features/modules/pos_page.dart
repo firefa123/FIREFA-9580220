@@ -1265,7 +1265,7 @@ class _PosPageState extends State<PosPage> {
                   borderRadius: BorderRadius.circular(16),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(16),
-                    onTap: () => configureProduct(product),
+                    onTap: _checkoutBusy ? null : () => configureProduct(product),
                     child: Container(
                       decoration: BoxDecoration(
                         border: Border.all(color: border),
@@ -1396,7 +1396,7 @@ class _PosPageState extends State<PosPage> {
               ),
               if (cart.isNotEmpty)
                 TextButton(
-                  onPressed: () {
+                  onPressed: _checkoutBusy ? null : () {
                     setState(() => cart.clear());
                     _saveCart();
                   },
@@ -1451,7 +1451,7 @@ class _PosPageState extends State<PosPage> {
                       child: Text(name, overflow: TextOverflow.ellipsis),
                     ),
                 ],
-                onChanged: (value) {
+                onChanged: _checkoutBusy ? null : (value) {
                   if (value != null) {
                     setState(() => config.table = value);
                     _saveCart();
@@ -1483,7 +1483,7 @@ class _PosPageState extends State<PosPage> {
           summaryRow('Subtotal', rupiah(subtotal)),
           const SizedBox(height: 10),
           OutlinedButton.icon(
-            onPressed: openChargesDialog,
+            onPressed: _checkoutBusy ? null : openChargesDialog,
             icon: const Icon(Icons.tune, size: 18),
             label: const Text('Discount & Charges'),
             style: OutlinedButton.styleFrom(foregroundColor: primary),
@@ -1534,8 +1534,17 @@ class _PosPageState extends State<PosPage> {
             height: 50,
             child: FilledButton.icon(
               onPressed: cart.isEmpty || _checkoutBusy ? null : checkout,
-              icon: const Icon(Icons.shopping_cart_checkout, size: 18),
-              label: const Text('Checkout'),
+              icon: _checkoutBusy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.shopping_cart_checkout, size: 18),
+              label: Text(_checkoutBusy ? 'Memproses Pesanan...' : 'Checkout'),
               style: FilledButton.styleFrom(
                 backgroundColor: primary,
                 shape: RoundedRectangleBorder(
@@ -1560,7 +1569,7 @@ class _PosPageState extends State<PosPage> {
     final selected = config.orderType == value;
 
     return OutlinedButton(
-      onPressed: () {
+      onPressed: _checkoutBusy ? null : () {
         setState(() => config.orderType = value);
         _saveCart();
       },
@@ -1620,23 +1629,24 @@ class _PosPageState extends State<PosPage> {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     IconButton(
-                      onPressed: () => changeQuantity(item, -1),
+                      onPressed: _checkoutBusy ? null : () => changeQuantity(item, -1),
                       icon: const Icon(Icons.remove_circle_outline, size: 19),
                     ),
                     Text('${item.quantity}'),
                     IconButton(
-                      onPressed: () => changeQuantity(item, 1),
+                      onPressed: _checkoutBusy ? null : () => changeQuantity(item, 1),
                       icon: const Icon(Icons.add_circle_outline, size: 19),
                     ),
                     IconButton(
                       tooltip: 'Edit',
-                      onPressed: () =>
-                          configureProduct(item.product, editing: item),
+                      onPressed: _checkoutBusy
+                          ? null
+                          : () => configureProduct(item.product, editing: item),
                       icon: const Icon(Icons.edit_outlined, size: 18),
                     ),
                     IconButton(
                       tooltip: 'Remove',
-                      onPressed: () {
+                      onPressed: _checkoutBusy ? null : () {
                         setState(() => cart.remove(item));
                         _saveCart();
                       },
