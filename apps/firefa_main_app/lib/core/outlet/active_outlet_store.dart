@@ -27,16 +27,15 @@ class FirefaActiveOutletStore extends ChangeNotifier {
   FirefaRole get role => _role;
   String get selectedOutletId => _selectedOutletId;
 
-  bool get canViewAllOutlets =>
-      _role == FirefaRole.owner || _role == FirefaRole.manager;
+  bool get canViewAllOutlets => _role == FirefaRole.owner;
 
   List<FirefaOutlet> get accessibleOutlets {
     if (canViewAllOutlets) {
       return List.unmodifiable(availableOutlets);
     }
 
-    // Penugasan outlet demo untuk Cashier dan Kitchen/Bar.
-    // Nantinya diambil dari membership pengguna di backend.
+    // Kasir demo hanya ditugaskan ke Outlet Utama.
+    // Penugasan final perlu diambil dari membership pengguna di backend.
     return List.unmodifiable(
       availableOutlets.where((outlet) => outlet.id == 'outlet-001'),
     );
@@ -44,39 +43,27 @@ class FirefaActiveOutletStore extends ChangeNotifier {
 
   FirefaOutlet get selectedOutlet {
     for (final outlet in availableOutlets) {
-      if (outlet.id == _selectedOutletId) {
-        return outlet;
-      }
+      if (outlet.id == _selectedOutletId) return outlet;
     }
-
     return availableOutlets.first;
   }
 
   String get selectedOutletName => selectedOutlet.name;
 
-  bool canAccessOutlet(String outletId) {
-    return accessibleOutlets.any((outlet) => outlet.id == outletId);
-  }
+  bool canAccessOutlet(String outletId) =>
+      accessibleOutlets.any((outlet) => outlet.id == outletId);
 
   void initializeForRole(FirefaRole role) {
     _role = role;
-
     if (!canAccessOutlet(_selectedOutletId)) {
       _selectedOutletId = accessibleOutlets.first.id;
     }
-
     notifyListeners();
   }
 
   bool selectOutlet(String outletId) {
-    if (!canAccessOutlet(outletId)) {
-      return false;
-    }
-
-    if (_selectedOutletId == outletId) {
-      return true;
-    }
-
+    if (!canAccessOutlet(outletId)) return false;
+    if (_selectedOutletId == outletId) return true;
     _selectedOutletId = outletId;
     notifyListeners();
     return true;
