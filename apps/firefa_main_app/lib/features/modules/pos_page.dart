@@ -643,6 +643,43 @@ class _PosPageState extends State<PosPage> {
       return;
     }
     final sourceOutlet = outletId;
+    try {
+      // Recheck the managed catalog immediately before opening checkout. A
+      // menu may have been disabled or repriced while items were in the cart.
+      await menuReady;
+      if (!mounted || sourceOutlet != outletId ||
+          !outletStore.canAccessOutlet(sourceOutlet)) {
+        return;
+      }
+      final currentMenu = {
+        for (final item in menuStore.forOutlet(sourceOutlet))
+          item.id: item,
+      };
+      final staleItems = cart.where((cartItem) {
+        final current = currentMenu[cartItem.product.id];
+        return current == null ||
+            !current.isActive ||
+            current.price != cartItem.product.price;
+      }).toList();
+      if (staleItems.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Menu di keranjang sudah berubah atau nonaktif. '
+              'Hapus item tersebut lalu pilih menu terbaru sebelum checkout.',
+            ),
+          ),
+        );
+        return;
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Katalog menu belum siap: $error')),
+        );
+      }
+      return;
+    }
     if (config.orderType == 'Dine In') {
       final tables = tableStore.forOutlet(sourceOutlet);
       final valid = tables.isEmpty
