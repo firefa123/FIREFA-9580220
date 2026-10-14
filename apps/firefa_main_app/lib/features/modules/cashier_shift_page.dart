@@ -164,15 +164,14 @@ class FirefaCashierShiftStore extends ChangeNotifier {
     if (cashSales < 0 || cashIn < 0 || cashOut < 0 || countedCash < 0) {
       throw ArgumentError('Nominal kas tidak boleh negatif.');
     }
-    final oldShift = _shifts.where((shift) => shift.id == shiftId).firstOrNull;
-    if (oldShift != null && cashOut > oldShift.openingCash + cashSales + cashIn) {
-      throw ArgumentError('Kas keluar melebihi uang yang tersedia pada shift.');
-    }
     final index = _shifts.indexWhere((shift) => shift.id == shiftId);
     if (index < 0 || !_shifts[index].isOpen) {
       throw StateError('Shift aktif tidak ditemukan.');
     }
     final old = _shifts[index];
+    if (cashOut > old.openingCash + cashSales + cashIn) {
+      throw ArgumentError('Kas keluar melebihi uang yang tersedia pada shift.');
+    }
     final closed = FirefaCashierShift(
       id: old.id,
       outletId: old.outletId,
