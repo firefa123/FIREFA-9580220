@@ -433,6 +433,67 @@ class FirefaOrderStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Persists an order status transition before reporting it as complete.
+  /// The legacy synchronous API remains available for existing callers.
+  Future<bool> advanceAndPersist(String outletId, String orderId) async {
+    return _mutateOrderAndPersist(
+      outletId,
+      orderId,
+      mutation: (order) => order.advanceStatus(),
+    );
+  }
+
+  /// Persists the local/demo payment state and its outbox event before returning.
+  /// This does not contact a payment provider or settle a bank transaction.
+  Future<bool> markPaidAndPersist(String outletId, String orderId) async {
+    return _mutateOrderAndPersist(
+      outletId,
+      orderId,
+      mutation: (order) => order.markPaid(),
+    );
+  }
+
+  Future<bool> _mutateOrderAndPersist(
+    String outletId,
+    String orderId, {
+    required bool Function(FirefaOrder order) mutation,
+  }) async {
+    _ensureInitialized();
+    final order = findOrder(outletId, orderId);
+    if (order == null) return false;
+
+    final previousStatus = order.status;
+    final previousPaymentStatus = order.paymentStatus;
+    final previousCompletedAt = order.completedAt;
+    if (!mutation(order)) return false;
+
+    FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
+    _scheduleSave();
+    try {
+      await waitForPendingSave();
+    } catch (error) {
+      // Do not leave the UI showing a transition that failed to persist.
+      order.status = previousStatus;
+      order.paymentStatus = previousPaymentStatus;
+      order.completedAt = previousCompletedAt;
+      FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
+      _scheduleSave();
+      notifyListeners();
+      try {
+        await waitForPendingSave();
+      } catch (rollbackError) {
+        debugPrint('FIREFA: order transition rollback needs recovery: $rollbackError');
+      }
+      rethrow;
+    }
+
+    notifyListeners();
+    if (order.status == FirefaOrderStatus.completed) {
+      await _syncTableOccupancyForOrder(order);
+    }
+    return true;
+  }
+
   bool advance(String outletId, String orderId) {
     final order = findOrder(outletId, orderId);
 
