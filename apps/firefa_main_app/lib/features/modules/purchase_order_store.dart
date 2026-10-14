@@ -276,45 +276,101 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
     return true;
   }
 
-  bool receive({
+  final Set<String> _receivingOrderKeys = <String>{};
+
+  Future<bool> receive({
     required String outletId, required String orderId, int? quantity,
-  }) {
-    if (!_initialized) {
+  }) async {
+    if (!_initialized || outletId.trim().isEmpty || orderId.trim().isEmpty) {
       return false;
     }
-    final index = _orders.indexWhere((po) =>
-        po.outletId == outletId && po.id == orderId &&
-        (po.status == 'ordered' || po.status == 'partial'));
-    if (index < 0) {
+    final lockKey = '$outletId:$orderId';
+    if (!_receivingOrderKeys.add(lockKey)) {
       return false;
     }
-    final order = _orders[index];
-    final amount = quantity ?? order.remainingQuantity;
-    if (amount <= 0 || amount > order.remainingQuantity) {
-      return false;
+
+    try {
+      final index = _orders.indexWhere((po) =>
+          po.outletId == outletId && po.id == orderId &&
+          (po.status == 'ordered' || po.status == 'partial'));
+      if (index < 0) {
+        return false;
+      }
+      final order = _orders[index];
+      final amount = quantity ?? order.remainingQuantity;
+      if (amount <= 0 || amount > order.remainingQuantity) {
+        return false;
+      }
+      final inventory = FirefaInventoryStore.instance;
+      final items = inventory.forOutlet(outletId)
+          .where((item) => item.id == order.itemId);
+      if (items.isEmpty || items.first.unit != order.unit ||
+          items.first.stock > 999999999 - amount) {
+        return false;
+      }
+
+      final receipt = FirefaPurchaseReceipt(
+        id: '${order.id}-receipt-${order.receipts.length + 1}',
+        quantity: amount, receivedAt: DateTime.now().toIso8601String(),
+      );
+      final movementNote =
+          'Penerimaan PO ${order.id} • ${order.supplierName} • ${receipt.id}';
+      if (!inventory.adjust(
+        outletId: outletId, id: order.itemId, type: 'in',
+        amount: amount, note: movementNote,
+      )) {
+        return false;
+      }
+
+      // Do not report a successful receipt until the stock ledger is persisted.
+      try {
+        await inventory.waitForPendingSave();
+      } catch (error) {
+        debugPrint('Penerimaan PO gagal menyimpan stok: $error');
+        inventory.adjust(
+          outletId: outletId, id: order.itemId, type: 'out',
+          amount: amount,
+          note: 'Rollback penerimaan PO ${order.id} / ${receipt.id}',
+        );
+        try {
+          await inventory.waitForPendingSave();
+        } catch (rollbackError) {
+          debugPrint('Rollback stok penerimaan PO gagal: $rollbackError');
+        }
+        return false;
+      }
+
+      _orders[index] = order.withReceipt(receipt);
+      notifyListeners();
+      _save();
+      try {
+        await waitForPendingSave();
+      } catch (error) {
+        debugPrint('Penerimaan PO gagal menyimpan catatan: $error');
+        _orders[index] = order;
+        notifyListeners();
+        inventory.adjust(
+          outletId: outletId, id: order.itemId, type: 'out',
+          amount: amount,
+          note: 'Rollback penerimaan PO ${order.id} / ${receipt.id}',
+        );
+        try {
+          await inventory.waitForPendingSave();
+        } catch (rollbackError) {
+          debugPrint('Rollback stok penerimaan PO gagal: $rollbackError');
+        }
+        _save();
+        try {
+          await waitForPendingSave();
+        } catch (rollbackError) {
+          debugPrint('Rollback catatan PO gagal: $rollbackError');
+        }
+        return false;
+      }
+      return true;
+    } finally {
+      _receivingOrderKeys.remove(lockKey);
     }
-    final inventory = FirefaInventoryStore.instance;
-    final items = inventory.forOutlet(outletId)
-        .where((item) => item.id == order.itemId);
-    if (items.isEmpty || items.first.unit != order.unit ||
-        items.first.stock + amount > 999999999) {
-      return false;
-    }
-    final receipt = FirefaPurchaseReceipt(
-      id: '${order.id}-receipt-${order.receipts.length + 1}',
-      quantity: amount, receivedAt: DateTime.now().toIso8601String(),
-    );
-    final success = inventory.adjust(
-      outletId: outletId, id: order.itemId, type: 'in',
-      amount: amount, note: 'Penerimaan PO ${order.id} / ${receipt.id}',
-    );
-    if (!success) {
-      return false;
-    }
-    _orders[index] = order.withReceipt(receipt);
-    notifyListeners();
-    _save();
-    return true;
   }
 
   void _save() {
