@@ -299,10 +299,12 @@ class _PosPageState extends State<PosPage> {
   int get taxAmount => (discountedSubtotal * config.taxRate / 100).round();
 
   int get serviceAmount =>
-      (discountedSubtotal * config.serviceRate / 100).round() +
+      (discountedSubtotal * config.serviceRate / 100).round();
+
+  int get orderTypeFee =>
       FirefaFnbOperationsStore.instance.typeFee(outletId, config.orderType, subtotal);
 
-  int get grandTotal => discountedSubtotal + taxAmount + serviceAmount;
+  int get grandTotal => discountedSubtotal + taxAmount + serviceAmount + orderTypeFee;
 
   String rupiah(int value) =>
       'Rp ${value.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.')}';
@@ -1577,6 +1579,7 @@ class _PosPageState extends State<PosPage> {
           summaryRow('Discount', '- ${rupiah(discountAmount)}'),
           summaryRow('Tax (${config.taxRate}%)', rupiah(taxAmount)),
           summaryRow('Service (${config.serviceRate}%)', rupiah(serviceAmount)),
+          summaryRow('Biaya tipe pesanan', rupiah(orderTypeFee)),
           const Divider(height: 26),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
