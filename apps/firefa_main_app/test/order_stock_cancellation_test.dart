@@ -10,6 +10,54 @@ import 'package:firefa_main_app/features/modules/order_store.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('stock processing and reversal are isolated by outlet for reused order IDs', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = FirefaInventoryStore.instance;
+    await store.initialize();
+
+    for (final outlet in ['SCOPE-A', 'SCOPE-B']) {
+      expect(store.add(
+        outletId: outlet, name: 'Scoped beans', unit: 'gram',
+        stock: 10, minimumStock: 0,
+      ), isTrue);
+      final beans = store.forOutlet(outlet).singleWhere(
+        (item) => item.name == 'Scoped beans',
+      );
+      expect(store.addRecipeLine(
+        outletId: outlet, menuId: 'scoped-coffee',
+        ingredientId: beans.id, quantity: 2,
+      ), isTrue);
+    }
+
+    expect(await store.consumeOrderStock(
+      orderId: 'ORD-1001', outletId: 'SCOPE-A',
+      menuLines: [(menuId: 'scoped-coffee', quantity: 2)],
+    ), isTrue);
+    expect(await store.consumeOrderStock(
+      orderId: 'ORD-1001', outletId: 'SCOPE-B',
+      menuLines: [(menuId: 'scoped-coffee', quantity: 2)],
+    ), isTrue);
+    expect(store.forOutlet('SCOPE-A').single.stock, 6);
+    expect(store.forOutlet('SCOPE-B').single.stock, 6);
+
+    expect(await store.restoreCancelledOrderStock(
+      orderId: 'ORD-1001', outletId: 'SCOPE-A',
+    ), isTrue);
+    expect(store.forOutlet('SCOPE-A').single.stock, 10);
+    expect(store.forOutlet('SCOPE-B').single.stock, 6);
+    expect(await store.restoreCancelledOrderStock(
+      orderId: 'ORD-1001', outletId: 'SCOPE-B',
+    ), isTrue);
+    expect(store.forOutlet('SCOPE-B').single.stock, 10);
+    expect(await store.restoreCancelledOrderStock(
+      orderId: 'ORD-1001', outletId: 'SCOPE-B',
+    ), isFalse);
+
+    expect(store.isOrderStockProcessed('ORD-1001', outletId: 'SCOPE-A'), isTrue);
+    expect(store.isOrderStockReversed('ORD-1001', outletId: 'SCOPE-A'), isTrue);
+    await store.waitForPendingSave();
+  });
+
   test('cancelling unpaid POS order restores recipe stock exactly once', () async {
     SharedPreferences.setMockInitialValues({});
     final inventory = FirefaInventoryStore.instance;
