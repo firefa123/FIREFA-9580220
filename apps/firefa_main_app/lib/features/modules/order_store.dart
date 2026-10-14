@@ -461,6 +461,23 @@ class FirefaOrderStore extends ChangeNotifier {
     );
   }
 
+  /// Records a full local/demo refund without undoing ingredients already used.
+  Future<bool> refundPaidAndPersist(
+    String outletId,
+    String orderId, {
+    required String refundMethod,
+    required String reason,
+  }) async {
+    return _mutateOrderAndPersist(
+      outletId,
+      orderId,
+      mutation: (order) => order.markRefunded(
+        method: refundMethod,
+        reason: reason,
+      ),
+    );
+  }
+
   Future<bool> _mutateOrderAndPersist(
     String outletId,
     String orderId, {
@@ -476,6 +493,10 @@ class FirefaOrderStore extends ChangeNotifier {
     final previousPaidAt = order.paidAt;
     final previousPaymentMethod = order.paymentMethod;
     final previousCashPaidAmount = order.cashPaidAmount;
+    final previousRefundedAt = order.refundedAt;
+    final previousRefundMethod = order.refundMethod;
+    final previousRefundReason = order.refundReason;
+    final previousCashRefundAmount = order.cashRefundAmount;
     if (!mutation(order)) return false;
 
     FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
@@ -490,6 +511,10 @@ class FirefaOrderStore extends ChangeNotifier {
       order.paidAt = previousPaidAt;
       order.paymentMethod = previousPaymentMethod;
       order.cashPaidAmount = previousCashPaidAmount;
+      order.refundedAt = previousRefundedAt;
+      order.refundMethod = previousRefundMethod;
+      order.refundReason = previousRefundReason;
+      order.cashRefundAmount = previousCashRefundAmount;
       FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
       _scheduleSave();
       notifyListeners();
@@ -530,7 +555,7 @@ class FirefaOrderStore extends ChangeNotifier {
   Future<bool> cancelAndRestoreStock(String outletId, String orderId) async {
     final order = findOrder(outletId, orderId);
     if (order == null || !order.status.canCancel ||
-        order.paymentStatus == FirefaPaymentStatus.paid) {
+        order.paymentStatus != FirefaPaymentStatus.unpaid) {
       return false;
     }
 
@@ -589,7 +614,7 @@ class FirefaOrderStore extends ChangeNotifier {
     var recovered = 0;
     for (final order in List<FirefaOrder>.from(_orders)) {
       if (order.status != FirefaOrderStatus.cancelled ||
-          order.paymentStatus == FirefaPaymentStatus.paid ||
+          order.paymentStatus != FirefaPaymentStatus.unpaid ||
           !inventory.isOrderStockProcessed(order.id) ||
           inventory.isOrderStockReversed(order.id)) {
         continue;
