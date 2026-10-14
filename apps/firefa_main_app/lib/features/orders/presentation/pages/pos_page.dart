@@ -4,7 +4,6 @@ import '../../controllers/checkout_controller.dart';
 import '../../controllers/payment_controller.dart';
 import '../../controllers/pos_controller.dart';
 import '../../controllers/receipt_controller.dart';
-import '../../models/cart_item_model.dart';
 import '../../models/payment_model.dart';
 import '../../models/receipt_model.dart';
 import '../../models/transaction_model.dart';
