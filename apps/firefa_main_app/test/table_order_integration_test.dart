@@ -61,6 +61,7 @@ void main() {
     await tables.waitForPendingSave();
     expect(tables.forOutlet(outletId).single.occupied, isFalse);
     expect(tables.setOccupied(outletId, table.id, true), isTrue);
+    expect(tables.setOccupied(outletId, table.id, false), isTrue);
 
     // A persisted reservation without an active order is repaired on startup.
     expect(tables.reserveForOrder(outletId, table.id, 'ORD-STALE'), isTrue);
