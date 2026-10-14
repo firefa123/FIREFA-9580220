@@ -4,6 +4,7 @@ import '../../core/auth/role_permissions.dart';
 import '../../core/outlet/active_outlet_store.dart';
 import 'fnb_operations_store.dart';
 import 'menu_store.dart';
+import 'table_store.dart';
 import 'order_models.dart';
 import 'order_store.dart';
 
@@ -20,7 +21,7 @@ class _FnbOperationsPageState extends State<FnbOperationsPage> with SingleTicker
   late final TabController tabs;
   static const primary=Color(0xFF008F83);
   bool get canManage=>FirefaAccess.can(outlet.role,FirefaPermission.menuManage);
-  @override void initState(){super.initState();tabs=TabController(length:6,vsync:this);ready=Future.wait([store.initialize(),orders.initialize(),FirefaMenuStore.instance.initialize()]);store.addListener(refresh);orders.addListener(refresh);outlet.addListener(refresh);}
+  @override void initState(){super.initState();tabs=TabController(length:6,vsync:this);ready=Future.wait([store.initialize(),orders.initialize(),FirefaMenuStore.instance.initialize(),FirefaTableStore.instance.initialize()]);store.addListener(refresh);orders.addListener(refresh);outlet.addListener(refresh);}
   void refresh(){if(mounted)setState((){});}
   @override void dispose(){store.removeListener(refresh);orders.removeListener(refresh);outlet.removeListener(refresh);tabs.dispose();super.dispose();}
   String money(int v)=>'Rp '+v.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'),(_)=>'.');
@@ -36,7 +37,7 @@ class _FnbOperationsPageState extends State<FnbOperationsPage> with SingleTicker
       TextField(controller:note,decoration:const InputDecoration(labelText:'Catatan (opsional)')),
       const SizedBox(height:8),Row(children:[Expanded(child:Text('Jadwal: '+MaterialLocalizations.of(ctx).formatMediumDate(at)+' '+MaterialLocalizations.of(ctx).formatTimeOfDay(TimeOfDay.fromDateTime(at)))),TextButton(onPressed:()async{final d=await showDatePicker(context:ctx,initialDate:at.isBefore(DateTime.now())?DateTime.now():at,firstDate:DateTime.now().subtract(const Duration(days:1)),lastDate:DateTime.now().add(const Duration(days:365)));if(d!=null)update(()=>at=DateTime(d.year,d.month,d.day,at.hour,at.minute));},child:const Text('Tanggal')),TextButton(onPressed:()async{final t=await showTimePicker(context:ctx,initialTime:TimeOfDay.fromDateTime(at));if(t!=null)update(()=>at=DateTime(at.year,at.month,at.day,t.hour,t.minute));},child:const Text('Jam'))])
     ]))),actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Batal')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Simpan'))])));
-    if(ok==true){final success=store.addReservation(outlet:outlet.selectedOutletId,guest:guest.text,phone:phone.text,partySize:int.tryParse(party.text)??0,at:at,table:table.text,note:note.text);message(success?'Reservasi tersimpan.':'Data reservasi tidak valid.');}
+    if(ok==true){final knownTables=FirefaTableStore.instance.forOutlet(outlet.selectedOutletId);if(table.text.trim().isNotEmpty&&knownTables.isNotEmpty&&!knownTables.any((t)=>t.name.toLowerCase()==table.text.trim().toLowerCase())){message('Nama meja tidak ditemukan di outlet aktif.');}else{final success=store.addReservation(outlet:outlet.selectedOutletId,guest:guest.text,phone:phone.text,partySize:int.tryParse(party.text)??0,at:at,table:table.text,note:note.text);message(success?'Reservasi tersimpan.':'Meja sudah dipesan pada waktu berdekatan atau data reservasi tidak valid.');}}
     guest.dispose();phone.dispose();party.dispose();table.dispose();note.dispose();
   }
   Future<void> addQueue() async {
@@ -88,7 +89,7 @@ class _FnbOperationsPageState extends State<FnbOperationsPage> with SingleTicker
       isThreeLine: true,
       trailing: PopupMenuButton<String>(
         tooltip: 'Ubah status reservasi',
-        onSelected: (v) { store.setReservationStatus(id, r.id, v); },
+        onSelected: (v) { if (!store.setReservationStatus(id, r.id, v)) message('Perubahan status reservasi tidak sesuai alur.'); },
         itemBuilder: (_) => const [
           PopupMenuItem(value:'booked', child:Text('Dipesan')),
           PopupMenuItem(value:'arrived', child:Text('Tamu tiba')),
@@ -107,7 +108,7 @@ class _FnbOperationsPageState extends State<FnbOperationsPage> with SingleTicker
       subtitle: Text(q.at.toLocal().toString().substring(0,16)),
       trailing: PopupMenuButton<String>(
         tooltip:'Ubah status antrean',
-        onSelected:(v){store.setQueueStatus(id,q.id,v);},
+        onSelected:(v){if(!store.setQueueStatus(id,q.id,v))message('Perubahan status antrean tidak sesuai alur.');},
         itemBuilder:(_)=>const [
           PopupMenuItem(value:'waiting',child:Text('Menunggu')),
           PopupMenuItem(value:'called',child:Text('Panggil')),
