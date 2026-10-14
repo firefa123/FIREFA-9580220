@@ -66,8 +66,8 @@ void main() {
   });
 
   test('checkout rejects an empty cart without creating an order', () async {
-    expect(
-      () => store.checkout(quantities: {}, type: 'Take Away'),
+    await expectLater(
+      store.checkout(quantities: {}, type: 'Take Away'),
       throwsStateError,
     );
     expect(store.orders, isEmpty);
@@ -77,8 +77,8 @@ void main() {
     final product = store.products.first;
     final startingStock = product.stock;
 
-    expect(
-      () => store.checkout(
+    await expectLater(
+      store.checkout(
         quantities: {product.id: startingStock + 1},
         type: 'Take Away',
       ),
