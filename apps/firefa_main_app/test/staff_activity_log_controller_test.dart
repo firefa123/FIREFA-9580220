@@ -51,7 +51,7 @@ void main() {
 
       expect(
         controller.logsBetween(firstAt, secondAt).map((entry) => entry.action),
-        ['Updated', 'Middle'],
+        ['Middle', 'Start'],
       );
     });
 
