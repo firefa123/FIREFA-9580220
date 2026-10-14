@@ -23,9 +23,10 @@ class FirefaCartData {
   final int discountInput;
   final int taxRate;
   final int serviceRate;
-  const FirefaCartData({this.items=const [],this.orderType='Dine In',this.table='A01',this.discountType='Nominal',this.discountInput=0,this.taxRate=0,this.serviceRate=0});
-  Map<String,dynamic> toJson() => {'items':items.map((e)=>e.toJson()).toList(),'orderType':orderType,'table':table,'discountType':discountType,'discountInput':discountInput,'taxRate':taxRate,'serviceRate':serviceRate};
-  factory FirefaCartData.fromJson(Map<String,dynamic> j) => FirefaCartData(items:(j['items'] as List).map((e)=>FirefaCartItemData.fromJson(Map<String,dynamic>.from(e as Map))).toList(),orderType:j['orderType'] as String,table:j['table'] as String,discountType:j['discountType'] as String,discountInput:j['discountInput'] as int,taxRate:j['taxRate'] as int,serviceRate:j['serviceRate'] as int);
+  final String promoCode;
+  const FirefaCartData({this.items=const [],this.orderType='Dine In',this.table='A01',this.discountType='Nominal',this.discountInput=0,this.taxRate=0,this.serviceRate=0,this.promoCode=''});
+  Map<String,dynamic> toJson() => {'items':items.map((e)=>e.toJson()).toList(),'orderType':orderType,'table':table,'discountType':discountType,'discountInput':discountInput,'taxRate':taxRate,'serviceRate':serviceRate,'promoCode':promoCode};
+  factory FirefaCartData.fromJson(Map<String,dynamic> j) => FirefaCartData(items:(j['items'] as List).map((e)=>FirefaCartItemData.fromJson(Map<String,dynamic>.from(e as Map))).toList(),orderType:j['orderType'] as String,table:j['table'] as String,discountType:j['discountType'] as String,discountInput:j['discountInput'] as int,taxRate:j['taxRate'] as int,serviceRate:j['serviceRate'] as int,promoCode:j['promoCode'] as String? ?? '');
 }
 class FirefaPersistentCartStore extends ChangeNotifier {
   FirefaPersistentCartStore._();

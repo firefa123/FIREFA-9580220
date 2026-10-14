@@ -60,7 +60,8 @@ class _PosPageState extends State<PosPage> {
       ..discountType = saved.discountType
       ..discountInput = saved.discountInput
       ..taxRate = saved.taxRate
-      ..serviceRate = saved.serviceRate;
+      ..serviceRate = saved.serviceRate
+      ..promoCode = saved.promoCode;
   }
 
   void _saveCart() => _saveCartForOutlet(outletId);
@@ -87,6 +88,7 @@ class _PosPageState extends State<PosPage> {
         discountInput: outletConfig.discountInput,
         taxRate: outletConfig.taxRate,
         serviceRate: outletConfig.serviceRate,
+        promoCode: outletConfig.promoCode,
       ),
     );
   }
@@ -297,7 +299,7 @@ class _PosPageState extends State<PosPage> {
     final manual = config.discountType == 'Percent'
         ? (subtotal * config.discountInput.clamp(0, 100) / 100).round()
         : config.discountInput.clamp(0, subtotal);
-    final promo = FirefaFnbOperationsStore.instance.promoDiscount(outletId, subtotal);
+    final promo = FirefaFnbOperationsStore.instance.promoDiscount(outletId, subtotal, code: config.promoCode);
     return (manual + promo).clamp(0, subtotal);
   }
 
@@ -552,6 +554,8 @@ class _PosPageState extends State<PosPage> {
     int draftDiscount = config.discountInput;
     int draftTax = config.taxRate;
     int draftService = config.serviceRate;
+    String draftPromoCode = config.promoCode;
+    final promoController = TextEditingController(text: draftPromoCode);
 
     final controller = TextEditingController(text: '$draftDiscount');
 
@@ -600,6 +604,16 @@ class _PosPageState extends State<PosPage> {
                           : amount.clamp(0, 999999999999);
                     }),
                   ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: promoController,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: const InputDecoration(
+                      labelText: 'Kode promo (kosongkan untuk promo otomatis)',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) => update(() => draftPromoCode = value.trim().toUpperCase()),
+                  ),
                   const SizedBox(height: 16),
                   const Text('Tax Rate (Demo)'),
                   DropdownButtonFormField<int>(
@@ -647,6 +661,7 @@ class _PosPageState extends State<PosPage> {
       ),
     );
 
+    promoController.dispose();
     if (apply != true || !mounted || sourceOutlet != outletId) {
       return;
     }
@@ -656,6 +671,7 @@ class _PosPageState extends State<PosPage> {
       config.discountInput = draftDiscount;
       config.taxRate = draftTax;
       config.serviceRate = draftService;
+      config.promoCode = draftPromoCode;
     });
     _saveCart();
   }
@@ -881,6 +897,7 @@ class _PosPageState extends State<PosPage> {
     final checkoutDiscountInput = config.discountInput;
     final checkoutTaxRate = config.taxRate;
     final checkoutServiceRate = config.serviceRate;
+    final checkoutPromoCode = config.promoCode;
     final checkoutItems = cart.map((item) => _CartItem(
       product: item.product,
       size: item.size,
@@ -893,7 +910,7 @@ class _PosPageState extends State<PosPage> {
     final manualCheckoutDiscount = checkoutDiscountType == 'Percent'
         ? (checkoutSubtotal * checkoutDiscountInput.clamp(0, 100) / 100).round()
         : checkoutDiscountInput.clamp(0, checkoutSubtotal);
-    final promoCheckoutDiscount = FirefaFnbOperationsStore.instance.promoDiscount(sourceOutlet, checkoutSubtotal);
+    final promoCheckoutDiscount = FirefaFnbOperationsStore.instance.promoDiscount(sourceOutlet, checkoutSubtotal, code: checkoutPromoCode);
     final checkoutDiscountAmount = (manualCheckoutDiscount + promoCheckoutDiscount).clamp(0, checkoutSubtotal);
     final checkoutDiscountedSubtotal = checkoutSubtotal - checkoutDiscountAmount;
     final checkoutTaxAmount = (checkoutDiscountedSubtotal * checkoutTaxRate / 100).round();
@@ -1824,12 +1841,14 @@ class _OrderSettings {
   int discountInput = 0;
   int taxRate = 0;
   int serviceRate = 0;
+  String promoCode = '';
 
   void resetCharges() {
     discountType = 'Nominal';
     discountInput = 0;
     taxRate = 0;
     serviceRate = 0;
+    promoCode = '';
   }
 }
 
