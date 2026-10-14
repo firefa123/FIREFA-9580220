@@ -99,12 +99,13 @@ class _OrdersPageState extends State<OrdersPage> {
       return;
     }
     final csv = <String>[
-      'Order ID,Outlet ID,Tanggal,Tipe,Meja,Status,Pembayaran,Item Qty,Subtotal,Diskon,Pajak,Service,Total,Produk',
+      'Order ID,Outlet ID,Tanggal,Tipe,Meja,Status Pembayaran,Metode Pembayaran,Kas Tunai,Item Qty,Subtotal,Diskon,Pajak,Service,Total,Produk',
       for (final order in rows)
         [
           order.id, order.outletId, order.createdAt.toIso8601String(),
           order.orderType, order.tableId ?? '', order.status.label,
-          order.paymentStatus.name, order.itemCount.toString(),
+          order.paymentStatus.name, order.paymentMethod ?? '',
+          order.cashPaidAmount.toString(), order.itemCount.toString(),
           order.subtotal.toString(), order.discount.toString(),
           order.tax.toString(), order.service.toString(),
           order.total.toString(),
@@ -775,6 +776,8 @@ class _OrdersPageState extends State<OrdersPage> {
                     ? Colors.green
                     : Colors.orange,
               ),
+              if (order.paymentMethod != null)
+                chip('Metode: ${order.paymentMethod}', Colors.blueGrey),
             ],
           ),
           const SizedBox(height: 10),
