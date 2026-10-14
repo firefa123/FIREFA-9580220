@@ -36,8 +36,10 @@ void main() {
     expect(result, contains('Jalan Mawar'));
     expect(result, contains('081234'));
     expect(result, contains('Datang kembali'));
-    expect(result, contains('Pajak: Rp 2000'));
-    expect(result, contains('TOTAL: Rp 22000'));
+    expect(result, contains('Kopi x2 @ Rp 10.000'));
+    expect(result, contains('Rp 20.000'));
+    expect(result, contains('Pajak: Rp 2.000'));
+    expect(result, contains('TOTAL: Rp 22.000'));
   });
 
   test('tax preference hides tax line but preserves total', () {
@@ -50,7 +52,7 @@ void main() {
       ),
     );
     expect(result, isNot(contains('Pajak: Rp')));
-    expect(result, contains('TOTAL: Rp 22000'));
+    expect(result, contains('TOTAL: Rp 22.000'));
     expect(result, contains('sudah termasuk komponen pajak'));
   });
 
