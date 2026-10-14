@@ -20,12 +20,14 @@ extension FirefaPrinterRoleLabel on FirefaPrinterRole {
 
 class FirefaPrinterConfig {
   final FirefaPrinterRole role;
+  final String outletId;
   final String name;
   final String target;
   final bool enabled;
 
   const FirefaPrinterConfig({
     required this.role,
+    required this.outletId,
     required this.name,
     required this.target,
     required this.enabled,
@@ -38,6 +40,7 @@ class FirefaPrinterConfig {
   }) {
     return FirefaPrinterConfig(
       role: role,
+      outletId: outletId,
       name: name ?? this.name,
       target: target ?? this.target,
       enabled: enabled ?? this.enabled,
@@ -46,6 +49,7 @@ class FirefaPrinterConfig {
 
   Map<String, dynamic> toJson() => {
         'role': role.name,
+        'outletId': outletId,
         'name': name,
         'target': target,
         'enabled': enabled,
@@ -54,6 +58,7 @@ class FirefaPrinterConfig {
   factory FirefaPrinterConfig.fromJson(Map<String, dynamic> json) {
     return FirefaPrinterConfig(
       role: FirefaPrinterRole.values.byName(json['role'] as String),
+      outletId: json['outletId'] as String? ?? 'outlet-001',
       name: json['name'] as String? ?? '',
       target: json['target'] as String? ?? '',
       enabled: json['enabled'] as bool? ?? false,
@@ -68,15 +73,21 @@ class FirefaPrinterStore extends ChangeNotifier {
   static const _storageKey = 'firefa_printer_configs_v1';
 
   bool _initialized = false;
-  final Map<FirefaPrinterRole, FirefaPrinterConfig> _configs = {};
+  final Map<String, FirefaPrinterConfig> _configs = {};
 
-  List<FirefaPrinterConfig> get configs =>
-      FirefaPrinterRole.values.map(configFor).toList(growable: false);
+  String _key(String outletId, FirefaPrinterRole role) => '$outletId:${role.name}';
 
-  FirefaPrinterConfig configFor(FirefaPrinterRole role) {
-    return _configs[role] ??
+  List<FirefaPrinterConfig> get configs => configsForOutlet('outlet-001');
+
+  List<FirefaPrinterConfig> configsForOutlet(String outletId) =>
+      FirefaPrinterRole.values.map((role) => configFor(role, outletId: outletId))
+          .toList(growable: false);
+
+  FirefaPrinterConfig configFor(FirefaPrinterRole role, {String outletId = 'outlet-001'}) {
+    return _configs[_key(outletId, role)] ??
         FirefaPrinterConfig(
           role: role,
+          outletId: outletId,
           name: 'Printer ${role.label}',
           target: '',
           enabled: false,
@@ -96,7 +107,7 @@ class FirefaPrinterStore extends ChangeNotifier {
           final config = FirefaPrinterConfig.fromJson(
             Map<String, dynamic>.from(value as Map),
           );
-          _configs[config.role] = config;
+          _configs[_key(config.outletId, config.role)] = config;
         }
       } catch (error) {
         debugPrint('FIREFA printer config restore failed: $error');
@@ -112,10 +123,10 @@ class FirefaPrinterStore extends ChangeNotifier {
       await initialize();
     }
 
-    _configs[config.role] = config;
+    _configs[_key(config.outletId, config.role)] = config;
     final prefs = await SharedPreferences.getInstance();
     final payload = jsonEncode(
-      FirefaPrinterRole.values.map((role) => configFor(role).toJson()).toList(),
+      _configs.values.map((config) => config.toJson()).toList(),
     );
 
     final saved = await prefs.setString(_storageKey, payload);
