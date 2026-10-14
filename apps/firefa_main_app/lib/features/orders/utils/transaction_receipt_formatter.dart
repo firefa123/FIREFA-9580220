@@ -53,6 +53,6 @@ class TransactionReceiptFormatter {
       'Status: LUNAS (SIMULASI LOKAL)',
       'Bukan bukti settlement bank.',
     ];
-    return lines.join('\\n');
+    return lines.join('\n');
   }
 }
