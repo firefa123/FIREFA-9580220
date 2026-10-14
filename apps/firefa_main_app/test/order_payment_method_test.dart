@@ -112,6 +112,17 @@ void main() {
     expect(order.paymentStatus, FirefaPaymentStatus.refunded);
     expect(order.cashRefundAmount, 25000);
     expect(order.refundReason, 'Pesanan salah');
+    expect(order.refundedAt, isNotNull);
+    expect(await store.markPaidAndPersist('REFUND-TEST', order.id, paymentMethod: 'Cash', cashPaidAmount: 25000), isFalse);
+    expect(await store.cancelAndRestoreStock('REFUND-TEST', order.id), isFalse);
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('firefa_orders_outbox_v2');
+    expect(raw, isNotNull);
+    final saved = (jsonDecode(raw!) as Map<String, dynamic>)['orders'] as List;
+    final savedRefund = Map<String, dynamic>.from(saved.singleWhere((entry) => (entry as Map)['id'] == order.id) as Map);
+    expect(savedRefund['paymentStatus'], FirefaPaymentStatus.refunded.name);
+    expect(savedRefund['refundReason'], 'Pesanan salah');
+    expect(savedRefund['cashRefundAmount'], 25000);
     expect(await store.refundPaidAndPersist('REFUND-TEST', order.id, refundMethod: 'Cash', reason: 'Duplikat'), isFalse);
   });
 
