@@ -236,8 +236,13 @@ void main() {
     final rawInventory = prefs.getString(legacy.FirefaInventoryStore.storageKey);
     expect(rawInventory, isNotNull);
     final savedInventory = jsonDecode(rawInventory!) as Map<String, dynamic>;
-    expect((savedInventory['reversedOrderIds'] as List).cast<String>(),
-        containsAll([order.id, interruptedOrder.id]));
+    expect(
+      (savedInventory['reversedOrderIds'] as List).cast<String>(),
+      containsAll([
+        jsonEncode(['CANCEL-TEST', order.id]),
+        jsonEncode(['CANCEL-TEST', interruptedOrder.id]),
+      ]),
+    );
     final savedItems = (savedInventory['items'] as List)
         .map((value) => Map<String, dynamic>.from(value as Map))
         .toList();
