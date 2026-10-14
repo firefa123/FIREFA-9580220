@@ -34,7 +34,7 @@ void main() {
     expect(text, contains('TRX-100'));
     expect(text, contains('PAY-100'));
     expect(text, contains('Nasi Goreng x1'));
-    expect(text, contains('FIREFA • STRUK TRANSAKSI\\nTanggal:'));
+    expect(text, contains('FIREFA • STRUK TRANSAKSI\nTanggal:'));
     expect(text, contains('Rp 30000'));
     expect(text, contains('TOTAL: Rp 45000'));
     expect(text, contains('LUNAS (SIMULASI LOKAL)'));
