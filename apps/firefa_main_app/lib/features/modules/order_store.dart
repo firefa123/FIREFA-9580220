@@ -204,19 +204,22 @@ class FirefaOrderStore extends ChangeNotifier {
     _ensureInitialized();
     final tables = FirefaTableStore.instance;
     await tables.initialize();
-
     var changed = false;
-    for (final order in _orders.where((candidate) =>
-        candidate.orderType == 'Dine In' &&
-        candidate.tableId != null &&
-        candidate.status != FirefaOrderStatus.completed &&
-        candidate.status != FirefaOrderStatus.cancelled)) {
-      for (final table in tables.forOutlet(order.outletId).where(
-        (candidate) => candidate.name == order.tableId,
-      )) {
-        if (!table.occupied) {
-          changed = tables.setOccupied(order.outletId, table.id, true) || changed;
+    for (final table in tables.allTablesForSync()) {
+      final activeOrders = _orders.where((order) =>
+        order.outletId == table.outletId &&
+        order.orderType == 'Dine In' &&
+        order.tableId == table.name &&
+        order.status != FirefaOrderStatus.completed &&
+        order.status != FirefaOrderStatus.cancelled
+      );
+      if (activeOrders.isNotEmpty) {
+        final order = activeOrders.first;
+        if (table.reservationOrderId != order.id) {
+          changed = tables.reserveForOrder(table.outletId, table.id, order.id) || changed;
         }
+      } else if (table.reservationOrderId != null) {
+        changed = tables.releaseOrderReservation(table.outletId, table.id, table.reservationOrderId!) || changed;
       }
     }
     if (changed) await tables.waitForPendingSave();
