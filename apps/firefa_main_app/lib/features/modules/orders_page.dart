@@ -6,6 +6,7 @@ import '../../core/outlet/active_outlet_store.dart';
 import 'order_models.dart';
 import 'offline_sync_queue.dart';
 import 'order_store.dart';
+import 'pos_payment_dialog.dart';
 import 'receipt_formatter.dart';
 import 'settings_store.dart';
 
@@ -239,17 +240,49 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Future<void> markPaid(FirefaOrder order) async {
+    final sourceOutlet = outletId;
     if (!canActOn(order)) {
       message('Anda tidak memiliki izin untuk pesanan ini.');
       return;
     }
 
+    final payment = await showDialog<PosPaymentResult>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => PosPaymentDialog(
+        total: order.total,
+        orderType: order.orderType,
+        table: order.tableId,
+        itemCount: order.itemCount,
+      ),
+    );
+    if (!mounted || payment == null) return;
+    if (sourceOutlet != outletId ||
+        !outletStore.canAccessOutlet(sourceOutlet) ||
+        order.outletId != sourceOutlet) {
+      message('Outlet berubah. Pembayaran dibatalkan; periksa pesanan lalu coba lagi.');
+      return;
+    }
+
     try {
-      final success = await orderStore.markPaidAndPersist(outletId, order.id);
+      final method = payment.method == 'Split'
+          ? 'Split:${payment.splitMethod}'
+          : payment.method;
+      final cashPaidAmount = payment.method == 'Cash'
+          ? payment.total
+          : payment.method == 'Split'
+              ? payment.splitCash
+              : 0;
+      final success = await orderStore.markPaidAndPersist(
+        sourceOutlet,
+        order.id,
+        paymentMethod: method,
+        cashPaidAmount: cashPaidAmount,
+      );
       if (!mounted) return;
       message(
         success
-            ? '${order.id} ditandai Paid (demo).'
+            ? '${order.id} ditandai Paid dengan metode $method (demo).'
             : 'Status pembayaran tidak dapat diubah.',
       );
     } catch (error) {
