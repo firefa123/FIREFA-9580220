@@ -1,5 +1,6 @@
 // ignore_for_file: prefer_interpolation_to_compose_strings
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/auth/role_permissions.dart';
 import '../../core/outlet/active_outlet_store.dart';
 import 'fnb_operations_store.dart';
@@ -77,7 +78,7 @@ class _FnbOperationsPageState extends State<FnbOperationsPage> with SingleTicker
   }
   Future<void> printKot(FirefaOrder order) async {
     final lines=<String>['FIREFA • KITCHEN ORDER TICKET','Order: '+order.id,'Tipe: '+order.orderType,if(order.tableId!=null)'Meja: '+order.tableId!,'Waktu: '+MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(order.createdAt.toLocal())),'--------------------------------',for(final item in order.items)item.quantity.toString()+' x '+item.productName+(item.details.isEmpty?'':' • '+item.details),'--------------------------------','Catatan: cek detail pesanan sebelum produksi'];
-    await showDialog<void>(context:context,builder:(ctx)=>AlertDialog(title:const Text('Preview KOT — simulasi cetak'),content:SingleChildScrollView(child:Text(lines.join('\n'))),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Tutup'))]));
+    await showDialog<void>(context:context,builder:(ctx)=>AlertDialog(title:const Text('Preview KOT — simulasi cetak'),content:SizedBox(width:420,child:SingleChildScrollView(child:SelectableText(lines.join('\n'),style:const TextStyle(fontFamily:'monospace')))),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Tutup')),FilledButton.icon(onPressed:()async{await Clipboard.setData(ClipboardData(text:lines.join('\n')));if(ctx.mounted)Navigator.pop(ctx);if(mounted)message('KOT disalin. Pengiriman ke printer fisik masih perlu driver printer.');},icon:const Icon(Icons.copy),label:const Text('Salin KOT'))]));
   }
   Widget _reservationTile(FirefaReservation r, String id) => Card(
     child: ListTile(
@@ -128,7 +129,7 @@ class _FnbOperationsPageState extends State<FnbOperationsPage> with SingleTicker
       isThreeLine:true,
       trailing: Row(mainAxisSize:MainAxisSize.min,children:[
         IconButton(tooltip:'Preview KOT',onPressed:()=>printKot(o),icon:const Icon(Icons.print_outlined)),
-        if(o.status.next!=null) IconButton(tooltip:'Lanjut status dapur',onPressed:()=>orders.advance(id,o.id),icon:const Icon(Icons.arrow_forward)),
+        if(o.status.next!=null) IconButton(tooltip:'Lanjut status dapur',onPressed:()=>{if(!orders.advance(id,o.id))message('Status belum dapat dilanjutkan. Pastikan pembayaran selesai sebelum menutup pesanan.');},icon:const Icon(Icons.arrow_forward)),
       ]),
     ),
   );
