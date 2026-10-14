@@ -106,6 +106,13 @@ class FirefaNavigation {
       icon: Icons.print_outlined,
       permission: FirefaPermission.printerManage,
     ),
+    FirefaModule(
+      id: 'cashier-shifts',
+      title: 'Shift Kasir',
+      description: 'Buka shift, catat kas, dan tutup shift kasir.',
+      icon: Icons.point_of_sale_outlined,
+      permission: FirefaPermission.cashierShiftManage,
+    ),
   ];
 
   static List<FirefaModule> accessibleModules(FirefaRole role) =>
