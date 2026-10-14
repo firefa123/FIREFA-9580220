@@ -14,7 +14,8 @@ int calculateCashSalesForShift({
 }) {
   return orders.where((order) {
     final paidAt = order.paidAt;
-    return order.paymentStatus == FirefaPaymentStatus.paid &&
+    return (order.paymentStatus == FirefaPaymentStatus.paid ||
+            order.paymentStatus == FirefaPaymentStatus.refunded) &&
         paidAt != null &&
         !paidAt.isBefore(openedAt) &&
         !paidAt.isAfter(closedAt);
