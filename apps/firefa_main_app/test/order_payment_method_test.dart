@@ -95,6 +95,26 @@ void main() {
     expect(restored.cashPaidAmount, 0);
   });
 
+  test('full cash refund is recorded and reduces shift cash reconciliation', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = FirefaOrderStore.instance;
+    await store.initialize();
+    final order = store.createOrder(
+      outletId: 'REFUND-TEST',
+      orderType: 'Take Away',
+      tableId: null,
+      items: const [FirefaOrderItem(productName: 'Meal', quantity: 1, unitPrice: 25000)],
+      subtotal: 25000, discount: 0, tax: 0, service: 0, total: 25000,
+    );
+    expect(await store.markPaidAndPersist('REFUND-TEST', order.id, paymentMethod: 'Cash', cashPaidAmount: 25000), isTrue);
+    expect(await store.refundPaidAndPersist('REFUND-TEST', order.id, refundMethod: 'Cash', reason: 'Pesanan salah'), isTrue);
+    await store.waitForPendingSave();
+    expect(order.paymentStatus, FirefaPaymentStatus.refunded);
+    expect(order.cashRefundAmount, 25000);
+    expect(order.refundReason, 'Pesanan salah');
+    expect(await store.refundPaidAndPersist('REFUND-TEST', order.id, refundMethod: 'Cash', reason: 'Duplikat'), isFalse);
+  });
+
   test('shift cash sales counts cash and split cash only within shift window', () {
     final opened = DateTime(2026, 10, 14, 9);
     final closed = DateTime(2026, 10, 14, 17);
@@ -128,13 +148,25 @@ void main() {
       paidOrder('after', DateTime(2026, 10, 14, 18), 'Cash', 7000),
     ];
 
+    final cashRefund = paidOrder('cash-refund', DateTime(2026, 10, 14, 10), 'Cash', 10000)
+      ..paymentStatus = FirefaPaymentStatus.refunded
+      ..refundedAt = DateTime(2026, 10, 14, 15)
+      ..cashRefundAmount = 6000;
     expect(
       calculateCashSalesForShift(
-        orders: orders,
+        orders: [...orders, cashRefund],
         openedAt: opened,
         closedAt: closed,
       ),
-      14000,
+      24000,
+    );
+    expect(
+      calculateCashRefundsForShift(
+        orders: [...orders, cashRefund],
+        openedAt: opened,
+        closedAt: closed,
+      ),
+      6000,
     );
   });
 }
