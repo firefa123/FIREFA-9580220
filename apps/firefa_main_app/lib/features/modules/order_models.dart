@@ -95,6 +95,9 @@ class FirefaOrder {
   final String? tableId;
   final DateTime createdAt;
   DateTime? completedAt;
+  DateTime? paidAt;
+  String? paymentMethod;
+  int cashPaidAmount;
   final List<FirefaOrderItem> items;
   final int subtotal;
   final int discount;
@@ -112,6 +115,9 @@ class FirefaOrder {
     required this.tableId,
     required this.createdAt,
     this.completedAt,
+    this.paidAt,
+    this.paymentMethod,
+    this.cashPaidAmount = 0,
     required this.items,
     required this.subtotal,
     required this.discount,
@@ -156,14 +162,22 @@ class FirefaOrder {
     return true;
   }
 
-  bool markPaid() {
+  bool markPaid({
+    String? method,
+    int cashAmount = 0,
+    DateTime? paymentTime,
+  }) {
     if (status == FirefaOrderStatus.draft ||
         status == FirefaOrderStatus.cancelled ||
         paymentStatus == FirefaPaymentStatus.paid) {
       return false;
     }
+    if (cashAmount < 0 || cashAmount > total) return false;
 
     paymentStatus = FirefaPaymentStatus.paid;
+    paymentMethod = method;
+    cashPaidAmount = cashAmount;
+    paidAt = paymentTime ?? DateTime.now();
     return true;
   }
 
@@ -174,6 +188,9 @@ class FirefaOrder {
         'tableId': tableId,
         'createdAt': createdAt.toIso8601String(),
         'completedAt': completedAt?.toIso8601String(),
+        'paidAt': paidAt?.toIso8601String(),
+        'paymentMethod': paymentMethod,
+        'cashPaidAmount': cashPaidAmount,
         'items': items.map((item) => item.toJson()).toList(),
         'subtotal': subtotal,
         'discount': discount,
@@ -194,6 +211,11 @@ class FirefaOrder {
       completedAt: json['completedAt'] == null
           ? null
           : DateTime.parse(json['completedAt'] as String),
+      paidAt: json['paidAt'] == null
+          ? null
+          : DateTime.parse(json['paidAt'] as String),
+      paymentMethod: json['paymentMethod'] as String?,
+      cashPaidAmount: json['cashPaidAmount'] as int? ?? 0,
       items: List.unmodifiable(
         (json['items'] as List).map(
           (item) =>
