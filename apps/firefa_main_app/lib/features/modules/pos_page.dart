@@ -775,7 +775,16 @@ class _PosPageState extends State<PosPage> {
       final inventory = FirefaInventoryStore.instance;
       await inventory.initialize();
       final stockLines = checkoutItems.map((item) => (menuId: item.product.id, quantity: item.quantity)).toList();
-      inventory.validateOrderStock(outletId: sourceOutlet, menuLines: stockLines);
+      final stockIsConfigured = inventory.validateOrderStock(
+        outletId: sourceOutlet,
+        menuLines: stockLines,
+      );
+      if (!stockIsConfigured) {
+        throw StateError(
+          'Resep dan stok bahan belum dikonfigurasi untuk outlet ini. '
+          'Checkout dibatalkan agar transaksi tidak tercatat tanpa pemakaian stok.',
+        );
+      }
       final store = FirefaOrderStore.instance;
       checkoutOrderStore = store;
       final order = store.createOrder(
@@ -796,7 +805,16 @@ class _PosPageState extends State<PosPage> {
         total: checkoutGrandTotal,
       );
       createdOrder = order;
-      await inventory.consumeOrderStock(orderId: order.id, outletId: sourceOutlet, menuLines: stockLines);
+      final stockConsumed = await inventory.consumeOrderStock(
+        orderId: order.id,
+        outletId: sourceOutlet,
+        menuLines: stockLines,
+      );
+      if (!stockConsumed) {
+        throw StateError(
+          'Pemakaian stok tidak berhasil dicatat. Checkout dibatalkan.',
+        );
+      }
       await inventory.waitForPendingSave();
       if (payment != null) {
         if (!store.markPaid(sourceOutlet, order.id)) {
