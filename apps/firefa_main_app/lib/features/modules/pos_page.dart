@@ -261,9 +261,14 @@ class _PosPageState extends State<PosPage> {
   }
 
   List<_Product> get catalogProducts {
-    final items = menuStore.forOutlet(outletId);
-    if (items.isEmpty) return products;
-    return items.where((item) => item.isActive).map(_fromMenu).toList();
+    // The managed outlet catalog is the POS source of truth. Demo products
+    // remain available only to resolve legacy saved carts, never as sellable
+    // items when the outlet has no configured menu.
+    return menuStore
+        .forOutlet(outletId)
+        .where((item) => item.isActive)
+        .map(_fromMenu)
+        .toList();
   }
 
   List<_Product> get visibleProducts {
