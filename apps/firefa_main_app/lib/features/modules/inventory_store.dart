@@ -247,8 +247,14 @@ class FirefaInventoryStore extends ChangeNotifier {
 
   Future<bool> consumeOrderStock({required String orderId, required String outletId, required List<({String menuId, int quantity})> menuLines}) async {
     if (orderId.trim().isEmpty) throw ArgumentError('ID order wajib diisi.');
-    if (_containsOrderMarker(_processedOrderIds, outletId, orderId,
-        legacyNote: 'POS order $orderId')) return false;
+    if (_containsOrderMarker(
+      _processedOrderIds,
+      outletId,
+      orderId,
+      legacyNote: 'POS order $orderId',
+    )) {
+      return false;
+    }
     if (!validateOrderStock(outletId: outletId, menuLines: menuLines)) return false;
     final requiredQuantities = <String, int>{};
     final recipes = _recipes.where((line) => line.outletId == outletId).toList();
@@ -286,10 +292,28 @@ class FirefaInventoryStore extends ChangeNotifier {
     if (orderId.trim().isEmpty || outletId.trim().isEmpty) {
       throw ArgumentError('Order dan outlet wajib diisi.');
     }
-    if (_containsOrderMarker(_reversedOrderIds, outletId, orderId,
-        legacyNote: 'Pembatalan POS order $orderId')) return false;
-    if (!_containsOrderMarker(_processedOrderIds, outletId, orderId,
-        legacyNote: 'POS order $orderId')) return false;
+    if (_containsOrderMarker(
+      _reversedOrderIds,
+      outletId,
+      orderId,
+      legacyNote: 'Pembatalan POS order $orderId',
+    )) {
+      return false;
+    }
+    final processedForOutlet = _containsOrderMarker(
+      _processedOrderIds,
+      outletId,
+      orderId,
+      legacyNote: 'POS order $orderId',
+    );
+    if (!processedForOutlet) {
+      final processedElsewhere = _processedOrderIds.contains(orderId) ||
+          _hasScopedMarkerForOrder(_processedOrderIds, orderId);
+      if (processedElsewhere) {
+        throw StateError('Stok order $orderId diproses di outlet lain.');
+      }
+      return false;
+    }
 
     final sourceMovements = _movements.where((movement) =>
       movement.outletId == outletId &&
@@ -389,7 +413,9 @@ class FirefaInventoryStore extends ChangeNotifier {
         try {
           final decoded = jsonDecode(marker);
           if (decoded is List && decoded.length == 2 &&
-              decoded[1] == orderId) return true;
+              decoded[1] == orderId) {
+            return true;
+          }
         } catch (_) {
           // Other marker formats are legacy values, not scoped keys.
         }
