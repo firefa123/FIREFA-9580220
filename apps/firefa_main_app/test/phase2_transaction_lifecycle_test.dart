@@ -70,6 +70,8 @@ void main() {
 
     test('legacy fully-refunded order JSON without a refund ledger remains readable', () {
       final json = sampleOrder().toJson()
+        ..remove('refundRecords')
+        ..remove('refundAmount')
         ..['paymentStatus'] = FirefaPaymentStatus.refunded.name
         ..['refundMethod'] = 'Cash'
         ..['refundReason'] = 'Legacy'
