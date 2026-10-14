@@ -21,6 +21,20 @@ int calculateCashSalesForShift({
   }).fold<int>(0, (sum, order) => sum + order.cashPaidAmount);
 }
 
+int calculateCashRefundsForShift({
+  required Iterable<FirefaOrder> orders,
+  required DateTime openedAt,
+  required DateTime closedAt,
+}) {
+  return orders.where((order) {
+    final refundedAt = order.refundedAt;
+    return order.paymentStatus == FirefaPaymentStatus.refunded &&
+        refundedAt != null &&
+        !refundedAt.isBefore(openedAt) &&
+        !refundedAt.isAfter(closedAt);
+  }).fold<int>(0, (sum, order) => sum + order.cashRefundAmount);
+}
+
 class FirefaCashierShift {
   final String id;
   final String outletId;
@@ -29,6 +43,7 @@ class FirefaCashierShift {
   final int openingCash;
   final DateTime? closedAt;
   final int cashSales;
+  final int cashRefunds;
   final int cashIn;
   final int cashOut;
   final int? countedCash;
@@ -41,13 +56,14 @@ class FirefaCashierShift {
     required this.openingCash,
     this.closedAt,
     this.cashSales = 0,
+    this.cashRefunds = 0,
     this.cashIn = 0,
     this.cashOut = 0,
     this.countedCash,
   });
 
   bool get isOpen => closedAt == null;
-  int get expectedCash => openingCash + cashSales + cashIn - cashOut;
+  int get expectedCash => openingCash + cashSales + cashIn - cashOut - cashRefunds;
   int? get difference => countedCash == null ? null : countedCash! - expectedCash;
 
   Map<String, dynamic> toJson() => {
@@ -58,6 +74,7 @@ class FirefaCashierShift {
         'openingCash': openingCash,
         'closedAt': closedAt?.toIso8601String(),
         'cashSales': cashSales,
+        'cashRefunds': cashRefunds,
         'cashIn': cashIn,
         'cashOut': cashOut,
         'countedCash': countedCash,
@@ -74,6 +91,7 @@ class FirefaCashierShift {
           ? null
           : DateTime.parse(json['closedAt'] as String),
       cashSales: json['cashSales'] as int? ?? 0,
+      cashRefunds: json['cashRefunds'] as int? ?? 0,
       cashIn: json['cashIn'] as int? ?? 0,
       cashOut: json['cashOut'] as int? ?? 0,
       countedCash: json['countedCash'] as int?,
@@ -155,13 +173,14 @@ class FirefaCashierShiftStore extends ChangeNotifier {
   FirefaCashierShift closeShift({
     required String shiftId,
     required int cashSales,
+    int cashRefunds = 0,
     required int cashIn,
     required int cashOut,
     required int countedCash,
     DateTime? closedAt,
   }) {
     _ensureInitialized();
-    if (cashSales < 0 || cashIn < 0 || cashOut < 0 || countedCash < 0) {
+    if (cashSales < 0 || cashRefunds < 0 || cashIn < 0 || cashOut < 0 || countedCash < 0) {
       throw ArgumentError('Nominal kas tidak boleh negatif.');
     }
     final index = _shifts.indexWhere((shift) => shift.id == shiftId);
@@ -169,7 +188,7 @@ class FirefaCashierShiftStore extends ChangeNotifier {
       throw StateError('Shift aktif tidak ditemukan.');
     }
     final old = _shifts[index];
-    if (cashOut > old.openingCash + cashSales + cashIn) {
+    if (cashOut + cashRefunds > old.openingCash + cashSales + cashIn) {
       throw ArgumentError('Kas keluar melebihi uang yang tersedia pada shift.');
     }
     final closed = FirefaCashierShift(
@@ -180,6 +199,7 @@ class FirefaCashierShiftStore extends ChangeNotifier {
       openingCash: old.openingCash,
       closedAt: closedAt ?? DateTime.now(),
       cashSales: cashSales,
+      cashRefunds: cashRefunds,
       cashIn: cashIn,
       cashOut: cashOut,
       countedCash: countedCash,
@@ -288,9 +308,18 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
     );
   }
 
+  int _cashRefundsForShift(FirefaCashierShift shift, {DateTime? until}) {
+    return calculateCashRefundsForShift(
+      orders: FirefaOrderStore.instance.ordersForOutlet(shift.outletId),
+      openedAt: shift.openedAt,
+      closedAt: until ?? DateTime.now(),
+    );
+  }
+
   Future<void> _closeShift(FirefaCashierShift shift) async {
     final closingTime = DateTime.now();
     final cashSales = _cashSalesForShift(shift, until: closingTime);
+    final cashRefunds = _cashRefundsForShift(shift, until: closingTime);
     final cashIn = _number(_cashInController);
     final cashOut = _number(_cashOutController);
     final counted = _number(_countedController);
@@ -303,6 +332,7 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
       final closed = _store.closeShift(
         shiftId: shift.id,
         cashSales: cashSales,
+        cashRefunds: cashRefunds,
         cashIn: cashIn,
         cashOut: cashOut,
         countedCash: counted,
@@ -397,11 +427,11 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
                       Text('Modal awal: ${_money(current.openingCash)}'),
                       const SizedBox(height: 16),
                       const Text(
-                        'Penjualan tunai dihitung otomatis dari transaksi yang dibayar dengan tunai atau bagian tunai dari split payment selama shift ini.',
+                        'Penjualan tunai dihitung otomatis dari pembayaran tunai/split. Refund tunai pada shift ini mengurangi estimasi kas; stok bahan tidak otomatis dipulihkan karena produk bisa sudah dibuat/disajikan.',
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Penjualan tunai otomatis: ${_money(_cashSalesForShift(current))}',
+                        'Penjualan tunai: ${_money(_cashSalesForShift(current))} • Refund tunai: ${_money(_cashRefundsForShift(current))}',
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 10),
@@ -412,7 +442,7 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
                       _amountField('Uang fisik saat tutup', _countedController),
                       const SizedBox(height: 12),
                       Text(
-                        'Estimasi kas: ${_money(current.openingCash + _cashSalesForShift(current) + (_number(_cashInController) < 0 ? 0 : _number(_cashInController)) - (_number(_cashOutController) < 0 ? 0 : _number(_cashOutController)))}',
+                        'Estimasi kas: ${_money(current.openingCash + _cashSalesForShift(current) + (_number(_cashInController) < 0 ? 0 : _number(_cashInController)) - (_number(_cashOutController) < 0 ? 0 : _number(_cashOutController)) - _cashRefundsForShift(current))}',
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 12),
