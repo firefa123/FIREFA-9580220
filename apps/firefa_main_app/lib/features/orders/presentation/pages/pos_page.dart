@@ -97,8 +97,37 @@ class _PosPageState extends State<PosPage> {
                                   .map(
                                     (item) => ListTile(
                                       title: Text(item.name),
-                                      subtitle: Text('Qty ${item.quantity}'),
-                                      trailing: Text('Rp ${item.subtotal}'),
+                                      subtitle: Text('Rp ${item.price} / item'),
+                                      trailing: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            tooltip: 'Kurangi jumlah',
+                                            visualDensity: VisualDensity.compact,
+                                            onPressed: () {
+                                              setState(() {
+                                                posController.decreaseItem(item.name);
+                                                _resetPaymentState();
+                                              });
+                                            },
+                                            icon: const Icon(Icons.remove_circle_outline),
+                                          ),
+                                          Text('${item.quantity}'),
+                                          IconButton(
+                                            tooltip: 'Tambah jumlah',
+                                            visualDensity: VisualDensity.compact,
+                                            onPressed: () {
+                                              setState(() {
+                                                posController.addItem(item.name, item.price);
+                                                _resetPaymentState();
+                                              });
+                                            },
+                                            icon: const Icon(Icons.add_circle_outline),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text('Rp ${item.subtotal}'),
+                                        ],
+                                      ),
                                     ),
                                   )
                                   .toList(),
