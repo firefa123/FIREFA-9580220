@@ -10,6 +10,7 @@ Removed from the tracked repository:
 - 16 files belonging to a parallel, unused shell/navigation/page scaffold: `AppShell`, `AppRoutes`, the unused owner sidebar family, duplicate presentation pages, and their isolated placeholder settings/stat-card dependencies.
 - 1 unused alternate navigation entry point: `FirefaMainNavigation`.
 - 5 unreferenced alternate role-dashboard prototype files (`RoleDashboardRouter` and the owner, manager, cashier, and kitchen dashboard widgets). The active app already routes role access through its current dashboard/module navigation; these alternate widgets had no in-repository entry point.
+- 7 unreferenced scaffolding/placeholder files: unused settings/branding binding DTOs, an unused payment UI binding, a disconnected inventory-dashboard bridge, and a customer list page containing hard-coded sample customers.
 
 The separate `apps/firefa_main_app_rebuild/` prototype had already been removed in an earlier commit and remains absent. The active app directory `apps/firefa_main_app/` is retained.
 
