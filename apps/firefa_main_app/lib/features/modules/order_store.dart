@@ -241,7 +241,6 @@ class FirefaOrderStore extends ChangeNotifier {
         candidate.status != FirefaOrderStatus.completed &&
         candidate.status != FirefaOrderStatus.cancelled
       );
-      final shouldBeOccupied = activeOrders.isNotEmpty;
       for (final table in tables.forOutlet(order.outletId).where(
         (candidate) => candidate.name == order.tableId,
       )) {
