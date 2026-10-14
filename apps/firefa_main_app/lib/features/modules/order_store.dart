@@ -74,6 +74,9 @@ class FirefaOrderStore extends ChangeNotifier {
       _scheduleSave();
     }
     _registerTableOrderChecker();
+    // Recover stock reversals if the app was interrupted after a cancelled
+    // order became durable but before its inventory restoration completed.
+    await recoverCancelledOrderStock();
     notifyListeners();
   }
 
@@ -447,8 +450,8 @@ class FirefaOrderStore extends ChangeNotifier {
   }
 
   /// Cancels an unpaid order and restores ingredients previously deducted by POS.
-  /// The local order and inventory stores persist separately, so this remains a
-  /// local-first best effort rather than a crash-atomic cross-store transaction.
+  /// Persist the cancelled order first so a restart can recover a stock reversal
+  /// if the process stops between the order and inventory writes.
   Future<bool> cancelAndRestoreStock(String outletId, String orderId) async {
     final order = findOrder(outletId, orderId);
     if (order == null || !order.status.canCancel ||
@@ -456,10 +459,21 @@ class FirefaOrderStore extends ChangeNotifier {
       return false;
     }
 
-    // Change the order state before the first await so another action cannot
-    // pay or advance it while stock restoration is in flight.
     final previousStatus = order.status;
     if (!order.cancel()) return false;
+
+    FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
+    _scheduleSave();
+    try {
+      await waitForPendingSave();
+    } catch (_) {
+      // If cancellation itself was not durable, do not proceed to inventory.
+      order.status = previousStatus;
+      FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
+      _scheduleSave();
+      notifyListeners();
+      rethrow;
+    }
 
     try {
       final inventory = FirefaInventoryStore.instance;
@@ -471,20 +485,54 @@ class FirefaOrderStore extends ChangeNotifier {
           outletId: outletId,
         );
       }
-    } catch (_) {
-      // Keep the order cancellable if restoration could not be completed.
-      order.status = previousStatus;
-      _scheduleSave();
+    } catch (error) {
+      // Keep the durable cancellation. Startup recovery retries any missing
+      // stock reversal, and the UI can report that inventory recovery is pending.
       notifyListeners();
-      rethrow;
+      throw StateError(
+        'Order dibatalkan, tetapi pemulihan stok tertunda: $error',
+      );
     }
 
-    FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
-    _scheduleSave();
-    await waitForPendingSave();
     notifyListeners();
     await _syncTableOccupancyForOrder(order);
     return true;
+  }
+
+  /// Retries inventory restoration for cancelled, unpaid orders whose POS stock
+  /// was consumed but has not yet been reversed. Safe to call more than once.
+  Future<int> recoverCancelledOrderStock() async {
+    _ensureInitialized();
+    final inventory = FirefaInventoryStore.instance;
+    try {
+      await inventory.initialize();
+    } catch (error) {
+      debugPrint('FIREFA: inventory recovery could not initialize: $error');
+      return 0;
+    }
+
+    var recovered = 0;
+    for (final order in List<FirefaOrder>.from(_orders)) {
+      if (order.status != FirefaOrderStatus.cancelled ||
+          order.paymentStatus == FirefaPaymentStatus.paid ||
+          !inventory.isOrderStockProcessed(order.id) ||
+          inventory.isOrderStockReversed(order.id)) {
+        continue;
+      }
+      try {
+        if (await inventory.restoreCancelledOrderStock(
+          orderId: order.id,
+          outletId: order.outletId,
+        )) {
+          recovered++;
+        }
+      } catch (error) {
+        debugPrint(
+          'FIREFA: stock restoration remains pending for ${order.id}: $error',
+        );
+      }
+    }
+    return recovered;
   }
 
   bool cancel(String outletId, String orderId) {
