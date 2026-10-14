@@ -308,7 +308,11 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
       _countedController.clear();
       _message('Shift ditutup. Selisih kas: ${_money(closed.difference ?? 0)}');
     } catch (error) {
-      _message(error is StateError ? error.message : 'Gagal menutup shift.');
+      _message(error is StateError
+          ? error.message
+          : error is ArgumentError
+              ? error.message.toString()
+              : 'Gagal menutup shift.');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
