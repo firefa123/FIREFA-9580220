@@ -49,6 +49,18 @@ void main() {
     expect(tables.remove(outletId, table.id), isFalse);
 
     expect(orders.findOrder(outletId, order.id)?.tableId, 'Meja 01');
+
+    // Completing the paid order releases the reservation for the next guest.
+    expect(orders.markPaid(outletId, order.id), isTrue);
+    expect(orders.advance(outletId, order.id), isTrue); // Preparing
+    expect(orders.advance(outletId, order.id), isTrue); // Ready
+    expect(orders.advance(outletId, order.id), isTrue); // Served
+    expect(orders.advance(outletId, order.id), isTrue); // Completed
+    await orders.waitForPendingSave();
+    await tables.waitForPendingSave();
+    expect(tables.forOutlet(outletId).single.occupied, isFalse);
+    expect(tables.setOccupied(outletId, table.id, true), isTrue);
+
     await orders.waitForPendingSave();
     await tables.waitForPendingSave();
   });
