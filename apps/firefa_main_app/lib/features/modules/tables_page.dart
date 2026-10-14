@@ -26,9 +26,10 @@ class _TablesPageState extends State<TablesPage> {
   @override
   void initState() {
     super.initState();
-    ready = Future.wait<void>([store.initialize(), orderStore.initialize()]);
+    ready = Future.wait<void>([store.initialize(), orderStore.initialize()]).then((_) => orderStore.synchronizeTableOccupancy());
     outlet.addListener(refresh);
     store.addListener(refresh);
+    orderStore.addListener(refresh);
   }
 
   void refresh() { if (mounted) setState(() {}); }
@@ -37,11 +38,24 @@ class _TablesPageState extends State<TablesPage> {
   void dispose() {
     outlet.removeListener(refresh);
     store.removeListener(refresh);
+    orderStore.removeListener(refresh);
     super.dispose();
   }
 
   bool get allowed => FirefaAccess.can(outlet.role, FirefaPermission.tablesManage) &&
       outlet.canAccessOutlet(outlet.selectedOutletId);
+
+  FirefaOrder? activeOrderFor(FirefaTable table) {
+    for (final order in orderStore.ordersForOutlet(table.outletId)) {
+      if (order.orderType == 'Dine In' &&
+          order.tableId == table.name &&
+          order.status != FirefaOrderStatus.completed &&
+          order.status != FirefaOrderStatus.cancelled) {
+        return order;
+      }
+    }
+    return null;
+  }
 
   String _csvCell(String value) {
     final escaped = value.replaceAll('"', '""');
@@ -203,7 +217,7 @@ class _TablesPageState extends State<TablesPage> {
                 Text('${outlet.selectedOutletName} • ${tables.length} meja • $available tersedia',
                     style: const TextStyle(color: muted)),
                 const SizedBox(height: 8),
-                const Text('Data lokal • Status meja diatur manual • Belum terhubung otomatis ke POS/cloud',
+                const Text('Status meja disinkronkan dengan pesanan dine-in aktif. Data tetap tersimpan lokal pada perangkat ini.',
                     style: TextStyle(color: muted, fontSize: 12)),
                 const SizedBox(height: 12),
                 Wrap(spacing: 10, runSpacing: 10, children: [
@@ -263,12 +277,13 @@ class _TablesPageState extends State<TablesPage> {
                     itemCount: visible.length,
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: constraints.maxWidth >= 950 ? 4 : constraints.maxWidth >= 650 ? 3 : narrow ? 1 : 2,
-                      mainAxisExtent: 158,
+                      mainAxisExtent: 210,
                       crossAxisSpacing: 12,
                       mainAxisSpacing: 12,
                     ),
                     itemBuilder: (context, index) {
                       final table = visible[index];
+                      final activeOrder = activeOrderFor(table);
                       return Container(
                         padding: const EdgeInsets.all(15),
                         decoration: BoxDecoration(
@@ -282,15 +297,35 @@ class _TablesPageState extends State<TablesPage> {
                             Text(table.name, maxLines: 1, overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(color: ink, fontWeight: FontWeight.bold, fontSize: 16)),
                             const SizedBox(height: 7),
-                            Text(table.occupied ? 'Terisi (manual)' : 'Tersedia',
-                                style: TextStyle(color: table.occupied ? Colors.deepOrange : primary, fontWeight: FontWeight.w600)),
+                            Text(
+                              activeOrder != null
+                                  ? 'Terisi • Pesanan aktif'
+                                  : table.occupied ? 'Terisi (manual)' : 'Tersedia',
+                              style: TextStyle(
+                                color: table.occupied ? Colors.deepOrange : primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            if (activeOrder != null) ...[
+                              const SizedBox(height: 7),
+                              Text(
+                                '${activeOrder.id} • ${activeOrder.status.label}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                              Text(
+                                '${activeOrder.itemCount} item • Rp ${activeOrder.total}',
+                                style: const TextStyle(color: muted, fontSize: 12),
+                              ),
+                            ],
                             const Spacer(),
                             Row(
                               children: [
                                 Expanded(
                                   child: OutlinedButton(
-                                    onPressed: allowed ? () => store.setOccupied(outlet.selectedOutletId, table.id, !table.occupied) : null,
-                                    child: Text(table.occupied ? 'Tersedia' : 'Terisi'),
+                                    onPressed: allowed && activeOrder == null ? () => store.setOccupied(outlet.selectedOutletId, table.id, !table.occupied) : null,
+                                    child: Text(activeOrder != null ? 'Pesanan aktif' : table.occupied ? 'Tersedia' : 'Terisi'),
                                   ),
                                 ),
                                 PopupMenuButton<String>(
