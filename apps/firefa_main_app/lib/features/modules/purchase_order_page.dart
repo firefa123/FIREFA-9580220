@@ -175,11 +175,14 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
       return;
     }
     final ok = receive
-        ? orders.receive(
+        ? await orders.receive(
             outletId: sourceOutlet, orderId: po.id, quantity: result)
         : orders.cancel(outletId: sourceOutlet, orderId: po.id);
+    if (!mounted || sourceOutlet != outlet.selectedOutletId) {
+      return;
+    }
     if (!ok) {
-      _message('Operasi gagal. Periksa sisa pesanan, stok, dan satuan barang.');
+      _message('Operasi gagal. Periksa sisa pesanan, stok, dan satuan barang. Perubahan tidak dikonfirmasi.');
     }
   }
 
