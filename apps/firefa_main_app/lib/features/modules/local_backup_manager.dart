@@ -163,7 +163,11 @@ class FirefaLocalBackupManager extends ChangeNotifier {
       throw const FormatException('Antrean sync pada backup tidak valid.');
     }
 
-    // OrderStore validates its model snapshot before applying it.
+    // Preflight every domain snapshot before mutating any active store.
+    // This prevents a malformed order/outbox from leaving inventory, menu,
+    // or tables partially restored.
+    FirefaOrderStore.instance.validateLocalSnapshot(orderSnapshot);
+
     FirefaOrderStore.instance.restoreLocalSnapshot(orderSnapshot);
     await FirefaOrderStore.instance.waitForPendingSave();
 
