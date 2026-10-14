@@ -1192,17 +1192,52 @@ class _PosPageState extends State<PosPage> {
                 : 1;
 
             if (visibleProducts.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 36),
+              final hasActiveCatalog = catalogProducts.isNotEmpty;
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 36,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: border),
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 child: Center(
                   child: Column(
                     children: [
-                      Icon(Icons.search_off_outlined, size: 36, color: muted),
-                      SizedBox(height: 10),
-                      Text('Produk tidak ditemukan', style: TextStyle(color: ink)),
-                      SizedBox(height: 4),
-                      Text('Coba kata kunci atau kategori lain.',
-                          style: TextStyle(fontSize: 12, color: muted)),
+                      Icon(
+                        hasActiveCatalog
+                            ? Icons.search_off_outlined
+                            : Icons.menu_book_outlined,
+                        size: 42,
+                        color: muted,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        hasActiveCatalog
+                            ? 'Produk tidak ditemukan'
+                            : 'Belum ada menu aktif',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: ink,
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        hasActiveCatalog
+                            ? 'Coba kata kunci atau kategori lain.'
+                            : 'Tambahkan dan aktifkan menu untuk outlet ini '
+                                'melalui modul pengelolaan menu.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: muted,
+                        ),
+                      ),
                     ],
                   ),
                 ),
