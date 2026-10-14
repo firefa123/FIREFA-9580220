@@ -12,6 +12,7 @@ enum FirefaPermission {
   conflictManage,
   settingsManage,
   printerManage,
+  cashierShiftManage,
 }
 
 extension FirefaRoleDetails on FirefaRole {
@@ -39,6 +40,7 @@ class FirefaAccess {
           FirefaPermission.ordersManage,
           FirefaPermission.tablesManage,
           FirefaPermission.printerManage,
+          FirefaPermission.cashierShiftManage,
         };
     }
   }
