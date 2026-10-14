@@ -620,12 +620,15 @@ class DashboardView extends StatelessWidget {
   Widget build(BuildContext context) => PageFrame(
     title: 'Dashboard',
     subtitle: 'Ringkasan operasional hari ini, $userName.',
-    child: Wrap(spacing: 16, runSpacing: 16, children: [
-      _MetricCard(label: 'Pesanan Aktif', value: '${store.activeOrders}', icon: Icons.receipt_long, note: 'Belum selesai'),
-      _MetricCard(label: 'Total Penjualan', value: _rupiah(store.totalSales), icon: Icons.payments_outlined, note: 'Pesanan tidak dibatalkan'),
-      _MetricCard(label: 'Item Menu', value: '${store.products.length}', icon: Icons.restaurant_menu, note: 'Menu terdaftar'),
-      _MetricCard(label: 'Stok Menipis', value: '${store.products.where((p) => p.stock <= 5).length}', icon: Icons.inventory_2_outlined, note: 'Stok ≤ 5 unit'),
-      const SizedBox(width: 1000, child: Card(child: Padding(padding: EdgeInsets.all(20), child: Text('Alur utama: POS → Pesanan → Meja dan Inventory. Data tersimpan di perangkat ini.')))),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Wrap(spacing: 16, runSpacing: 16, children: [
+        _MetricCard(label: 'Pesanan Aktif', value: '${store.activeOrders}', icon: Icons.receipt_long, note: 'Belum selesai'),
+        _MetricCard(label: 'Total Penjualan', value: _rupiah(store.totalSales), icon: Icons.payments_outlined, note: 'Pesanan tidak dibatalkan'),
+        _MetricCard(label: 'Item Menu', value: '${store.products.length}', icon: Icons.restaurant_menu, note: 'Menu terdaftar'),
+        _MetricCard(label: 'Stok Menipis', value: '${store.products.where((p) => p.stock <= 5).length}', icon: Icons.inventory_2_outlined, note: 'Stok ≤ 5 unit'),
+      ]),
+      const SizedBox(height: 16),
+      const Card(child: Padding(padding: EdgeInsets.all(20), child: Text('Alur utama: POS → Pesanan → Meja dan Inventory. Data tersimpan di perangkat ini.'))),
     ]),
   );
 }
