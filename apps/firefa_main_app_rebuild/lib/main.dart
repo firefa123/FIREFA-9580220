@@ -577,7 +577,7 @@ class _RoleEntryPageState extends State<RoleEntryPage> {
                       TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Nama pengguna', prefixIcon: Icon(Icons.person_outline))),
                       const SizedBox(height: 14),
                       DropdownButtonFormField<String>(
-                        value: role,
+                        initialValue: role,
                         decoration: const InputDecoration(labelText: 'Masuk sebagai', prefixIcon: Icon(Icons.badge_outlined)),
                         items: const [
                           DropdownMenuItem(value: 'Owner', child: Text('Owner')),
@@ -884,10 +884,10 @@ class _PosViewState extends State<PosView> {
             );
           }),
           const Divider(),
-          DropdownButtonFormField<String>(value: type, decoration: const InputDecoration(labelText: 'Jenis pesanan'), items: const [DropdownMenuItem(value: 'Dine In', child: Text('Dine In')), DropdownMenuItem(value: 'Take Away', child: Text('Take Away'))], onChanged: (value) => setState(() { type = value ?? 'Dine In'; if (type != 'Dine In') table = null; })),
+          DropdownButtonFormField<String>(initialValue: type, decoration: const InputDecoration(labelText: 'Jenis pesanan'), items: const [DropdownMenuItem(value: 'Dine In', child: Text('Dine In')), DropdownMenuItem(value: 'Take Away', child: Text('Take Away'))], onChanged: (value) => setState(() { type = value ?? 'Dine In'; if (type != 'Dine In') table = null; })),
           if (type == 'Dine In') ...[
             const SizedBox(height: 10),
-            DropdownButtonFormField<String>(value: table, decoration: const InputDecoration(labelText: 'Pilih meja'), items: [for (final t in widget.store.tables.where((t) => !widget.store.isTableOccupied(t))) DropdownMenuItem(value: t, child: Text(t))], onChanged: (value) => setState(() => table = value)),
+            DropdownButtonFormField<String>(initialValue: table, decoration: const InputDecoration(labelText: 'Pilih meja'), items: [for (final t in widget.store.tables.where((t) => !widget.store.isTableOccupied(t))) DropdownMenuItem(value: t, child: Text(t))], onChanged: (value) => setState(() => table = value)),
           ],
           const SizedBox(height: 12),
           Row(children: [const Expanded(child: Text('Total', style: TextStyle(fontWeight: FontWeight.w700))), Text(_rupiah(total), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _teal))]),
