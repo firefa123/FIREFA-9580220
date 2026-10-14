@@ -357,7 +357,8 @@ class FirefaLocalStore extends ChangeNotifier {
     if (price < 1 || openingStock < 0) {
       throw StateError('Harga harus lebih dari nol dan stok tidak boleh negatif.');
     }
-    if (id == null && products.any((item) => item.name.toLowerCase() == normalizedName.toLowerCase())) {
+    if (products.any((item) =>
+        item.id != id && item.name.toLowerCase() == normalizedName.toLowerCase())) {
       throw StateError('Nama menu sudah digunakan.');
     }
     final existing = id == null ? null : products.firstWhere(
@@ -1079,7 +1080,10 @@ class MenuView extends StatelessWidget {
               const SizedBox(height: 10),
               TextFormField(controller: price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Harga (Rupiah)'), validator: (v) => int.tryParse(v ?? '') == null || int.parse(v!) < 1 ? 'Masukkan harga valid' : null),
               const SizedBox(height: 10),
-              TextFormField(controller: stock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Stok awal/tersedia'), validator: (v) => int.tryParse(v ?? '') == null || int.parse(v!) < 0 ? 'Masukkan stok valid' : null),
+              if (product == null)
+                TextFormField(controller: stock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Stok awal'), validator: (v) => int.tryParse(v ?? '') == null || int.parse(v!) < 0 ? 'Masukkan stok valid' : null)
+              else
+                Align(alignment: Alignment.centerLeft, child: Padding(padding: const EdgeInsets.only(top: 12), child: Text('Stok saat ini: ${product.stock} unit. Perubahan stok dilakukan dari Inventory.', style: const TextStyle(color: _muted, fontSize: 12))),
             ])),
           ),
         ),
@@ -1098,7 +1102,7 @@ class MenuView extends StatelessWidget {
           name: name.text,
           category: category.text,
           price: int.parse(price.text),
-          openingStock: int.parse(stock.text),
+          openingStock: product?.stock ?? int.parse(stock.text),
         );
       } catch (error) {
         if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Menu gagal disimpan: $error')));
