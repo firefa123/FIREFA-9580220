@@ -65,6 +65,42 @@ void main() {
     restored.dispose();
   });
 
+  test('menu changes and printer settings persist locally', () async {
+    await store.saveMenuProduct(
+      name: 'Es Kopi Susu',
+      category: 'Coffee',
+      price: 26000,
+      openingStock: 12,
+    );
+    await store.saveBusinessSettings(
+      name: 'Kedai FIREFA',
+      footer: 'Sampai jumpa kembali.',
+    );
+    await store.savePrinterSettings(
+      role: 'Kasir',
+      enabled: true,
+      target: 'printer-kasir',
+    );
+
+    final restored = FirefaLocalStore(preferences: preferences);
+    await restored.initialize();
+
+    expect(restored.products.any((item) => item.name == 'Es Kopi Susu'), isTrue);
+    expect(restored.businessName, 'Kedai FIREFA');
+    expect(restored.receiptFooter, 'Sampai jumpa kembali.');
+    expect(restored.printerEnabled['Kasir'], isTrue);
+    expect(restored.printerTargets['Kasir'], 'printer-kasir');
+    restored.dispose();
+  });
+
+  test('printer cannot be enabled without a target', () async {
+    await expectLater(
+      store.savePrinterSettings(role: 'Kitchen', enabled: true, target: ''),
+      throwsStateError,
+    );
+    expect(store.printerEnabled['Kitchen'], isFalse);
+  });
+
   test('checkout rejects an empty cart without creating an order', () async {
     await expectLater(
       store.checkout(quantities: {}, type: 'Take Away'),
