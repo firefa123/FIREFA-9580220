@@ -39,6 +39,7 @@ class _PrinterPageState extends State<PrinterPage> {
     final nameController = TextEditingController(text: config.name);
     final targetController = TextEditingController(text: config.target);
     var enabled = config.enabled;
+    String? validationError;
 
     final result = await showDialog<FirefaPrinterConfig>(
       context: context,
@@ -71,10 +72,16 @@ class _PrinterPageState extends State<PrinterPage> {
                   const SizedBox(height: 14),
                   TextField(
                     controller: targetController,
-                    decoration: const InputDecoration(
+                    onChanged: (_) {
+                      if (validationError != null) {
+                        update(() => validationError = null);
+                      }
+                    },
+                    decoration: InputDecoration(
                       labelText: 'Target / Alamat',
                       hintText: 'Contoh: 192.168.1.50 atau Bluetooth',
-                      prefixIcon: Icon(Icons.link_outlined),
+                      prefixIcon: const Icon(Icons.link_outlined),
+                      errorText: validationError,
                     ),
                   ),
                 ],
@@ -87,6 +94,11 @@ class _PrinterPageState extends State<PrinterPage> {
               ),
               FilledButton(
                 onPressed: () {
+                  if (enabled && targetController.text.trim().isEmpty) {
+                    update(() => validationError =
+                        'Target wajib diisi untuk printer aktif.');
+                    return;
+                  }
                   Navigator.pop(
                     dialogContext,
                     config.copyWith(
