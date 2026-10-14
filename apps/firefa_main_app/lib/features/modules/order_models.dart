@@ -162,7 +162,7 @@ class FirefaOrder {
 
 
   bool cancel() {
-    if (!status.canCancel || paymentStatus == FirefaPaymentStatus.paid) {
+    if (!status.canCancel || paymentStatus != FirefaPaymentStatus.unpaid) {
       return false;
     }
 
@@ -177,7 +177,7 @@ class FirefaOrder {
   }) {
     if (status == FirefaOrderStatus.draft ||
         status == FirefaOrderStatus.cancelled ||
-        paymentStatus == FirefaPaymentStatus.paid) {
+        paymentStatus != FirefaPaymentStatus.unpaid) {
       return false;
     }
     if (cashAmount < 0 || cashAmount > total) return false;
