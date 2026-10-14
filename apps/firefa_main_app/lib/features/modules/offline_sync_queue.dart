@@ -352,22 +352,32 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
       throw const FormatException('Struktur backup antrean sync tidak valid.');
     }
 
-    final eventIds = <String>{};
-    for (final value in data['entries'] as List) {
-      final entry = FirefaSyncEntry.fromJson(
-        Map<String, dynamic>.from(value as Map),
-      );
-      final order = FirefaOrder.fromJson(entry.orderSnapshot);
-      if (entry.eventId.trim().isEmpty ||
-          entry.outletId.trim().isEmpty ||
-          entry.orderId.trim().isEmpty ||
-          entry.eventType.trim().isEmpty ||
-          entry.attempts < 0 ||
-          !eventIds.add(entry.eventId) ||
-          order.id != entry.orderId ||
-          order.outletId != entry.outletId) {
-        throw const FormatException('Data event pada backup antrean sync tidak valid.');
+    try {
+      final eventIds = <String>{};
+      for (final value in data['entries'] as List) {
+        final entry = FirefaSyncEntry.fromJson(
+          Map<String, dynamic>.from(value as Map),
+        );
+        final order = FirefaOrder.fromJson(entry.orderSnapshot);
+        if (entry.eventId.trim().isEmpty ||
+            entry.outletId.trim().isEmpty ||
+            entry.orderId.trim().isEmpty ||
+            entry.eventType.trim().isEmpty ||
+            entry.attempts < 0 ||
+            !eventIds.add(entry.eventId) ||
+            order.id != entry.orderId ||
+            order.outletId != entry.outletId) {
+          throw const FormatException(
+            'Data event pada backup antrean sync tidak valid.',
+          );
+        }
       }
+    } on FormatException {
+      rethrow;
+    } catch (_) {
+      throw const FormatException(
+        'Data event pada backup antrean sync tidak valid.',
+      );
     }
   }
 
