@@ -50,18 +50,14 @@ class RolePermissionController {
 
   RolePermissionModel _normalize(RolePermissionModel role) {
     final name = role.role.trim();
-    final permissions = role.permissions
+    final rawPermissions = role.permissions
         .map((permission) => permission.trim())
-        .where((permission) => permission.isNotEmpty)
-        .toSet()
         .toList(growable: false);
 
     if (name.isEmpty || name.length > 80) {
       throw ArgumentError.value(role.role, 'role', 'Nama role tidak valid.');
     }
-    if (permissions.length != role.permissions.length ||
-        role.permissions.any((permission) => permission.trim().isEmpty)) {
-      // Reject invalid entries rather than silently assigning an unintended set.
+    if (rawPermissions.any((permission) => permission.isEmpty)) {
       throw ArgumentError.value(
         role.permissions,
         'permissions',
@@ -69,6 +65,8 @@ class RolePermissionController {
       );
     }
 
+    // Duplicate permissions are harmless and are normalized to a unique set.
+    final permissions = rawPermissions.toSet().toList(growable: false);
     return RolePermissionModel(
       role: name,
       permissions: List.unmodifiable(permissions),
