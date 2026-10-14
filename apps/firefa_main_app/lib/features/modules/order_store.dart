@@ -142,21 +142,39 @@ class FirefaOrderStore extends ChangeNotifier {
     };
   }
 
-  void restoreLocalSnapshot(Map<String, dynamic> snapshot) {
-    _ensureInitialized();
-
-    if (snapshot['version'] != 2) {
-      throw const FormatException('Versi backup tidak didukung.');
-    }
-
-    final nextNumber = snapshot['nextNumber'];
-    final rawOrders = snapshot['orders'];
-    final rawOutbox = snapshot['outbox'];
-
-    if (nextNumber is! int || rawOrders is! List || rawOutbox is! Map) {
+  /// Validates an order/outbox snapshot before any active store is replaced.
+  void validateLocalSnapshot(Map<String, dynamic> snapshot) {
+    if (snapshot['version'] != 2 ||
+        snapshot['nextNumber'] is! int ||
+        (snapshot['nextNumber'] as int) < 1 ||
+        snapshot['orders'] is! List ||
+        snapshot['outbox'] is! Map) {
       throw const FormatException('Struktur backup FIREFA tidak valid.');
     }
 
+    final orders = (snapshot['orders'] as List)
+        .map((entry) => FirefaOrder.fromJson(Map<String, dynamic>.from(entry as Map)))
+        .toList();
+    final orderIds = <String>{};
+    for (final order in orders) {
+      if (order.id.trim().isEmpty || order.outletId.trim().isEmpty ||
+          order.items.isEmpty || order.total < 0 ||
+          !orderIds.add('${order.outletId}:${order.id}')) {
+        throw const FormatException('Data pesanan pada backup tidak valid.');
+      }
+    }
+
+    final outbox = Map<String, dynamic>.from(snapshot['outbox'] as Map);
+    FirefaOfflineSyncQueue.instance.validateCombinedSnapshot(outbox);
+  }
+
+  void restoreLocalSnapshot(Map<String, dynamic> snapshot) {
+    _ensureInitialized();
+    validateLocalSnapshot(snapshot);
+
+    final nextNumber = snapshot['nextNumber'] as int;
+    final rawOrders = snapshot['orders'] as List;
+    final rawOutbox = snapshot['outbox'] as Map;
     final restoredOrders = rawOrders
         .map(
           (entry) =>
