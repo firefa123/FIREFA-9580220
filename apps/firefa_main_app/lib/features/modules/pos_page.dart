@@ -11,6 +11,7 @@ import 'persistent_cart_store.dart';
 import 'table_store.dart';
 import 'receipt_formatter.dart';
 import 'settings_store.dart';
+import 'fnb_operations_store.dart';
 
 class PosPage extends StatefulWidget {
   const PosPage({super.key});
@@ -215,7 +216,7 @@ class _PosPageState extends State<PosPage> {
   @override
   void initState() {
     super.initState();
-    menuReady = Future.wait([menuStore.initialize(), tableStore.initialize()]).then((_) {});
+    menuReady = Future.wait([menuStore.initialize(), tableStore.initialize(), FirefaFnbOperationsStore.instance.initialize()]).then((_) {});
     tableStore.addListener(_onOutletChanged);
     menuStore.addListener(_onOutletChanged);
     outletStore.addListener(_onOutletChanged);
@@ -286,10 +287,11 @@ class _PosPageState extends State<PosPage> {
   int get subtotal => cart.fold(0, (sum, item) => sum + item.total);
 
   int get discountAmount {
-    if (config.discountType == 'Percent') {
-      return (subtotal * config.discountInput.clamp(0, 100) / 100).round();
-    }
-    return config.discountInput.clamp(0, subtotal);
+    final manual = config.discountType == 'Percent'
+        ? (subtotal * config.discountInput.clamp(0, 100) / 100).round()
+        : config.discountInput.clamp(0, subtotal);
+    final promo = FirefaFnbOperationsStore.instance.promoDiscount(outletId, subtotal);
+    return (manual + promo).clamp(0, subtotal);
   }
 
   int get discountedSubtotal => subtotal - discountAmount;
@@ -297,7 +299,8 @@ class _PosPageState extends State<PosPage> {
   int get taxAmount => (discountedSubtotal * config.taxRate / 100).round();
 
   int get serviceAmount =>
-      (discountedSubtotal * config.serviceRate / 100).round();
+      (discountedSubtotal * config.serviceRate / 100).round() +
+      FirefaFnbOperationsStore.instance.typeFee(outletId, config.orderType, subtotal);
 
   int get grandTotal => discountedSubtotal + taxAmount + serviceAmount;
 
@@ -864,12 +867,15 @@ class _PosPageState extends State<PosPage> {
       quantity: item.quantity,
     )).toList();
     final checkoutSubtotal = checkoutItems.fold<int>(0, (sum, item) => sum + item.total);
-    final checkoutDiscountAmount = checkoutDiscountType == 'Percent'
+    final manualCheckoutDiscount = checkoutDiscountType == 'Percent'
         ? (checkoutSubtotal * checkoutDiscountInput.clamp(0, 100) / 100).round()
         : checkoutDiscountInput.clamp(0, checkoutSubtotal);
+    final promoCheckoutDiscount = FirefaFnbOperationsStore.instance.promoDiscount(sourceOutlet, checkoutSubtotal);
+    final checkoutDiscountAmount = (manualCheckoutDiscount + promoCheckoutDiscount).clamp(0, checkoutSubtotal);
     final checkoutDiscountedSubtotal = checkoutSubtotal - checkoutDiscountAmount;
     final checkoutTaxAmount = (checkoutDiscountedSubtotal * checkoutTaxRate / 100).round();
-    final checkoutServiceAmount = (checkoutDiscountedSubtotal * checkoutServiceRate / 100).round();
+    final checkoutServiceAmount = (checkoutDiscountedSubtotal * checkoutServiceRate / 100).round() +
+        FirefaFnbOperationsStore.instance.typeFee(sourceOutlet, checkoutOrderType, checkoutSubtotal);
     final checkoutGrandTotal = checkoutDiscountedSubtotal + checkoutTaxAmount + checkoutServiceAmount;
 
     setState(() => _checkoutBusy = true);

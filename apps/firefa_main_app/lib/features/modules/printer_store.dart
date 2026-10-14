@@ -3,10 +3,16 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum FirefaPrinterRole { cashier }
+enum FirefaPrinterRole { cashier, kitchen, bar }
 
 extension FirefaPrinterRoleLabel on FirefaPrinterRole {
-  String get label => 'Kasir';
+  String get label {
+    switch (this) {
+      case FirefaPrinterRole.cashier: return 'Kasir';
+      case FirefaPrinterRole.kitchen: return 'Dapur';
+      case FirefaPrinterRole.bar: return 'Bar';
+    }
+  }
 }
 
 class FirefaPrinterConfig {
@@ -104,7 +110,7 @@ class FirefaPrinterStore extends ChangeNotifier {
             final config = FirefaPrinterConfig.fromJson(
               Map<String, dynamic>.from(value as Map),
             );
-            // Ignore legacy kitchen/bar configs while preserving cashier settings.
+            // Keep outlet-specific cashier, kitchen, and bar printer configs.
             _configs[_key(config.outletId, config.role)] = config;
           } on ArgumentError {
             continue;

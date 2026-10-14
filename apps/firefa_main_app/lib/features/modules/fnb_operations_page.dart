@@ -72,7 +72,7 @@ class _FnbOperationsPageState extends State<FnbOperationsPage> with SingleTicker
   }
   Future<void> printKot(FirefaOrder order) async {
     final lines=<String>['FIREFA • KITCHEN ORDER TICKET','Order: '+order.id,'Tipe: '+order.orderType,if(order.tableId!=null)'Meja: '+order.tableId!,'Waktu: '+MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(order.createdAt.toLocal())),'--------------------------------',for(final item in order.items)item.quantity.toString()+' x '+item.productName+(item.details.isEmpty?'':' • '+item.details),'--------------------------------','Catatan: cek detail pesanan sebelum produksi'];
-    await showDialog<void>(context:context,builder:(ctx)=>AlertDialog(title:const Text('Preview KOT — simulasi cetak'),content:SingleChildScrollView(child(Builder(builder:(_)=>Text(lines.join('\n')))),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Tutup'))]));
+    await showDialog<void>(context:context,builder:(ctx)=>AlertDialog(title:const Text('Preview KOT — simulasi cetak'),content:SingleChildScrollView(child:Text(lines.join('\n'))),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Tutup'))]));
   }
   @override Widget build(BuildContext context)=>FutureBuilder<void>(future:ready,builder:(context,snapshot){
     if(snapshot.hasError)return const Text('Gagal memuat data operasional F&B. Data lama dipertahankan.');

@@ -45,7 +45,7 @@ class _PrinterPageState extends State<PrinterPage> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, update) => AlertDialog(
-          title: const Text('Pengaturan Printer Kasir'),
+          title: Text('Pengaturan Printer ' + config.role.label),
           content: SizedBox(
             width: 420,
             child: Column(
@@ -54,7 +54,7 @@ class _PrinterPageState extends State<PrinterPage> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Aktifkan printer'),
-                  subtitle: const Text('Printer untuk mencetak struk transaksi kasir.'),
+                  subtitle: Text('Printer untuk kebutuhan ' + config.role.label.toLowerCase() + '.'),
                   value: enabled,
                   onChanged: (value) => update(() => enabled = value),
                 ),
@@ -100,7 +100,7 @@ class _PrinterPageState extends State<PrinterPage> {
                   dialogContext,
                   config.copyWith(
                     name: nameController.text.trim().isEmpty
-                        ? 'Printer Kasir'
+                        ? 'Printer ' + config.role.label
                         : nameController.text.trim(),
                     target: targetController.text.trim(),
                     enabled: enabled,
@@ -124,7 +124,7 @@ class _PrinterPageState extends State<PrinterPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Konfigurasi printer kasir ${outlet.selectedOutletName} tersimpan lokal.',
+            'Konfigurasi printer ' + result.role.label.toLowerCase() + ' ' + outlet.selectedOutletName + ' tersimpan lokal.',
           ),
         ),
       );
@@ -139,7 +139,7 @@ class _PrinterPageState extends State<PrinterPage> {
   Future<void> _testPrint(FirefaPrinterConfig config) async {
     if (!config.enabled) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Printer kasir belum diaktifkan.')),
+        SnackBar(content: Text('Printer ' + config.role.label.toLowerCase() + ' belum diaktifkan.')),
       );
       return;
     }
@@ -165,7 +165,7 @@ class _PrinterPageState extends State<PrinterPage> {
     final simulate = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Preview Test Print - Kasir'),
+        title: Text('Preview Test Print - ' + config.role.label),
         content: SizedBox(
           width: 360,
           child: Column(
@@ -217,7 +217,7 @@ class _PrinterPageState extends State<PrinterPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-          'Preview printer kasir disimulasikan. Printer fisik belum dihubungkan.',
+          'Preview printer ' + config.role.label.toLowerCase() + ' disimulasikan. Printer fisik belum dihubungkan.',
         ),
       ),
     );
@@ -242,7 +242,7 @@ class _PrinterPageState extends State<PrinterPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Printer Kasir',
+              'Printer ' + config.role.label,
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -327,7 +327,7 @@ class _PrinterCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             const Text(
-              'PRINTER KASIR',
+              'PRINTER ' + config.role.label.toUpperCase(),
               style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 4),

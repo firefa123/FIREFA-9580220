@@ -113,6 +113,13 @@ class FirefaNavigation {
       icon: Icons.point_of_sale_outlined,
       permission: FirefaPermission.cashierShiftManage,
     ),
+    FirefaModule(
+      id: 'fnb-operations',
+      title: 'Operasional F&B',
+      description: 'Reservasi, antrean, KOT, paket menu, harga pesanan, dan promo.',
+      icon: Icons.room_service_outlined,
+      permission: FirefaPermission.ordersView,
+    ),
   ];
 
   static List<FirefaModule> accessibleModules(FirefaRole role) =>

@@ -8,6 +8,7 @@ import 'features/modules/conflict_store.dart';
 import 'features/modules/conflict_resolution_store.dart';
 import 'features/modules/persistent_cart_store.dart';
 import 'features/modules/table_store.dart';
+import 'features/modules/fnb_operations_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +21,7 @@ Future<void> main() async {
   // Tahap 7H-A: Memuat pesanan yang tersimpan.
   await FirefaOrderStore.instance.initialize();
   await FirefaTableStore.instance.initialize();
+  await FirefaFnbOperationsStore.instance.initialize();
   await FirefaOrderStore.instance.synchronizeTableOccupancy();
 
   // Tahap 7H-B: Memuat keranjang per outlet.

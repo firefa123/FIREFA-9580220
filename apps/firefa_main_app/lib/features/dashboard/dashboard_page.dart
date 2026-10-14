@@ -17,6 +17,7 @@ import '../modules/reports_page.dart';
 import '../modules/settings_page.dart';
 import '../modules/printer_page.dart';
 import '../modules/cashier_shift_page.dart';
+import '../modules/fnb_operations_page.dart';
 import 'widgets/dashboard_sidebar.dart';
 import 'widgets/stat_card.dart';
 import 'widgets/revenue_card.dart';
@@ -58,6 +59,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'Purchasing',
     'Printer Kasir',
     'Shift Kasir',
+    'Operasional F&B',
   ];
 
   static const pageDescriptions = [
@@ -74,6 +76,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'Buat PO dan terima barang ke stok inventory.',
     'Kelola konfigurasi printer struk kasir.',
     'Buka shift, catat kas, dan rekonsiliasi saat penutupan.',
+    'Kelola reservasi, antrean, KOT dapur, paket menu, harga per tipe pesanan, dan promo.',
   ];
 
   static const pagePermissions = [
@@ -90,6 +93,7 @@ class _DashboardPageState extends State<DashboardPage> {
     FirefaPermission.inventoryManage,
     FirefaPermission.printerManage,
     FirefaPermission.cashierShiftManage,
+    FirefaPermission.ordersView,
   ];
 
   @override
@@ -626,6 +630,8 @@ class _DashboardPageState extends State<DashboardPage> {
         return const PrinterPage();
       case 12:
         return const CashierShiftPage();
+      case 13:
+        return const FnbOperationsPage();
       default:
         return const SizedBox.shrink();
     }
