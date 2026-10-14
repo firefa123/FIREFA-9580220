@@ -1,3 +1,4 @@
+// ignore_for_file: prefer_interpolation_to_compose_strings
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -35,6 +36,7 @@ class _PosPageState extends State<PosPage> {
   final persistentStore = FirefaPersistentCartStore.instance;
   final menuStore = FirefaMenuStore.instance;
   final tableStore = FirefaTableStore.instance;
+  final fnbStore = FirefaFnbOperationsStore.instance;
   late final Future<void> menuReady;
 
   void _restoreOutlet(String id) {
@@ -111,6 +113,7 @@ class _PosPageState extends State<PosPage> {
     'Food',
     'Snacks',
     'Dessert',
+    'Paket',
     'Other',
   ];
 
@@ -246,6 +249,10 @@ class _PosPageState extends State<PosPage> {
       return _Product(demo.id, saved.productName ?? demo.name,
           demo.category, demo.price, demo.icon, demo.color);
     }
+    final bundle = fnbStore.bundles(id).where((item) => item.id == saved.productId).firstOrNull;
+    if (bundle != null) {
+      return _Product(bundle.id, saved.productName ?? bundle.name, 'Paket', bundle.price, Icons.lunch_dining_outlined, const Color(0xFFFFF3E0));
+    }
     final matches = menuStore.forOutlet(id)
         .where((item) => item.id == saved.productId);
     final menu = matches.firstOrNull;
@@ -267,11 +274,11 @@ class _PosPageState extends State<PosPage> {
     // The managed outlet catalog is the POS source of truth. Demo products
     // remain available only to resolve legacy saved carts, never as sellable
     // items when the outlet has no configured menu.
-    return menuStore
-        .forOutlet(outletId)
-        .where((item) => item.isActive)
-        .map(_fromMenu)
-        .toList();
+    return [
+      ...menuStore.forOutlet(outletId).where((item) => item.isActive).map(_fromMenu),
+      ...fnbStore.bundles(outletId).where((bundle) => bundle.active).map((bundle) =>
+        _Product(bundle.id, bundle.name, 'Paket', bundle.price, Icons.lunch_dining_outlined, const Color(0xFFFFF3E0))),
+    ];
   }
 
   List<_Product> get visibleProducts {
@@ -339,6 +346,16 @@ class _PosPageState extends State<PosPage> {
   Future<void> configureProduct(_Product product, {_CartItem? editing}) async {
     final sourceOutlet = outletId;
     if (editing == null && !catalogProducts.any((p) => p.id == product.id)) {
+      return;
+    }
+    if (product.category == 'Paket') {
+      final bundle = fnbStore.bundles(sourceOutlet).where((b) => b.id == product.id && b.active).firstOrNull;
+      final activeMenus = menuStore.forOutlet(sourceOutlet).where((m) => m.isActive).map((m) => m.name.toLowerCase()).toSet();
+      if (bundle == null || bundle.lines.any((line) => !activeMenus.contains(line.name.toLowerCase()))) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Paket tidak dapat dijual: pastikan semua komponennya cocok dengan menu aktif dan memiliki resep stok.')));
+        return;
+      }
+      addItem(_CartItem(product: product, size: 'Paket', extras: const [], note: '', unitPrice: product.price, quantity: editing?.quantity ?? 1), editing: editing);
       return;
     }
     final isDrink =
@@ -722,11 +739,15 @@ class _PosPageState extends State<PosPage> {
         for (final item in menuStore.forOutlet(sourceOutlet))
           item.id: item,
       };
+      final activeBundles = fnbStore.bundles(sourceOutlet).where((b) => b.active).toList();
+      final activeMenuNames = menuStore.forOutlet(sourceOutlet).where((m) => m.isActive).map((m) => m.name.toLowerCase()).toSet();
       final staleItems = cart.where((cartItem) {
+        if (cartItem.product.category == 'Paket') {
+          final bundle = activeBundles.where((b) => b.id == cartItem.product.id).firstOrNull;
+          return bundle == null || bundle.price != cartItem.product.price || bundle.lines.any((line) => !activeMenuNames.contains(line.name.toLowerCase()));
+        }
         final current = currentMenu[cartItem.product.id];
-        return current == null ||
-            !current.isActive ||
-            current.price != cartItem.product.price;
+        return current == null || !current.isActive || current.price != cartItem.product.price;
       }).toList();
       if (staleItems.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -893,11 +914,15 @@ class _PosPageState extends State<PosPage> {
         for (final item in menuStore.forOutlet(sourceOutlet))
           item.id: item,
       };
+      final activeBundles = fnbStore.bundles(sourceOutlet).where((b) => b.active).toList();
+      final activeMenuNames = menuStore.forOutlet(sourceOutlet).where((m) => m.isActive).map((m) => m.name.toLowerCase()).toSet();
       final changedMenuItems = checkoutItems.where((item) {
+        if (item.product.category == 'Paket') {
+          final bundle = activeBundles.where((b) => b.id == item.product.id).firstOrNull;
+          return bundle == null || bundle.price != item.product.price || bundle.lines.any((line) => !activeMenuNames.contains(line.name.toLowerCase()));
+        }
         final latest = latestMenu[item.product.id];
-        return latest == null ||
-            !latest.isActive ||
-            latest.price != item.product.price;
+        return latest == null || !latest.isActive || latest.price != item.product.price;
       }).toList();
       if (changedMenuItems.isNotEmpty) {
         throw StateError(
@@ -917,7 +942,20 @@ class _PosPageState extends State<PosPage> {
         );
       }
 
-      final stockLines = checkoutItems.map((item) => (menuId: item.product.id, quantity: item.quantity)).toList();
+      final stockLines = <({String menuId, int quantity})>[];
+      for (final item in checkoutItems) {
+        if (item.product.category == 'Paket') {
+          final bundle = fnbStore.bundles(sourceOutlet).where((b) => b.id == item.product.id && b.active).firstOrNull;
+          if (bundle == null) throw StateError('Paket tidak lagi aktif.');
+          for (final line in bundle.lines) {
+            final component = menuStore.forOutlet(sourceOutlet).where((m) => m.isActive && m.name.toLowerCase() == line.name.toLowerCase()).firstOrNull;
+            if (component == null) throw StateError('Komponen paket ' + line.name + ' tidak ditemukan di katalog menu aktif.');
+            stockLines.add((menuId: component.id, quantity: line.quantity * item.quantity));
+          }
+        } else {
+          stockLines.add((menuId: item.product.id, quantity: item.quantity));
+        }
+      }
       final stockIsConfigured = inventory.validateOrderStock(
         outletId: sourceOutlet,
         menuLines: stockLines,
