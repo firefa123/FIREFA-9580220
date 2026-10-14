@@ -1,6 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _teal = Color(0xFF008F83);
@@ -917,6 +921,77 @@ class OrdersView extends StatelessWidget {
   final bool kitchenMode;
   const OrdersView({super.key, required this.store, this.kitchenMode = false});
 
+  String _receiptText(LocalOrder order) {
+    final buffer = StringBuffer()
+      ..writeln(store.businessName)
+      ..writeln('Struk transaksi lokal')
+      ..writeln('--------------------------------')
+      ..writeln('Order: ${order.id}')
+      ..writeln('Tanggal: ${order.createdAt.toLocal()}')
+      ..writeln('Jenis: ${order.type}${order.table == null ? '' : ' / Meja ${order.table}'}')
+      ..writeln('Status: ${order.status}')
+      ..writeln('Pembayaran: ${order.paid ? 'Paid (demo)' : 'Unpaid'}')
+      ..writeln('--------------------------------');
+    for (final line in order.lines) {
+      buffer.writeln('${line.name} x${line.quantity}');
+      buffer.writeln('  ${_rupiah(line.total)}');
+    }
+    buffer
+      ..writeln('--------------------------------')
+      ..writeln('TOTAL: ${_rupiah(order.total)}')
+      ..writeln(store.receiptFooter)
+      ..writeln('Pembayaran demo; bukan bukti settlement bank.');
+    return buffer.toString();
+  }
+
+  Future<void> _showReceipt(BuildContext context, LocalOrder order) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(store.businessName),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: SelectableText(_receiptText(order), style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: _receiptText(order)));
+              if (dialogContext.mounted) {
+                Navigator.pop(dialogContext);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Struk disalin ke clipboard.')));
+              }
+            },
+            child: const Text('Salin Struk'),
+          ),
+          FilledButton.icon(
+            onPressed: () async {
+              final doc = pw.Document();
+              doc.addPage(pw.Page(
+                pageFormat: PdfPageFormat.a4,
+                build: (_) => pw.Padding(
+                  padding: const pw.EdgeInsets.all(24),
+                  child: pw.Text(_receiptText(order), style: pw.TextStyle(fontSize: 10, font: pw.Font.courier())),
+                ),
+              ));
+              try {
+                await Printing.layoutPdf(onLayout: (_) async => doc.save(), name: 'FIREFA-${order.id}.pdf');
+              } catch (error) {
+                if (dialogContext.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal membuka cetak: $error')));
+                }
+              }
+            },
+            icon: const Icon(Icons.print_outlined),
+            label: const Text('Cetak / Simpan PDF'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final visible = kitchenMode ? store.orders.where((order) => order.active).toList() : store.orders;
@@ -934,6 +1009,7 @@ class OrdersView extends StatelessWidget {
               Row(children: [const Expanded(child: Text('Total', style: TextStyle(fontWeight: FontWeight.w700))), Text(_rupiah(order.total), style: const TextStyle(fontWeight: FontWeight.w800, color: _teal))]),
               const SizedBox(height: 8),
               Wrap(alignment: WrapAlignment.end, spacing: 8, children: [
+                OutlinedButton.icon(onPressed: () => _showReceipt(context, order), icon: const Icon(Icons.receipt_long), label: const Text('Struk')),
                 if (order.active) OutlinedButton(onPressed: () async {
                   try { await store.cancelOrder(order); } catch (error) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Pembatalan gagal: $error'))); }
                 }, child: const Text('Batalkan')),
