@@ -1083,7 +1083,7 @@ class MenuView extends StatelessWidget {
               if (product == null)
                 TextFormField(controller: stock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Stok awal'), validator: (v) => int.tryParse(v ?? '') == null || int.parse(v!) < 0 ? 'Masukkan stok valid' : null)
               else
-                Align(alignment: Alignment.centerLeft, child: Padding(padding: const EdgeInsets.only(top: 12), child: Text('Stok saat ini: ${product.stock} unit. Perubahan stok dilakukan dari Inventory.', style: const TextStyle(color: _muted, fontSize: 12))),
+                Align(alignment: Alignment.centerLeft, child: Padding(padding: const EdgeInsets.only(top: 12), child: Text('Stok saat ini: ${product.stock} unit. Perubahan stok dilakukan dari Inventory.', style: const TextStyle(color: _muted, fontSize: 12)))),
             ])),
           ),
         ),
