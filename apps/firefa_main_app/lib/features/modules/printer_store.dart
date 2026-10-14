@@ -3,19 +3,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum FirefaPrinterRole { cashier, kitchen, bar }
+enum FirefaPrinterRole { cashier }
 
 extension FirefaPrinterRoleLabel on FirefaPrinterRole {
-  String get label {
-    switch (this) {
-      case FirefaPrinterRole.cashier:
-        return 'Kasir';
-      case FirefaPrinterRole.kitchen:
-        return 'Kitchen';
-      case FirefaPrinterRole.bar:
-        return 'Bar';
-    }
-  }
+  String get label => 'Kasir';
 }
 
 class FirefaPrinterConfig {
@@ -75,15 +66,20 @@ class FirefaPrinterStore extends ChangeNotifier {
   bool _initialized = false;
   final Map<String, FirefaPrinterConfig> _configs = {};
 
-  String _key(String outletId, FirefaPrinterRole role) => '$outletId:${role.name}';
+  String _key(String outletId, FirefaPrinterRole role) =>
+      '$outletId:${role.name}';
 
   List<FirefaPrinterConfig> get configs => configsForOutlet('outlet-001');
 
   List<FirefaPrinterConfig> configsForOutlet(String outletId) =>
-      FirefaPrinterRole.values.map((role) => configFor(role, outletId: outletId))
+      FirefaPrinterRole.values
+          .map((role) => configFor(role, outletId: outletId))
           .toList(growable: false);
 
-  FirefaPrinterConfig configFor(FirefaPrinterRole role, {String outletId = 'outlet-001'}) {
+  FirefaPrinterConfig configFor(
+    FirefaPrinterRole role, {
+    String outletId = 'outlet-001',
+  }) {
     return _configs[_key(outletId, role)] ??
         FirefaPrinterConfig(
           role: role,
@@ -104,10 +100,17 @@ class FirefaPrinterStore extends ChangeNotifier {
       try {
         final decoded = jsonDecode(raw) as List<dynamic>;
         for (final value in decoded) {
-          final config = FirefaPrinterConfig.fromJson(
-            Map<String, dynamic>.from(value as Map),
-          );
-          _configs[_key(config.outletId, config.role)] = config;
+          try {
+            final config = FirefaPrinterConfig.fromJson(
+              Map<String, dynamic>.from(value as Map),
+            );
+            // Ignore legacy kitchen/bar configs while preserving cashier settings.
+            _configs[_key(config.outletId, config.role)] = config;
+          } on ArgumentError {
+            continue;
+          } on TypeError {
+            continue;
+          }
         }
       } catch (error) {
         debugPrint('FIREFA printer config restore failed: $error');
@@ -119,9 +122,7 @@ class FirefaPrinterStore extends ChangeNotifier {
   }
 
   Future<void> save(FirefaPrinterConfig config) async {
-    if (!_initialized) {
-      await initialize();
-    }
+    if (!_initialized) await initialize();
 
     _configs[_key(config.outletId, config.role)] = config;
     final prefs = await SharedPreferences.getInstance();
@@ -130,9 +131,7 @@ class FirefaPrinterStore extends ChangeNotifier {
     );
 
     final saved = await prefs.setString(_storageKey, payload);
-    if (!saved) {
-      throw StateError('Gagal menyimpan konfigurasi printer.');
-    }
+    if (!saved) throw StateError('Gagal menyimpan konfigurasi printer.');
 
     notifyListeners();
   }
