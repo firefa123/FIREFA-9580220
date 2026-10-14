@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/auth/role_permissions.dart';
 import '../../core/outlet/active_outlet_store.dart';
 import 'fnb_operations_store.dart';
+import 'menu_store.dart';
 import 'order_models.dart';
 import 'order_store.dart';
 
@@ -19,7 +20,7 @@ class _FnbOperationsPageState extends State<FnbOperationsPage> with SingleTicker
   late final TabController tabs;
   static const primary=Color(0xFF008F83);
   bool get canManage=>FirefaAccess.can(outlet.role,FirefaPermission.menuManage);
-  @override void initState(){super.initState();tabs=TabController(length:6,vsync:this);ready=Future.wait([store.initialize(),orders.initialize()]);store.addListener(refresh);orders.addListener(refresh);outlet.addListener(refresh);}
+  @override void initState(){super.initState();tabs=TabController(length:6,vsync:this);ready=Future.wait([store.initialize(),orders.initialize(),FirefaMenuStore.instance.initialize()]);store.addListener(refresh);orders.addListener(refresh);outlet.addListener(refresh);}
   void refresh(){if(mounted)setState((){});}
   @override void dispose(){store.removeListener(refresh);orders.removeListener(refresh);outlet.removeListener(refresh);tabs.dispose();super.dispose();}
   String money(int v)=>'Rp '+v.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'),(_)=>'.');
@@ -47,11 +48,13 @@ class _FnbOperationsPageState extends State<FnbOperationsPage> with SingleTicker
     final name=TextEditingController(),lines=TextEditingController(),price=TextEditingController();
     final ok=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(title:const Text('Buat Paket Menu'),content:SizedBox(width:420,child:Column(mainAxisSize:MainAxisSize.min,children:[
       TextField(controller:name,decoration:const InputDecoration(labelText:'Nama paket')),
-      TextField(controller:lines,maxLines:4,decoration:const InputDecoration(labelText:'Isi paket, satu per baris',hintText:'2x Nasi Goreng\n1x Es Teh')),
+      TextField(controller:lines,maxLines:4,decoration:const InputDecoration(labelText:'Isi paket, satu per baris',hintText:'2x Nasi Goreng\n1x Es Teh (nama harus sama dengan menu aktif)')),
       TextField(controller:price,keyboardType:TextInputType.number,decoration:const InputDecoration(labelText:'Harga paket (Rp)')),
     ])),actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Batal')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Simpan Paket'))]));
     if(ok==true){final parsed=<FirefaBundleLine>[];for(final raw in lines.text.split('\n')){final s=raw.trim();if(s.isEmpty)continue;final m=RegExp(r'^\s*(\d+)\s*[xX]\s*(.+)$').firstMatch(s);parsed.add(m==null?FirefaBundleLine(s,1):FirefaBundleLine(m.group(2)!.trim(),int.tryParse(m.group(1)!)??1));}
-      final success=store.saveBundle(outlet:outlet.selectedOutletId,name:name.text,lines:parsed,price:int.tryParse(price.text)??0);message(success?'Paket menu tersimpan.':'Periksa nama, isi paket, dan harga.');}
+      final activeNames=FirefaMenuStore.instance.forOutlet(outlet.selectedOutletId).where((m)=>m.isActive).map((m)=>m.name.toLowerCase()).toSet();
+      if(parsed.any((line)=>!activeNames.contains(line.name.toLowerCase()))){message('Setiap komponen paket harus sama persis dengan nama menu aktif di Menu Management.');}
+      else {final success=store.saveBundle(outlet:outlet.selectedOutletId,name:name.text,lines:parsed,price:int.tryParse(price.text)??0);message(success?'Paket menu tersimpan.':'Periksa nama, isi paket, dan harga.');}}
     name.dispose();lines.dispose();price.dispose();
   }
   Future<void> editPrice(String type) async {
