@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_theme.dart';
 import '../../core/outlet/active_outlet_store.dart';
+import '../../core/theme/app_theme.dart';
 import 'printer_store.dart';
 
 class PrinterPage extends StatefulWidget {
@@ -43,84 +43,79 @@ class _PrinterPageState extends State<PrinterPage> {
 
     final result = await showDialog<FirefaPrinterConfig>(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, update) => AlertDialog(
-            title: Text('Printer ${config.role.label}'),
-            content: SizedBox(
-              width: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Aktif'),
-                    subtitle: const Text(
-                      'Aktifkan printer untuk kebutuhan outlet.',
-                    ),
-                    value: enabled,
-                    onChanged: (value) => update(() => enabled = value),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, update) => AlertDialog(
+          title: const Text('Pengaturan Printer Kasir'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Aktifkan printer'),
+                  subtitle: const Text('Printer untuk mencetak struk transaksi kasir.'),
+                  value: enabled,
+                  onChanged: (value) => update(() => enabled = value),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Nama Printer',
+                    prefixIcon: Icon(Icons.print_outlined),
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nama Printer',
-                      prefixIcon: Icon(Icons.print_outlined),
-                    ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: targetController,
+                  onChanged: (_) {
+                    if (validationError != null) {
+                      update(() => validationError = null);
+                    }
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Alamat / Target Printer',
+                    hintText: 'Contoh: alamat IP atau perangkat Bluetooth',
+                    prefixIcon: const Icon(Icons.link_outlined),
+                    errorText: validationError,
                   ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: targetController,
-                    onChanged: (_) {
-                      if (validationError != null) {
-                        update(() => validationError = null);
-                      }
-                    },
-                    decoration: InputDecoration(
-                      labelText: 'Target / Alamat',
-                      hintText: 'Contoh: 192.168.1.50 atau Bluetooth',
-                      prefixIcon: const Icon(Icons.link_outlined),
-                      errorText: validationError,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Batal'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  if (enabled && targetController.text.trim().isEmpty) {
-                    update(() => validationError =
-                        'Target wajib diisi untuk printer aktif.');
-                    return;
-                  }
-                  Navigator.pop(
-                    dialogContext,
-                    config.copyWith(
-                      name: nameController.text.trim().isEmpty
-                          ? 'Printer ${config.role.label}'
-                          : nameController.text.trim(),
-                      target: targetController.text.trim(),
-                      enabled: enabled,
-                    ),
-                  );
-                },
-                child: const Text('Simpan'),
-              ),
-            ],
           ),
-        );
-      },
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Batal'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (enabled && targetController.text.trim().isEmpty) {
+                  update(() => validationError =
+                      'Target wajib diisi untuk printer aktif.');
+                  return;
+                }
+                Navigator.pop(
+                  dialogContext,
+                  config.copyWith(
+                    name: nameController.text.trim().isEmpty
+                        ? 'Printer Kasir'
+                        : nameController.text.trim(),
+                    target: targetController.text.trim(),
+                    enabled: enabled,
+                  ),
+                );
+              },
+              child: const Text('Simpan'),
+            ),
+          ],
+        ),
+      ),
     );
 
     nameController.dispose();
     targetController.dispose();
-
     if (!mounted || result == null) return;
 
     try {
@@ -128,7 +123,9 @@ class _PrinterPageState extends State<PrinterPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Konfigurasi ${result.role.label} ${outlet.selectedOutletName} tersimpan lokal.'),
+          content: Text(
+            'Konfigurasi printer kasir ${outlet.selectedOutletName} tersimpan lokal.',
+          ),
         ),
       );
     } catch (error) {
@@ -142,55 +139,33 @@ class _PrinterPageState extends State<PrinterPage> {
   Future<void> _testPrint(FirefaPrinterConfig config) async {
     if (!config.enabled) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Printer ${config.role.label} belum diaktifkan.')),
+        const SnackBar(content: Text('Printer kasir belum diaktifkan.')),
       );
       return;
     }
     if (config.target.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Isi target/alamat printer terlebih dahulu.')),
+        const SnackBar(content: Text('Isi alamat printer terlebih dahulu.')),
       );
       return;
     }
 
-    final lines = switch (config.role) {
-      FirefaPrinterRole.cashier => [
-          'FIREFA - TEST RECEIPT',
-          '--------------------------------',
-          'Outlet: ${outlet.selectedOutletName}',
-          'No. Pesanan: TEST-0001',
-          '1x Item Demo             Rp10.000',
-          '--------------------------------',
-          'TOTAL                    Rp10.000',
-          'Metode: SIMULASI',
-          'Terima kasih',
-        ],
-      FirefaPrinterRole.kitchen => [
-          'FIREFA - KITCHEN TICKET',
-          '--------------------------------',
-          'Pesanan: TEST-0001',
-          'Jenis: Dine In',
-          '1x Item Demo',
-          'CATATAN: Tiket uji coba',
-          '--------------------------------',
-          'BUKAN PESANAN AKTUAL',
-        ],
-      FirefaPrinterRole.bar => [
-          'FIREFA - BAR TICKET',
-          '--------------------------------',
-          'Pesanan: TEST-0001',
-          '1x Minuman Demo',
-          'CATATAN: Tiket uji coba',
-          '--------------------------------',
-          'BUKAN PESANAN AKTUAL',
-        ],
-    };
+    const lines = [
+      'FIREFA - TEST RECEIPT',
+      '--------------------------------',
+      'No. Pesanan: TEST-0001',
+      '1x Item Demo             Rp10.000',
+      '--------------------------------',
+      'TOTAL                    Rp10.000',
+      'Metode: SIMULASI',
+      'Terima kasih',
+    ];
 
     if (!mounted) return;
     final simulate = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Preview test print - ${config.role.label}'),
+        title: const Text('Preview Test Print - Kasir'),
         content: SizedBox(
           width: 360,
           child: Column(
@@ -213,10 +188,7 @@ class _PrinterPageState extends State<PrinterPage> {
                 ),
                 child: SelectableText(
                   lines.join('\n'),
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 12,
-                  ),
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                 ),
               ),
               const SizedBox(height: 10),
@@ -243,9 +215,9 @@ class _PrinterPageState extends State<PrinterPage> {
 
     if (!mounted || simulate != true) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+      const SnackBar(
         content: Text(
-          'Preview ${config.role.label} berhasil disimulasikan. Printer fisik belum dihubungkan.',
+          'Preview printer kasir disimulasikan. Printer fisik belum dihubungkan.',
         ),
       ),
     );
@@ -256,15 +228,21 @@ class _PrinterPageState extends State<PrinterPage> {
     return FutureBuilder<void>(
       future: ready,
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Text('Gagal memuat konfigurasi printer lokal.');
+        }
         if (snapshot.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
         }
+
+        final configs = store.configsForOutlet(outlet.selectedOutletId);
+        final config = configs.single;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Printer Management',
+              'Printer Kasir',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -273,37 +251,20 @@ class _PrinterPageState extends State<PrinterPage> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Konfigurasi printer ${outlet.selectedOutletName} disimpan lokal pada perangkat ini.',
+              'Satu konfigurasi printer struk untuk ${outlet.selectedOutletName}.',
               style: const TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 13,
               ),
             ),
             const SizedBox(height: 20),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final cardWidth = constraints.maxWidth >= 900
-                    ? (constraints.maxWidth - 32) / 3
-                    : constraints.maxWidth >= 560
-                        ? (constraints.maxWidth - 16) / 2
-                        : constraints.maxWidth;
-
-                return Wrap(
-                  spacing: 16,
-                  runSpacing: 16,
-                  children: [
-                    for (final config in store.configsForOutlet(outlet.selectedOutletId))
-                      SizedBox(
-                        width: cardWidth,
-                        child: _PrinterCard(
-                          config: config,
-                          onEdit: () => _edit(config),
-                          onTest: () => _testPrint(config),
-                        ),
-                      ),
-                  ],
-                );
-              },
+            SizedBox(
+              width: 480,
+              child: _PrinterCard(
+                config: config,
+                onEdit: () => _edit(config),
+                onTest: () => _testPrint(config),
+              ),
             ),
           ],
         );
@@ -342,17 +303,11 @@ class _PrinterCard extends StatelessWidget {
                     color: AppTheme.primaryTint,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
-                    Icons.print_outlined,
-                    color: AppTheme.primary,
-                  ),
+                  child: const Icon(Icons.print_outlined, color: AppTheme.primary),
                 ),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 5,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                   decoration: BoxDecoration(
                     color: active
                         ? Colors.green.withValues(alpha: 0.10)
@@ -371,30 +326,21 @@ class _PrinterCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            Text(
-              config.role.label,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppTheme.textSecondary,
-              ),
+            const Text(
+              'PRINTER KASIR',
+              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 4),
             Text(
               config.name,
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-              ),
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 5),
             Text(
-              config.target.isEmpty ? 'Belum ada target printer' : config.target,
+              config.target.isEmpty ? 'Belum ada alamat printer' : config.target,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppTheme.textSecondary,
-              ),
+              style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 18),
             Row(
