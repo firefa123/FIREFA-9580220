@@ -47,6 +47,29 @@ void main() {
     expect(current.status, FirefaOrderStatus.completed);
   });
 
+  test('completion timestamp is recorded and survives JSON round trip', () {
+    final current = order(status: FirefaOrderStatus.served);
+    expect(current.markPaid(), true);
+
+    final beforeCompletion = DateTime.now();
+    expect(current.advanceStatus(), true);
+    final completedAt = current.completedAt;
+
+    expect(completedAt, isNotNull);
+    expect(completedAt!.isBefore(beforeCompletion), isFalse);
+    final restored = FirefaOrder.fromJson(current.toJson());
+    expect(restored.completedAt, completedAt);
+    expect(restored.status, FirefaOrderStatus.completed);
+  });
+
+  test('legacy order JSON without completion timestamp remains readable', () {
+    final legacyJson = order().toJson()..remove('completedAt');
+    final restored = FirefaOrder.fromJson(legacyJson);
+
+    expect(restored.status, FirefaOrderStatus.confirmed);
+    expect(restored.completedAt, isNull);
+  });
+
   test('cancelled orders cannot be paid or advanced', () {
     final current = order();
     expect(current.cancel(), true);
