@@ -836,6 +836,17 @@ class _PosPageState extends State<PosPage> {
         );
       }
 
+      // A payment dialog can stay open while another cashier takes the table.
+      // Recheck table availability immediately before creating the order.
+      final checkoutTables = tableStore.forOutlet(sourceOutlet);
+      if (checkoutOrderType == 'Dine In' && checkoutTables.isNotEmpty &&
+          !checkoutTables.any((table) =>
+              table.name == checkoutTable && !table.occupied)) {
+        throw StateError(
+          'Meja $checkoutTable sudah tidak tersedia. Pilih meja lain.',
+        );
+      }
+
       final stockLines = checkoutItems.map((item) => (menuId: item.product.id, quantity: item.quantity)).toList();
       final stockIsConfigured = inventory.validateOrderStock(
         outletId: sourceOutlet,
@@ -867,6 +878,25 @@ class _PosPageState extends State<PosPage> {
         total: checkoutGrandTotal,
       );
       createdOrder = order;
+      // Reserve the table before the first inventory await. If stock processing
+      // fails, the existing rollback cancels the order and releases the table.
+      if (checkoutOrderType == 'Dine In') {
+        final selectedTable = tableStore
+            .forOutlet(sourceOutlet)
+            .where((table) => table.name == checkoutTable)
+            .firstOrNull;
+        if (selectedTable != null) {
+          if (selectedTable.occupied ||
+              !tableStore.setOccupied(
+                sourceOutlet,
+                selectedTable.id,
+                true,
+              )) {
+            throw StateError('Meja $checkoutTable sudah tidak tersedia.');
+          }
+          await tableStore.waitForPendingSave();
+        }
+      }
       final stockConsumed = await inventory.consumeOrderStock(
         orderId: order.id,
         outletId: sourceOutlet,
@@ -878,22 +908,6 @@ class _PosPageState extends State<PosPage> {
         );
       }
       await inventory.waitForPendingSave();
-      if (checkoutOrderType == 'Dine In') {
-        final selectedTable = tableStore
-            .forOutlet(sourceOutlet)
-            .where((table) => table.name == checkoutTable)
-            .firstOrNull;
-        if (selectedTable != null && !selectedTable.occupied) {
-          if (!tableStore.setOccupied(
-            sourceOutlet,
-            selectedTable.id,
-            true,
-          )) {
-            throw StateError('Status meja tidak dapat diperbarui.');
-          }
-          await tableStore.waitForPendingSave();
-        }
-      }
       if (payment != null) {
         if (!store.markPaid(sourceOutlet, order.id)) {
           throw StateError('Status pembayaran tidak dapat diperbarui.');
