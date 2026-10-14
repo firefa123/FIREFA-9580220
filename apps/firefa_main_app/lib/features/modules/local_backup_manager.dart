@@ -7,6 +7,7 @@ import 'inventory_store.dart';
 import 'menu_store.dart';
 import 'order_store.dart';
 import 'table_store.dart';
+import 'fnb_operations_store.dart';
 
 class FirefaLocalBackupInfo {
   final DateTime createdAt;
@@ -36,6 +37,7 @@ class FirefaLocalBackupManager extends ChangeNotifier {
       FirefaInventoryStore.instance.initialize(),
       FirefaMenuStore.instance.initialize(),
       FirefaTableStore.instance.initialize(),
+      FirefaFnbOperationsStore.instance.initialize(),
     ]);
   }
 
@@ -68,6 +70,7 @@ class FirefaLocalBackupManager extends ChangeNotifier {
       inventory.waitForPendingSave(),
       menu.waitForPendingSave(),
       tables.waitForPendingSave(),
+      FirefaFnbOperationsStore.instance.waitForPendingSave(),
     ]);
 
     final snapshot = <String, dynamic>{
@@ -75,6 +78,7 @@ class FirefaLocalBackupManager extends ChangeNotifier {
       'inventory': inventory.exportLocalSnapshot(),
       'menu': menu.exportLocalSnapshot(),
       'tables': tables.exportLocalSnapshot(),
+      'fnbOperations': FirefaFnbOperationsStore.instance.exportLocalSnapshot(),
     };
     final orderSnapshot = snapshot['orders'] as Map<String, dynamic>;
     final orderList = orderSnapshot['orders'] as List;
@@ -150,6 +154,11 @@ class FirefaLocalBackupManager extends ChangeNotifier {
       FirefaInventoryStore.instance.validateLocalSnapshot(inventorySnapshot);
       FirefaMenuStore.instance.validateLocalSnapshot(menuSnapshot);
       FirefaTableStore.instance.validateLocalSnapshot(tableSnapshot);
+      final rawFnb = snapshot['fnbOperations'];
+      if (rawFnb != null) {
+        if (rawFnb is! Map) throw const FormatException('Snapshot operasional F&B tidak valid.');
+        FirefaFnbOperationsStore.instance.validateLocalSnapshot(Map<String, dynamic>.from(rawFnb));
+      }
       orderSnapshot = Map<String, dynamic>.from(rawOrders);
     }
 
@@ -181,6 +190,12 @@ class FirefaLocalBackupManager extends ChangeNotifier {
       await FirefaTableStore.instance.restoreLocalSnapshot(
         List<dynamic>.from(snapshot['tables'] as List),
       );
+      final rawFnb = snapshot['fnbOperations'];
+      if (rawFnb is Map) {
+        await FirefaFnbOperationsStore.instance.restoreLocalSnapshot(
+          Map<String, dynamic>.from(rawFnb),
+        );
+      }
     }
 
     final entries = outbox['entries'] as List;

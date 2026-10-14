@@ -325,7 +325,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                       const SizedBox(height: 10),
                       const Text(
-                        'Backup mencakup order, antrean sync, inventory, katalog menu, dan meja. '
+                        'Backup mencakup order, antrean sync, inventory, katalog menu, meja, reservasi, antrean pelanggan, paket, harga, dan promo. '
                         'Tersimpan di perangkat ini; belum dikirim ke cloud.',
                         style: TextStyle(
                           color: muted,

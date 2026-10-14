@@ -94,6 +94,21 @@ class FirefaFnbOperationsStore extends ChangeNotifier {
   bool setPromoActive(String outlet,String id,bool active){_check();final i=_promos.indexWhere((p)=>p.outletId==outlet&&p.id==id);if(i<0)return false;_promos[i]=_promos[i].withActive(active);_save();return true;}
   Map<String,dynamic> exportLocalSnapshot()=>{'version':1,'nextReservation':_r,'nextQueue':_q,'nextBundle':_b,'nextPromo':_p,'reservations':_reservations.map((e)=>e.toJson()).toList(),'queue':_queue.map((e)=>e.toJson()).toList(),'bundles':_bundles.map((e)=>e.toJson()).toList(),'prices':_prices.values.map((e)=>e.toJson()).toList(),'promos':_promos.map((e)=>e.toJson()).toList()};
   void validateLocalSnapshot(Map<String,dynamic> j){if(j['version']!=1||j['reservations'] is! List||j['queue'] is! List||j['bundles'] is! List||j['prices'] is! List||j['promos'] is! List)throw const FormatException('Snapshot F&B tidak valid.');for(final e in (j['reservations'] as List)){FirefaReservation.fromJson(Map<String,dynamic>.from(e as Map));}for(final e in (j['queue'] as List)){FirefaQueueTicket.fromJson(Map<String,dynamic>.from(e as Map));}for(final e in (j['bundles'] as List)){FirefaMenuBundle.fromJson(Map<String,dynamic>.from(e as Map));}for(final e in (j['promos'] as List)){FirefaPromo.fromJson(Map<String,dynamic>.from(e as Map));}}
+  Future<void> restoreLocalSnapshot(Map<String,dynamic> j) async {
+    _check();
+    validateLocalSnapshot(j);
+    final rs=(j['reservations'] as List).map((e)=>FirefaReservation.fromJson(Map<String,dynamic>.from(e as Map))).toList();
+    final qs=(j['queue'] as List).map((e)=>FirefaQueueTicket.fromJson(Map<String,dynamic>.from(e as Map))).toList();
+    final bs=(j['bundles'] as List).map((e)=>FirefaMenuBundle.fromJson(Map<String,dynamic>.from(e as Map))).toList();
+    final ps=(j['promos'] as List).map((e)=>FirefaPromo.fromJson(Map<String,dynamic>.from(e as Map))).toList();
+    final prices=<String,FirefaOrderTypePrice>{};
+    for(final e in (j['prices'] as List)) { final p=FirefaOrderTypePrice.fromJson(Map<String,dynamic>.from(e as Map)); prices[p.outletId+':'+p.type]=p; }
+    _reservations..clear()..addAll(rs); _queue..clear()..addAll(qs);
+    _bundles..clear()..addAll(bs); _promos..clear()..addAll(ps); _prices..clear()..addAll(prices);
+    _r=j['nextReservation'] as int? ?? 1; _q=j['nextQueue'] as int? ?? 1;
+    _b=j['nextBundle'] as int? ?? 1; _p=j['nextPromo'] as int? ?? 1;
+    _save(); await waitForPendingSave();
+  }
   Future<void> waitForPendingSave()=>_pending;
   void _save(){notifyListeners();final snapshot=jsonEncode(exportLocalSnapshot());_pending=_pending.catchError((Object _){}).then((_)async{final prefs=await SharedPreferences.getInstance();if(!await prefs.setString(storageKey,snapshot))throw StateError('Gagal menyimpan data F&B');});unawaited(_pending.catchError((Object e){debugPrint('F&B save failed: '+e.toString());}));}
 }
