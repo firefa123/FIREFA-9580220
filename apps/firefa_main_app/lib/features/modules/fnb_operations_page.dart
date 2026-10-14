@@ -129,7 +129,7 @@ class _FnbOperationsPageState extends State<FnbOperationsPage> with SingleTicker
       isThreeLine:true,
       trailing: Row(mainAxisSize:MainAxisSize.min,children:[
         IconButton(tooltip:'Preview KOT',onPressed:()=>printKot(o),icon:const Icon(Icons.print_outlined)),
-        if(o.status.next!=null) IconButton(tooltip:'Lanjut status dapur',onPressed:()=>{if(!orders.advance(id,o.id))message('Status belum dapat dilanjutkan. Pastikan pembayaran selesai sebelum menutup pesanan.');},icon:const Icon(Icons.arrow_forward)),
+        if(o.status.next!=null) IconButton(tooltip:'Lanjut status dapur',onPressed:(){if(!orders.advance(id,o.id))message('Status belum dapat dilanjutkan. Pastikan pembayaran selesai sebelum menutup pesanan.');},icon:const Icon(Icons.arrow_forward)),
       ]),
     ),
   );
