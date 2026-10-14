@@ -9,6 +9,8 @@ import 'order_store.dart';
 import 'pos_payment_dialog.dart';
 import 'persistent_cart_store.dart';
 import 'table_store.dart';
+import 'receipt_formatter.dart';
+import 'settings_store.dart';
 
 class PosPage extends StatefulWidget {
   const PosPage({super.key});
@@ -636,6 +638,66 @@ class _PosPageState extends State<PosPage> {
     _saveCart();
   }
 
+  Future<void> _showOrderReceipt(FirefaOrder order, String sourceOutlet) async {
+    try {
+      final settingsStore = FirefaSettingsStore.instance;
+      await settingsStore.initialize();
+      if (!mounted ||
+          outletId != sourceOutlet ||
+          !outletStore.canAccessOutlet(sourceOutlet) ||
+          order.outletId != sourceOutlet) {
+        return;
+      }
+
+      final text = FirefaReceiptFormatter.format(
+        order: order,
+        outletName: outletName,
+        settings: settingsStore.forOutlet(sourceOutlet),
+      );
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Struk Pesanan'),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: SelectableText(
+                text,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Tutup'),
+            ),
+            FilledButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: text));
+                if (!dialogContext.mounted) return;
+                Navigator.pop(dialogContext);
+                if (mounted && outletId == sourceOutlet) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Struk pesanan disalin.')),
+                  );
+                }
+              },
+              icon: const Icon(Icons.copy_outlined),
+              label: const Text('Salin Struk'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (mounted && outletId == sourceOutlet) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Pesanan tersimpan, tetapi struk gagal dibuat: $error')),
+        );
+      }
+    }
+  }
+
   bool _checkoutBusy = false;
 
   Future<void> checkout() async {
@@ -927,6 +989,7 @@ class _PosPageState extends State<PosPage> {
           '${order.id} tersimpan — ${payment == null ? 'Unpaid' : 'Paid (simulasi)'}.',
         )),
       );
+      await _showOrderReceipt(order, sourceOutlet);
     } catch (error) {
       var rollbackMessage = '';
       final order = createdOrder;
