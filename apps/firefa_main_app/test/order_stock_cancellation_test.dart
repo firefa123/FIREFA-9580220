@@ -153,6 +153,38 @@ void main() {
 
     // Verify the idempotency marker and restored quantity reached durable storage.
     final prefs = await SharedPreferences.getInstance();
+
+    // The cancelled order and its matching sync-outbox snapshot must be
+    // durable together, so a future sync cannot accidentally recreate an
+    // active order after stock has already been restored.
+    final rawCombined = prefs.getString('firefa_orders_outbox_v2');
+    expect(rawCombined, isNotNull);
+    final combined = jsonDecode(rawCombined!) as Map<String, dynamic>;
+    final combinedOrders = (combined['orders'] as List)
+        .map((value) => Map<String, dynamic>.from(value as Map))
+        .toList();
+    expect(
+      combinedOrders.singleWhere((value) => value['id'] == order.id)['status'],
+      FirefaOrderStatus.cancelled.name,
+    );
+    final outbox = Map<String, dynamic>.from(combined['outbox'] as Map);
+    final cancellationEvents = (outbox['entries'] as List)
+        .map((value) => Map<String, dynamic>.from(value as Map))
+        .where((entry) =>
+            entry['orderId'] == order.id &&
+            entry['eventType'] == 'order.updated' &&
+            (entry['orderSnapshot'] as Map)['status'] ==
+                FirefaOrderStatus.cancelled.name)
+        .toList();
+    expect(cancellationEvents, isNotEmpty);
+    expect(
+      cancellationEvents.every((entry) =>
+          entry['outletId'] == 'CANCEL-TEST' &&
+          (entry['orderSnapshot'] as Map)['paymentStatus'] ==
+              FirefaPaymentStatus.unpaid.name),
+      isTrue,
+    );
+
     final rawInventory = prefs.getString(FirefaInventoryStore.storageKey);
     expect(rawInventory, isNotNull);
     final savedInventory = jsonDecode(rawInventory!) as Map<String, dynamic>;
