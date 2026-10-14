@@ -578,8 +578,8 @@ class FirefaOrderStore extends ChangeNotifier {
     try {
       final inventory = FirefaInventoryStore.instance;
       await inventory.initialize();
-      if (inventory.isOrderStockProcessed(orderId) &&
-          !inventory.isOrderStockReversed(orderId)) {
+      if (inventory.isOrderStockProcessed(orderId, outletId: outletId) &&
+          !inventory.isOrderStockReversed(orderId, outletId: outletId)) {
         await inventory.restoreCancelledOrderStock(
           orderId: orderId,
           outletId: outletId,
@@ -615,8 +615,8 @@ class FirefaOrderStore extends ChangeNotifier {
     for (final order in List<FirefaOrder>.from(_orders)) {
       if (order.status != FirefaOrderStatus.cancelled ||
           order.paymentStatus != FirefaPaymentStatus.unpaid ||
-          !inventory.isOrderStockProcessed(order.id) ||
-          inventory.isOrderStockReversed(order.id)) {
+          !inventory.isOrderStockProcessed(order.id, outletId: order.outletId) ||
+          inventory.isOrderStockReversed(order.id, outletId: order.outletId)) {
         continue;
       }
       try {
