@@ -971,7 +971,7 @@ class _PosPageState extends State<PosPage> {
       }
       await inventory.waitForPendingSave();
       if (payment != null) {
-        if (!store.markPaid(sourceOutlet, order.id)) {
+        if (!await store.markPaidAndPersist(sourceOutlet, order.id)) {
           throw StateError('Status pembayaran tidak dapat diperbarui.');
         }
       }
