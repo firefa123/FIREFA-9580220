@@ -65,6 +65,41 @@ void main() {
     restored.dispose();
   });
 
+  test('editing menu changes POS price without resetting stock', () async {
+    final product = store.products.firstWhere((item) => item.id == 'P01');
+    final startingStock = product.stock;
+    await store.checkout(quantities: {'P01': 2}, type: 'Take Away');
+
+    await store.saveMenuProduct(
+      id: product.id,
+      name: 'Cappuccino Special',
+      category: 'Coffee',
+      price: 31000,
+      openingStock: product.stock,
+    );
+
+    expect(product.name, 'Cappuccino Special');
+    expect(product.price, 31000);
+    expect(product.stock, startingStock - 2);
+  });
+
+  test('order status can progress and completed dine-in order releases table', () async {
+    final order = await store.checkout(
+      quantities: {'P04': 1},
+      type: 'Dine In',
+      table: 'T2',
+    );
+    expect(store.isTableOccupied('T2'), isTrue);
+
+    await store.advanceOrder(order);
+    expect(order.status, 'Diproses');
+    await store.advanceOrder(order);
+    expect(order.status, 'Siap Disajikan');
+    await store.advanceOrder(order);
+    expect(order.status, 'Selesai');
+    expect(store.isTableOccupied('T2'), isFalse);
+  });
+
   test('menu changes and printer settings persist locally', () async {
     await store.saveMenuProduct(
       name: 'Es Kopi Susu',
