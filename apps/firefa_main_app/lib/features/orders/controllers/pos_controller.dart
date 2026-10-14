@@ -18,6 +18,17 @@ class PosController {
     }
   }
 
+  void decreaseItem(String name) {
+    final index = cart.indexWhere((item) => item.name == name);
+    if (index < 0) return;
+
+    if (cart[index].quantity > 1) {
+      cart[index].quantity--;
+    } else {
+      cart.removeAt(index);
+    }
+  }
+
   void removeItem(String name) {
     cart.removeWhere((item) => item.name == name);
   }
