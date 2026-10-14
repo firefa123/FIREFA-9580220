@@ -199,19 +199,23 @@ class _OrdersPageState extends State<OrdersPage> {
         order.outletId == outletId;
   }
 
-  void advance(FirefaOrder order) {
+  Future<void> advance(FirefaOrder order) async {
     if (!canActOn(order)) {
       message('Anda tidak memiliki izin untuk pesanan ini.');
       return;
     }
 
-    final success = orderStore.advance(outletId, order.id);
-
-    message(
-      success
-          ? '${order.id} sekarang ${order.status.label}'
-          : 'Status tidak dapat dilanjutkan.',
-    );
+    try {
+      final success = await orderStore.advanceAndPersist(outletId, order.id);
+      if (!mounted) return;
+      message(
+        success
+            ? '${order.id} sekarang ${order.status.label}'
+            : 'Status tidak dapat dilanjutkan.',
+      );
+    } catch (error) {
+      if (mounted) message('Status pesanan gagal disimpan: $error');
+    }
   }
 
   Future<void> cancel(FirefaOrder order) async {
@@ -234,19 +238,23 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
-  void markPaid(FirefaOrder order) {
+  Future<void> markPaid(FirefaOrder order) async {
     if (!canActOn(order)) {
       message('Anda tidak memiliki izin untuk pesanan ini.');
       return;
     }
 
-    final success = orderStore.markPaid(outletId, order.id);
-
-    message(
-      success
-          ? '${order.id} ditandai Paid (demo).'
-          : 'Status pembayaran tidak dapat diubah.',
-    );
+    try {
+      final success = await orderStore.markPaidAndPersist(outletId, order.id);
+      if (!mounted) return;
+      message(
+        success
+            ? '${order.id} ditandai Paid (demo).'
+            : 'Status pembayaran tidak dapat diubah.',
+      );
+    } catch (error) {
+      if (mounted) message('Status pembayaran gagal disimpan: $error');
+    }
   }
 
   Color statusColor(FirefaOrderStatus status) {
