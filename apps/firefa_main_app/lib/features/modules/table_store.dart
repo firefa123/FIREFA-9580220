@@ -63,6 +63,11 @@ class FirefaTableStore extends ChangeNotifier {
     return List.unmodifiable(_tables.where((table) => table.outletId == outletId));
   }
 
+  List<FirefaTable> allTablesForSync() {
+    if (!_initialized) throw StateError('FirefaTableStore must be initialized');
+    return List.unmodifiable(_tables);
+  }
+
   bool add(String outletId, String name) {
     if (!_initialized) return false;
     final normalized = name.trim();
