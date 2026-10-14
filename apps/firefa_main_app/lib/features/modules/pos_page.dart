@@ -1023,6 +1023,104 @@ class _PosPageState extends State<PosPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // A visible transaction overview keeps the cashier oriented while
+        // switching between catalog, order type, and the current cart.
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEAF7F5),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFB8E5DF)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: primary,
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: const Icon(
+                  Icons.point_of_sale_rounded,
+                  color: Colors.white,
+                  size: 25,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'KASIR AKTIF',
+                      style: TextStyle(
+                        fontSize: 10,
+                        letterSpacing: 1.1,
+                        fontWeight: FontWeight.bold,
+                        color: primary,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      outletName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: ink,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      config.orderType == 'Dine In'
+                          ? 'Dine In • Meja ${config.table}'
+                          : config.orderType,
+                      style: const TextStyle(fontSize: 12, color: muted),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                constraints: const BoxConstraints(minWidth: 88),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '$itemCount item',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: muted,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      rupiah(grandTotal),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 22),
         Row(
           children: [
             const Expanded(
