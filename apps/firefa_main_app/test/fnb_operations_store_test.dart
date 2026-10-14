@@ -38,6 +38,31 @@ void main() {
     expect(store.savePrice(outlet:'promo-test-outlet',type:'Delivery',fee:5000,percent:10),true);
     expect(store.typeFee('promo-test-outlet','Delivery',50000),10000);
   });
+  test('reservation prevents nearby table overlap and enforces status lifecycle', () async {
+    final store = FirefaFnbOperationsStore.instance;
+    final outlet = 'reservation-lifecycle-test';
+    final start = DateTime.now().add(const Duration(hours:4));
+    expect(store.addReservation(outlet:outlet,guest:'Guest A',phone:'',partySize:2,at:start,table:'A-01'),true);
+    expect(store.addReservation(outlet:outlet,guest:'Guest B',phone:'',partySize:2,at:start.add(const Duration(minutes:60)),table:'a-01'),false);
+    expect(store.addReservation(outlet:outlet,guest:'Guest C',phone:'',partySize:2,at:start.add(const Duration(hours:3)),table:'A-01'),true);
+    final reservation = store.reservations(outlet).first;
+    expect(store.setReservationStatus(outlet,reservation.id,'seated'),false);
+    expect(store.setReservationStatus(outlet,reservation.id,'arrived'),true);
+    expect(store.setReservationStatus(outlet,reservation.id,'seated'),true);
+    expect(store.setReservationStatus(outlet,reservation.id,'completed'),true);
+    await store.waitForPendingSave();
+  });
+  test('queue follows waiting called seated completed lifecycle', () async {
+    final store = FirefaFnbOperationsStore.instance;
+    const outlet = 'queue-lifecycle-test';
+    expect(store.addQueue(outlet:outlet,guest:'Queue Guest',partySize:3),true);
+    final ticket = store.queue(outlet).single;
+    expect(store.setQueueStatus(outlet,ticket.id,'seated'),false);
+    expect(store.setQueueStatus(outlet,ticket.id,'called'),true);
+    expect(store.setQueueStatus(outlet,ticket.id,'seated'),true);
+    expect(store.setQueueStatus(outlet,ticket.id,'completed'),true);
+    await store.waitForPendingSave();
+  });
   test('bundle serializes its component quantities', () {
     final bundle = FirefaMenuBundle(id:'B1',outletId:'o1',name:'Paket A',
       lines:const [FirefaBundleLine('Nasi',2),FirefaBundleLine('Teh',1)],
