@@ -247,7 +247,8 @@ class FirefaInventoryStore extends ChangeNotifier {
 
   Future<bool> consumeOrderStock({required String orderId, required String outletId, required List<({String menuId, int quantity})> menuLines}) async {
     if (orderId.trim().isEmpty) throw ArgumentError('ID order wajib diisi.');
-    if (_processedOrderIds.contains(orderId)) return false;
+    if (_containsOrderMarker(_processedOrderIds, outletId, orderId,
+        legacyNote: 'POS order $orderId')) return false;
     if (!validateOrderStock(outletId: outletId, menuLines: menuLines)) return false;
     final requiredQuantities = <String, int>{};
     final recipes = _recipes.where((line) => line.outletId == outletId).toList();
@@ -267,7 +268,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       _items[index] = FirefaInventoryItem(id: old.id, outletId: old.outletId, name: old.name, unit: old.unit, stock: after, minimumStock: old.minimumStock);
       _movements.add(FirefaStockMovement(id: 'movement-${_nextMovementId++}', outletId: outletId, itemId: old.id, itemName: old.name, type: 'out', before: old.stock, after: after, note: 'POS order $orderId', timestamp: DateTime.now().toIso8601String()));
     }
-    _processedOrderIds.add(orderId);
+    _processedOrderIds.add(_orderStockKey(outletId, orderId));
     notifyListeners();
     _save();
     await waitForPendingSave();
@@ -285,8 +286,10 @@ class FirefaInventoryStore extends ChangeNotifier {
     if (orderId.trim().isEmpty || outletId.trim().isEmpty) {
       throw ArgumentError('Order dan outlet wajib diisi.');
     }
-    if (_reversedOrderIds.contains(orderId)) return false;
-    if (!_processedOrderIds.contains(orderId)) return false;
+    if (_containsOrderMarker(_reversedOrderIds, outletId, orderId,
+        legacyNote: 'Pembatalan POS order $orderId')) return false;
+    if (!_containsOrderMarker(_processedOrderIds, outletId, orderId,
+        legacyNote: 'POS order $orderId')) return false;
 
     final sourceMovements = _movements.where((movement) =>
       movement.outletId == outletId &&
@@ -331,15 +334,69 @@ class FirefaInventoryStore extends ChangeNotifier {
         timestamp: DateTime.now().toIso8601String(),
       ));
     }
-    _reversedOrderIds.add(orderId);
+    _reversedOrderIds.add(_orderStockKey(outletId, orderId));
     notifyListeners();
     _save();
     await waitForPendingSave();
     return true;
   }
 
-  bool isOrderStockProcessed(String orderId) => _processedOrderIds.contains(orderId);
-  bool isOrderStockReversed(String orderId) => _reversedOrderIds.contains(orderId);
+  String _orderStockKey(String outletId, String orderId) =>
+      jsonEncode([outletId, orderId]);
+
+  /// New markers are outlet-scoped because local order IDs restart per outlet.
+  /// Legacy raw IDs are still recognized conservatively for backward compatibility.
+  bool _containsOrderMarker(
+    Set<String> markers,
+    String outletId,
+    String orderId, {
+    required String legacyNote,
+  }) {
+    if (markers.contains(_orderStockKey(outletId, orderId))) return true;
+    if (!markers.contains(orderId)) return false;
+
+    // Legacy records stored only the order ID. If their matching movement exists,
+    // scope the marker to that movement's outlet. If no movement exists, preserve
+    // the old marker conservatively rather than risk consuming/restoring twice.
+    final hasScopedMovement = _movements.any((movement) =>
+        movement.outletId == outletId && movement.note == legacyNote);
+    final hasAnyMatchingMovement =
+        _movements.any((movement) => movement.note == legacyNote);
+    return hasScopedMovement || !hasAnyMatchingMovement;
+  }
+
+  bool isOrderStockProcessed(String orderId, {String? outletId}) {
+    if (outletId != null) {
+      return _containsOrderMarker(_processedOrderIds, outletId, orderId,
+          legacyNote: 'POS order $orderId');
+    }
+    return _processedOrderIds.contains(orderId) ||
+        _hasScopedMarkerForOrder(_processedOrderIds, orderId);
+  }
+
+  bool isOrderStockReversed(String orderId, {String? outletId}) {
+    if (outletId != null) {
+      return _containsOrderMarker(_reversedOrderIds, outletId, orderId,
+          legacyNote: 'Pembatalan POS order $orderId');
+    }
+    return _reversedOrderIds.contains(orderId) ||
+        _hasScopedMarkerForOrder(_reversedOrderIds, orderId);
+  }
+
+  bool _hasScopedMarkerForOrder(Set<String> markers, String orderId) {
+    for (final marker in markers) {
+      if (marker.startsWith('[')) {
+        try {
+          final decoded = jsonDecode(marker);
+          if (decoded is List && decoded.length == 2 &&
+              decoded[1] == orderId) return true;
+        } catch (_) {
+          // Other marker formats are legacy values, not scoped keys.
+        }
+      }
+    }
+    return false;
+  }
 
   List<FirefaStockMovement> historyForOutlet(String outletId) {
     if (!_initialized) throw StateError('Inventory belum diinisialisasi');
