@@ -16,34 +16,28 @@ class FirefaOutletContext {
     required this.assignedOutlets,
   });
 
-  bool get canViewAllOutlets {
-    return role == FirefaRole.owner || role == FirefaRole.manager;
-  }
+  bool get canViewAllOutlets => role == FirefaRole.owner;
 
-  List<FirefaOutlet> get availableOutlets {
-    return assignedOutlets;
-  }
+  List<FirefaOutlet> get availableOutlets => assignedOutlets;
 
-  bool canAccessOutlet(String outletId) {
-    return assignedOutlets.any((outlet) => outlet.id == outletId);
-  }
+  bool canAccessOutlet(String outletId) =>
+      assignedOutlets.any((outlet) => outlet.id == outletId);
 
   static FirefaOutletContext demo(FirefaRole role) {
     const outletUtama = FirefaOutlet(id: 'outlet-001', name: 'Outlet Utama');
-
     const outletDua = FirefaOutlet(id: 'outlet-002', name: 'Outlet 2');
 
     switch (role) {
       case FirefaRole.owner:
-      case FirefaRole.manager:
         return FirefaOutletContext(
           role: role,
           assignedOutlets: [outletUtama, outletDua],
         );
-
       case FirefaRole.cashier:
-      case FirefaRole.kitchenBar:
-        return FirefaOutletContext(role: role, assignedOutlets: [outletUtama]);
+        return FirefaOutletContext(
+          role: role,
+          assignedOutlets: [outletUtama],
+        );
     }
   }
 }
