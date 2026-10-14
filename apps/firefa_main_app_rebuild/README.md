@@ -1,32 +1,44 @@
 # FIREFA Main App — Clean Rebuild
 
-This folder is the clean rebuild of FIREFA Main App. The previous `apps/firefa_main_app` is intentionally left untouched as a reference/backup.
+This is the clean rebuild of FIREFA Main App. The previous `apps/firefa_main_app` remains untouched as a reference and rollback point.
 
-## Scope for the first usable version
+## First usable Main App scope
 
-- Preserve the existing FIREFA visual direction: modern light UI, teal accent, clean cards, responsive layout.
-- Demo role entry for Owner, Manager, Cashier, and Kitchen/Bar.
-- Working local POS: choose menu items, adjust quantities, checkout, create an order, and reduce product stock.
-- Orders: view orders, advance order status, and cancel an active order with stock restoration.
-- Tables: show occupancy derived from active dine-in orders.
-- Inventory: view and receive stock.
-- Reports: show totals derived from saved orders.
-- Persist the local operational data on the device using SharedPreferences.
+- Modern light UI in the existing FIREFA visual direction.
+- Role entry for Owner, Manager, Cashier, and Kitchen/Bar.
+- POS: menu selection, quantity controls, dine-in/take-away, table selection, stock validation, and checkout.
+- Order management: view orders, advance statuses, cancel orders, and restore stock on cancellation.
+- Tables: occupancy follows active dine-in orders.
+- Menu management: add/edit product name, category, and price.
+- Inventory: see stock and receive stock.
+- Reports: totals derived from locally saved orders.
+- Receipts: preview, copy, and print/save as PDF through the operating system's print flow.
+- Printer configuration for cashier/kitchen/bar and basic business name/footer settings.
+- Operational data and settings persist locally through SharedPreferences.
 
-## Explicitly out of scope for this first pass
+## Setup on Windows
 
-No reconciliation/conflict center, advanced audit trail, cloud sync engine, subscriptions, billing, real payment gateway, or physical printer integration. These come later only after core flows are usable.
+Do not run `flutter create .` inside this folder: it could replace the custom `lib/main.dart`.
 
-## Platform scaffolding
-
-After pulling this folder, generate the Flutter platform folders once:
+Create platform scaffolding in a temporary sibling folder, then copy only the platform folders:
 
 ```powershell
-cd C:\Users\Intel\FIREFA-9580220\apps\firefa_main_app_rebuild
-flutter create --platforms=android,web --project-name firefa_main_app_rebuild .
+cd C:\Users\Intel\FIREFA-9580220\apps
+flutter create --platforms=android,web --project-name firefa_main_app_rebuild _firefa_platform_scaffold
+Copy-Item -Recurse -Force .\_firefa_platform_scaffold\android .\firefa_main_app_rebuild\
+Copy-Item -Recurse -Force .\_firefa_platform_scaffold\web .\firefa_main_app_rebuild\
+Copy-Item -Force .\_firefa_platform_scaffold\.metadata .\firefa_main_app_rebuild\
+Remove-Item -Recurse -Force .\_firefa_platform_scaffold
+cd .\firefa_main_app_rebuild
 flutter pub get
 flutter analyze
 flutter test
 ```
 
-The role entry and payment are local/demo behavior, not production authentication or real payment settlement. Data is local to this app installation; no cloud backend is connected yet.
+## Honest current boundaries
+
+- Role entry is demo access, not production authentication.
+- Payment is simulated locally; it does not settle through a bank or QRIS gateway.
+- Orders, menu, stock, and settings are local to this app installation.
+- PDF printing opens the OS print/save flow. Saved printer targets are configuration only; direct device-specific routing (for example, automatic kitchen/bar printing) is not connected yet.
+- Cloud backend, multi-device synchronization, tenant/subscription administration, and conflict resolution are intentionally not part of this first functional milestone. Do not present them as active.
