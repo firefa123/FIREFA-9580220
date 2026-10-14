@@ -110,6 +110,44 @@ void main() {
     expect(inventory.forOutlet('CANCEL-TEST').single.stock, 16);
     expect(inventory.isOrderStockReversed(paidOrder.id), isFalse);
 
+    // Simulate an interrupted legacy cancellation: the order is durably
+    // cancelled, but the inventory reversal has not run yet.
+    final interruptedOrder = orders.createOrder(
+      outletId: 'CANCEL-TEST',
+      orderType: 'Take Away',
+      tableId: null,
+      items: const [
+        FirefaOrderItem(
+          productName: 'Coffee',
+          productId: 'menu-coffee',
+          quantity: 1,
+          unitPrice: 1000,
+        ),
+      ],
+      subtotal: 1000,
+      discount: 0,
+      tax: 0,
+      service: 0,
+      total: 1000,
+    );
+    expect(
+      await inventory.consumeOrderStock(
+        orderId: interruptedOrder.id,
+        outletId: 'CANCEL-TEST',
+        menuLines: [(menuId: 'menu-coffee', quantity: 1)],
+      ),
+      isTrue,
+    );
+    expect(inventory.forOutlet('CANCEL-TEST').single.stock, 14);
+    expect(orders.cancel('CANCEL-TEST', interruptedOrder.id), isTrue);
+    await orders.waitForPendingSave();
+
+    expect(await orders.recoverCancelledOrderStock(), 1);
+    expect(inventory.forOutlet('CANCEL-TEST').single.stock, 16);
+    expect(inventory.isOrderStockReversed(interruptedOrder.id), isTrue);
+    expect(await orders.recoverCancelledOrderStock(), 0);
+    expect(inventory.forOutlet('CANCEL-TEST').single.stock, 16);
+
     await orders.waitForPendingSave();
     await inventory.waitForPendingSave();
 
@@ -119,7 +157,7 @@ void main() {
     expect(rawInventory, isNotNull);
     final savedInventory = jsonDecode(rawInventory!) as Map<String, dynamic>;
     expect((savedInventory['reversedOrderIds'] as List).cast<String>(),
-        contains(order.id));
+        containsAll([order.id, interruptedOrder.id]));
     final savedItems = (savedInventory['items'] as List)
         .map((value) => Map<String, dynamic>.from(value as Map))
         .toList();
