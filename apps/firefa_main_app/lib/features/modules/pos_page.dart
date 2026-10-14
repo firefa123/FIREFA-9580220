@@ -887,10 +887,10 @@ class _PosPageState extends State<PosPage> {
             .firstOrNull;
         if (selectedTable != null) {
           if (selectedTable.occupied ||
-              !tableStore.setOccupied(
+              !tableStore.reserveForOrder(
                 sourceOutlet,
                 selectedTable.id,
-                true,
+                order.id,
               )) {
             throw StateError('Meja $checkoutTable sudah tidak tersedia.');
           }
