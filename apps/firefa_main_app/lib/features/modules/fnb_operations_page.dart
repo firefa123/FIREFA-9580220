@@ -74,30 +74,131 @@ class _FnbOperationsPageState extends State<FnbOperationsPage> with SingleTicker
     final lines=<String>['FIREFA • KITCHEN ORDER TICKET','Order: '+order.id,'Tipe: '+order.orderType,if(order.tableId!=null)'Meja: '+order.tableId!,'Waktu: '+MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(order.createdAt.toLocal())),'--------------------------------',for(final item in order.items)item.quantity.toString()+' x '+item.productName+(item.details.isEmpty?'':' • '+item.details),'--------------------------------','Catatan: cek detail pesanan sebelum produksi'];
     await showDialog<void>(context:context,builder:(ctx)=>AlertDialog(title:const Text('Preview KOT — simulasi cetak'),content:SingleChildScrollView(child:Text(lines.join('\n'))),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Tutup'))]));
   }
-  @override Widget build(BuildContext context)=>FutureBuilder<void>(future:ready,builder:(context,snapshot){
-    if(snapshot.hasError)return const Text('Gagal memuat data operasional F&B. Data lama dipertahankan.');
-    if(snapshot.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
-    final id=outlet.selectedOutletId;
-    return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-      const Text('Operasional F&B',style:TextStyle(fontSize:22,fontWeight:FontWeight.bold)),
-      const SizedBox(height:5),Text(outlet.selectedOutletName+' • Data tersimpan lokal',style:const TextStyle(color:Colors.blueGrey)),
-      const SizedBox(height:16),TabBar(controller:tabs,isScrollable:true,labelColor:primary,tabs:const [Tab(text:'Reservasi'),Tab(text:'Antrean'),Tab(text:'KOT Dapur'),Tab(text:'Paket Menu'),Tab(text:'Harga Pesanan'),Tab(text:'Promo')]),
-      SizedBox(height:560,child:TabBarView(controller:tabs,children:[
-        _panel('Reservasi',store.reservations(id).length,canManage?addReservation:null,[
-          for(final r in store.reservations(id))Card(child:ListTile(leading:const Icon(Icons.event_available_outlined),title:Text(r.guest+' • '+r.partySize.toString()+' orang'),subtitle:Text(r.id+' • '+r.at.toLocal().toString().substring(0,16)+(r.table.isEmpty?'':' • Meja '+r.table)+'\n'+r.phone+(r.note.isEmpty?'':' • '+r.note)),isThreeLine:true,trailing:PopupMenuButton<String>(onSelected:(v){store.setReservationStatus(id,r.id,v);},itemBuilder:(_)=>const [PopupMenuItem(value:'booked',child:Text('Dipesan')),PopupMenuItem(value:'arrived',child:Text('Tamu tiba')),PopupMenuItem(value:'seated',child:Text('Sudah duduk')),PopupMenuItem(value:'completed',child:Text('Selesai')),PopupMenuItem(value:'cancelled',child:Text('Batalkan'))],child:Chip(label:Text(r.status))))]),
-        _panel('Antrean Pelanggan',store.queue(id).length,addQueue,[
-          for(final q in store.queue(id))Card(child:ListTile(leading:CircleAvatar(child:Text(q.number)),title:Text(q.guest+' • '+q.partySize.toString()+' orang'),subtitle:Text(q.at.toLocal().toString().substring(0,16)),trailing:PopupMenuButton<String>(onSelected:(v){store.setQueueStatus(id,q.id,v);},itemBuilder:(_)=>const [PopupMenuItem(value:'waiting',child:Text('Menunggu')),PopupMenuItem(value:'called',child:Text('Panggil')),PopupMenuItem(value:'seated',child:Text('Sudah duduk')),PopupMenuItem(value:'completed',child:Text('Selesai')),PopupMenuItem(value:'cancelled',child:Text('Batalkan'))],child:Chip(label:Text(q.status))))]),
-        _panel('Kitchen Order Ticket',orders.ordersForOutlet(id).where((o)=>o.status!=FirefaOrderStatus.completed&&o.status!=FirefaOrderStatus.cancelled).length,null,[
-          for(final o in orders.ordersForOutlet(id).where((o)=>o.status!=FirefaOrderStatus.completed&&o.status!=FirefaOrderStatus.cancelled))Card(child:ListTile(leading:const Icon(Icons.soup_kitchen_outlined),title:Text(o.id+' • '+o.orderType+(o.tableId==null?'':' • '+o.tableId!)),subtitle:Text(o.items.map((e)=>e.quantity.toString()+'x '+e.productName).join('\n')+'\nStatus: '+o.status.label),isThreeLine:true,trailing:Wrap(mainAxisSize:MainAxisSize.min,children:[IconButton(tooltip:'Preview KOT',onPressed:()=>printKot(o),icon:const Icon(Icons.print_outlined)),if(o.status.next!=null)IconButton(tooltip:'Lanjut status dapur',onPressed:()=>orders.advance(id,o.id),icon:const Icon(Icons.arrow_forward))]))) ]),
-        _panel('Paket Menu',store.bundles(id).length,canManage?addBundle:null,[
-          for(final b in store.bundles(id))Card(child:ListTile(title:Text(b.name),subtitle:Text(b.lines.map((e)=>e.quantity.toString()+'x '+e.name).join(', ')),isThreeLine:true,leading:const Icon(Icons.lunch_dining_outlined),trailing:Column(mainAxisSize:MainAxisSize.min,children:[Text(money(b.price)),Switch(value:b.active,onChanged:(v)=>store.setBundleActive(id,b.id,v))]))) ]),
-        _panel('Harga per Tipe Pesanan',3,null,[
-          for(final type in const ['Dine In','Takeaway','Delivery'])Builder(builder:(_){final p=store.price(id,type);return Card(child:ListTile(leading:const Icon(Icons.price_change_outlined),title:Text(type),subtitle:Text('Biaya tetap: '+money(p.fee)+' • Tambahan: '+p.percent.toString()+'%'),trailing:IconButton(onPressed:canManage?()=>editPrice(type):null,icon:const Icon(Icons.edit_outlined))));})]),
-        _panel('Promo & Diskon',store.promos(id).length,canManage?addPromo:null,[
-          for(final p in store.promos(id))Card(child:ListTile(leading:const Icon(Icons.local_offer_outlined),title:Text(p.name),subtitle:Text((p.code.isEmpty?'Tanpa kode':'Kode: '+p.code)+' • '+(p.type=='percent'?p.value.toString()+'%':money(p.value))+' • Min. '+money(p.minimum)+'\n'+p.start.toLocal().toString().substring(0,10)+' s.d. '+p.end.toLocal().toString().substring(0,10)),isThreeLine:true,trailing:Switch(value:p.active,onChanged:canManage?(v)=>store.setPromoActive(id,p.id,v):null)))])
-      ]))
-    ]);
-  });
+  Widget _reservationTile(FirefaReservation r, String id) => Card(
+    child: ListTile(
+      leading: const Icon(Icons.event_available_outlined),
+      title: Text(r.guest + ' • ' + r.partySize.toString() + ' orang'),
+      subtitle: Text(r.id + ' • ' + r.at.toLocal().toString().substring(0,16) +
+        (r.table.isEmpty ? '' : ' • Meja ' + r.table) + '\n' + r.phone +
+        (r.note.isEmpty ? '' : ' • ' + r.note)),
+      isThreeLine: true,
+      trailing: PopupMenuButton<String>(
+        tooltip: 'Ubah status reservasi',
+        onSelected: (v) { store.setReservationStatus(id, r.id, v); },
+        itemBuilder: (_) => const [
+          PopupMenuItem(value:'booked', child:Text('Dipesan')),
+          PopupMenuItem(value:'arrived', child:Text('Tamu tiba')),
+          PopupMenuItem(value:'seated', child:Text('Sudah duduk')),
+          PopupMenuItem(value:'completed', child:Text('Selesai')),
+          PopupMenuItem(value:'cancelled', child:Text('Batalkan')),
+        ],
+        child: Chip(label:Text(r.status)),
+      ),
+    ),
+  );
+  Widget _queueTile(FirefaQueueTicket q, String id) => Card(
+    child: ListTile(
+      leading: CircleAvatar(child:Text(q.number)),
+      title: Text(q.guest + ' • ' + q.partySize.toString() + ' orang'),
+      subtitle: Text(q.at.toLocal().toString().substring(0,16)),
+      trailing: PopupMenuButton<String>(
+        tooltip:'Ubah status antrean',
+        onSelected:(v){store.setQueueStatus(id,q.id,v);},
+        itemBuilder:(_)=>const [
+          PopupMenuItem(value:'waiting',child:Text('Menunggu')),
+          PopupMenuItem(value:'called',child:Text('Panggil')),
+          PopupMenuItem(value:'seated',child:Text('Sudah duduk')),
+          PopupMenuItem(value:'completed',child:Text('Selesai')),
+          PopupMenuItem(value:'cancelled',child:Text('Batalkan')),
+        ],
+        child:Chip(label:Text(q.status)),
+      ),
+    ),
+  );
+  Widget _kotTile(FirefaOrder o, String id) => Card(
+    child: ListTile(
+      leading: const Icon(Icons.soup_kitchen_outlined),
+      title: Text(o.id + ' • ' + o.orderType + (o.tableId == null ? '' : ' • ' + o.tableId!)),
+      subtitle: Text(o.items.map((e)=>e.quantity.toString()+'x '+e.productName).join('\n')+'\nStatus: '+o.status.label),
+      isThreeLine:true,
+      trailing: Row(mainAxisSize:MainAxisSize.min,children:[
+        IconButton(tooltip:'Preview KOT',onPressed:()=>printKot(o),icon:const Icon(Icons.print_outlined)),
+        if(o.status.next!=null) IconButton(tooltip:'Lanjut status dapur',onPressed:()=>orders.advance(id,o.id),icon:const Icon(Icons.arrow_forward)),
+      ]),
+    ),
+  );
+  Widget _bundleTile(FirefaMenuBundle b,String id)=>Card(
+    child:ListTile(
+      leading:const Icon(Icons.lunch_dining_outlined),
+      title:Text(b.name),
+      subtitle:Text(b.lines.map((e)=>e.quantity.toString()+'x '+e.name).join(', ')),
+      isThreeLine:true,
+      trailing:SizedBox(width:150,child:Row(mainAxisSize:MainAxisSize.min,children:[
+        Flexible(child:Text(money(b.price),overflow:TextOverflow.ellipsis)),
+        Switch(value:b.active,onChanged:canManage?(v)=>store.setBundleActive(id,b.id,v):null),
+      ])),
+    ),
+  );
+  Widget _priceTile(String type,String id){
+    final p=store.price(id,type);
+    return Card(child:ListTile(
+      leading:const Icon(Icons.price_change_outlined),
+      title:Text(type),
+      subtitle:Text('Biaya tetap: '+money(p.fee)+' • Tambahan: '+p.percent.toString()+'%'),
+      trailing:IconButton(onPressed:canManage?()=>editPrice(type):null,icon:const Icon(Icons.edit_outlined)),
+    ));
+  }
+  Widget _promoTile(FirefaPromo p,String id)=>Card(
+    child:ListTile(
+      leading:const Icon(Icons.local_offer_outlined),
+      title:Text(p.name),
+      subtitle:Text((p.code.isEmpty?'Tanpa kode':'Kode: '+p.code)+' • '+(p.type=='percent'?p.value.toString()+'%':money(p.value))+' • Min. '+money(p.minimum)+'\n'+p.start.toLocal().toString().substring(0,10)+' s.d. '+p.end.toLocal().toString().substring(0,10)),
+      isThreeLine:true,
+      trailing:Switch(value:p.active,onChanged:canManage?(v)=>store.setPromoActive(id,p.id,v):null),
+    ),
+  );
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future:ready,
+      builder:(context,snapshot) {
+        if(snapshot.hasError) return const Text('Gagal memuat data operasional F&B. Data lama dipertahankan.');
+        if(snapshot.connectionState!=ConnectionState.done) return const Center(child:CircularProgressIndicator());
+        final id=outlet.selectedOutletId;
+        final activeOrders=orders.ordersForOutlet(id).where((o)=>o.status!=FirefaOrderStatus.completed&&o.status!=FirefaOrderStatus.cancelled).toList();
+        return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          const Text('Operasional F&B',style:TextStyle(fontSize:22,fontWeight:FontWeight.bold)),
+          const SizedBox(height:5),
+          Text(outlet.selectedOutletName+' • Data tersimpan lokal',style:const TextStyle(color:Colors.blueGrey)),
+          const SizedBox(height:16),
+          TabBar(controller:tabs,isScrollable:true,labelColor:primary,tabs:const [
+            Tab(text:'Reservasi'),Tab(text:'Antrean'),Tab(text:'KOT Dapur'),
+            Tab(text:'Paket Menu'),Tab(text:'Harga Pesanan'),Tab(text:'Promo'),
+          ]),
+          SizedBox(height:560,child:TabBarView(controller:tabs,children:[
+            _panel('Reservasi',store.reservations(id).length,canManage?addReservation:null,[
+              for(final r in store.reservations(id)) _reservationTile(r,id),
+            ]),
+            _panel('Antrean Pelanggan',store.queue(id).length,addQueue,[
+              for(final q in store.queue(id)) _queueTile(q,id),
+            ]),
+            _panel('Kitchen Order Ticket',activeOrders.length,null,[
+              for(final o in activeOrders) _kotTile(o,id),
+            ]),
+            _panel('Paket Menu',store.bundles(id).length,canManage?addBundle:null,[
+              for(final b in store.bundles(id)) _bundleTile(b,id),
+            ]),
+            _panel('Harga per Tipe Pesanan',3,null,[
+              for(final type in const ['Dine In','Takeaway','Delivery']) _priceTile(type,id),
+            ]),
+            _panel('Promo & Diskon',store.promos(id).length,canManage?addPromo:null,[
+              for(final p in store.promos(id)) _promoTile(p,id),
+            ]),
+          ])),
+        ]);
+      },
+    );
+  }
   Widget _panel(String title,int count,VoidCallback? onAdd,List<Widget> children)=>Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
     Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Row(children:[Expanded(child:Text(title+' • '+count.toString(),style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16))),if(onAdd!=null)FilledButton.icon(onPressed:onAdd,icon:const Icon(Icons.add),label:const Text('Tambah'))])),
     Expanded(child:children.isEmpty?const Center(child:Text('Belum ada data. Gunakan tombol Tambah untuk memulai.')):ListView(children:children))
