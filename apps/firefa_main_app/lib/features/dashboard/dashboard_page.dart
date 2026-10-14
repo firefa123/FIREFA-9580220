@@ -605,7 +605,7 @@ class _DashboardPageState extends State<DashboardPage> {
       case 1:
         return const PosPage();
       case 2:
-        return const OrdersPage();
+        return OrdersPage(onReorder: () => _selectPage(1));
       case 3:
         return const TablesPage();
       case 4:

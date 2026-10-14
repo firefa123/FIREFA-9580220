@@ -8,10 +8,12 @@ import 'offline_sync_queue.dart';
 import 'order_store.dart';
 import 'pos_payment_dialog.dart';
 import 'receipt_formatter.dart';
+import 'persistent_cart_store.dart';
 import 'settings_store.dart';
 
 class OrdersPage extends StatefulWidget {
-  const OrdersPage({super.key});
+  final VoidCallback? onReorder;
+  const OrdersPage({super.key, this.onReorder});
 
   @override
   State<OrdersPage> createState() => _OrdersPageState();
@@ -207,6 +209,29 @@ class _OrdersPageState extends State<OrdersPage> {
         order.outletId == outletId;
   }
 
+  Future<void> reorder(FirefaOrder order) async {
+    final sourceOutlet = outletId;
+    if (!canActOn(order) || order.items.isEmpty) {
+      message('Pesanan tidak dapat digunakan untuk pesan ulang.');
+      return;
+    }
+    try {
+      final cartStore = FirefaPersistentCartStore.instance;
+      await cartStore.initialize();
+      if (!mounted || sourceOutlet != outletId || order.outletId != sourceOutlet || !outletStore.canAccessOutlet(sourceOutlet)) return;
+      cartStore.saveCart(sourceOutlet, FirefaCartData(
+        items: order.items.map((item) => FirefaCartItemData(productId: item.productId ?? item.productName, productName: item.productName, size: 'Regular', extras: const [], note: item.details, unitPrice: item.unitPrice, quantity: item.quantity)).toList(),
+        orderType: order.orderType,
+        table: order.tableId ?? 'A01',
+      ));
+      await cartStore.waitForPendingSave();
+      if (!mounted || sourceOutlet != outletId) return;
+      widget.onReorder?.call();
+      message('Keranjang untuk pesan ulang ${order.id} disiapkan. Periksa meja dan menu sebelum checkout.');
+    } catch (error) {
+      if (mounted) message('Pesan ulang gagal disiapkan: $error');
+    }
+  }
   Future<void> advance(FirefaOrder order) async {
     if (!canActOn(order)) {
       message('Anda tidak memiliki izin untuk pesanan ini.');
@@ -280,12 +305,14 @@ class _OrdersPageState extends State<OrdersPage> {
           : payment.method == 'Split'
               ? payment.splitCash
               : 0;
-      final success = await orderStore.markPaidAndPersist(
-        sourceOutlet,
-        order.id,
-        paymentMethod: method,
-        cashPaidAmount: cashPaidAmount,
-      );
+      final success = payment.method == 'BON'
+          ? false
+          : await orderStore.markPaidAndPersist(
+              sourceOutlet,
+              order.id,
+              paymentMethod: method,
+              cashPaidAmount: cashPaidAmount,
+            );
       if (!mounted) return;
       message(
         success
@@ -299,12 +326,14 @@ class _OrdersPageState extends State<OrdersPage> {
 
   Future<void> refund(FirefaOrder order) async {
     final sourceOutlet = outletId;
-    if (!canActOn(order) || order.paymentStatus != FirefaPaymentStatus.paid) {
-      message('Refund hanya tersedia untuk pesanan Paid pada outlet aktif.');
+    if (!canActOn(order) || order.paymentStatus != FirefaPaymentStatus.paid ||
+        order.refundableAmount <= 0) {
+      message('Refund hanya tersedia untuk sisa pembayaran lunas pada outlet aktif.');
       return;
     }
     final reasonController = TextEditingController();
-    final result = await showDialog<({String method, String reason})>(
+    final amountController = TextEditingController(text: '${order.refundableAmount}');
+    final result = await showDialog<({String method, String reason, int amount})>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
@@ -313,7 +342,14 @@ class _OrdersPageState extends State<OrdersPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Refund penuh sebesar ${rupiah(order.total)}. Pilih cara pengembalian dana dan isi alasan.'),
+            Text('Sisa nominal yang dapat direfund: ${rupiah(order.refundableAmount)}.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: amountController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(12)],
+              decoration: const InputDecoration(labelText: 'Nominal refund (Rp)', border: OutlineInputBorder()),
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: reasonController,
@@ -334,18 +370,23 @@ class _OrdersPageState extends State<OrdersPage> {
             child: const Text('Batal'),
           ),
           OutlinedButton(
-            onPressed: () => Navigator.pop(dialogContext, (method: 'Non-tunai', reason: reasonController.text.trim())),
+            onPressed: () => Navigator.pop(dialogContext, (method: 'Non-tunai', reason: reasonController.text.trim(), amount: int.tryParse(amountController.text) ?? 0)),
             child: const Text('Refund Non-tunai'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, (method: 'Cash', reason: reasonController.text.trim())),
+            onPressed: () => Navigator.pop(dialogContext, (method: 'Cash', reason: reasonController.text.trim(), amount: int.tryParse(amountController.text) ?? 0)),
             child: const Text('Refund Tunai'),
           ),
         ],
       ),
     );
     reasonController.dispose();
+    amountController.dispose();
     if (!mounted || result == null) return;
+    if (result.amount <= 0 || result.amount > order.refundableAmount) {
+      message('Nominal refund harus lebih dari Rp 0 dan tidak melebihi ${rupiah(order.refundableAmount)}.');
+      return;
+    }
     if (result.reason.isEmpty) {
       message('Alasan refund wajib diisi.');
       return;
@@ -361,11 +402,12 @@ class _OrdersPageState extends State<OrdersPage> {
         order.id,
         refundMethod: result.method,
         reason: result.reason,
+        amount: result.amount,
       );
       if (!mounted) return;
       message(success
-          ? '${order.id} direfund penuh via ${result.method}. Stok bahan tidak otomatis dipulihkan.'
-          : 'Refund tidak dapat diproses; pastikan order belum direfund.');
+          ? '${order.id}: refund ${rupiah(result.amount)} via ${result.method} tersimpan. Sisa refund ${rupiah(order.refundableAmount)}. Stok bahan tidak otomatis dipulihkan.'
+          : 'Refund tidak dapat diproses; periksa status dan sisa nominal refund.');
     } catch (error) {
       if (mounted) message('Refund gagal disimpan: $error');
     }
@@ -407,7 +449,7 @@ class _OrdersPageState extends State<OrdersPage> {
     final paidOrders = currentOrders.where((order) =>
         order.paymentStatus == FirefaPaymentStatus.paid &&
         order.status != FirefaOrderStatus.cancelled).toList();
-    final paidTotal = paidOrders.fold<int>(0, (sum, order) => sum + order.total);
+    final paidTotal = paidOrders.fold<int>(0, (sum, order) => sum + order.total - order.refundAmount);
     final completed = currentOrders.where((order) =>
         order.status == FirefaOrderStatus.completed).length;
 
@@ -852,12 +894,12 @@ class _OrdersPageState extends State<OrdersPage> {
               chip(
                 switch (order.paymentStatus) {
                   FirefaPaymentStatus.unpaid => 'Unpaid',
-                  FirefaPaymentStatus.paid => 'Paid',
+                  FirefaPaymentStatus.paid => order.paymentMethod == 'BON' ? 'BON / Piutang' : (order.hasPartialRefund ? 'Paid • Partial Refund' : 'Paid'),
                   FirefaPaymentStatus.refunded => 'Refunded',
                 },
                 switch (order.paymentStatus) {
                   FirefaPaymentStatus.unpaid => Colors.orange,
-                  FirefaPaymentStatus.paid => Colors.green,
+                  FirefaPaymentStatus.paid => order.paymentMethod == 'BON' ? Colors.orange : (order.hasPartialRefund ? Colors.deepOrange : Colors.green),
                   FirefaPaymentStatus.refunded => Colors.redAccent,
                 },
               ),
@@ -942,6 +984,12 @@ class _OrdersPageState extends State<OrdersPage> {
           if (order.service > 0) amountRow('Service', order.service),
           const Divider(height: 20),
           amountRow('Grand Total', order.total, bold: true),
+          if (order.refundRecords.isNotEmpty) ...[
+            const Divider(height: 20),
+            Text('Total refund: ${rupiah(order.refundAmount)} • Sisa dapat direfund: ${rupiah(order.refundableAmount)}', style: const TextStyle(color: muted, fontSize: 12)),
+            for (final refundRecord in order.refundRecords)
+              Padding(padding: const EdgeInsets.only(top: 6), child: Text('${refundRecord.createdAt.toLocal()} • ${rupiah(refundRecord.amount)} • ${refundRecord.method}\nAlasan: ${refundRecord.reason}', style: const TextStyle(color: muted, fontSize: 12))),
+          ],
           if (order.refundedAt != null) ...[
             const Divider(height: 20),
             Text('Waktu refund: ${order.refundedAt!.toLocal()}', style: const TextStyle(color: muted, fontSize: 12)),
@@ -980,14 +1028,19 @@ class _OrdersPageState extends State<OrdersPage> {
                   OutlinedButton.icon(
                     onPressed: canActOn(order) ? () => markPaid(order) : null,
                     icon: const Icon(Icons.payments_outlined, size: 16),
-                    label: const Text('Mark Paid (Demo)'),
+                    label: Text(order.paymentMethod == 'BON' ? 'Terima Pembayaran BON' : 'Mark Paid (Demo)'),
                   ),
-                if (order.paymentStatus == FirefaPaymentStatus.paid)
+                if (order.paymentStatus == FirefaPaymentStatus.paid && order.refundableAmount > 0)
                   OutlinedButton.icon(
                     onPressed: canActOn(order) ? () => refund(order) : null,
                     icon: const Icon(Icons.currency_exchange, size: 16),
-                    label: const Text('Refund Penuh'),
+                    label: const Text('Refund Parsial/Penuh'),
                   ),
+                OutlinedButton.icon(
+                  onPressed: canActOn(order) ? () => reorder(order) : null,
+                  icon: const Icon(Icons.replay_outlined, size: 16),
+                  label: const Text('Pesan Ulang'),
+                ),
                 if (order.status.canCancel &&
                     order.paymentStatus == FirefaPaymentStatus.unpaid)
                   TextButton.icon(

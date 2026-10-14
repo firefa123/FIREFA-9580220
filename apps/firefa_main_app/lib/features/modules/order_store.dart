@@ -461,22 +461,13 @@ class FirefaOrderStore extends ChangeNotifier {
     );
   }
 
-  /// Records a full local/demo refund without undoing ingredients already used.
-  Future<bool> refundPaidAndPersist(
-    String outletId,
-    String orderId, {
-    required String refundMethod,
-    required String reason,
-  }) async {
-    return _mutateOrderAndPersist(
-      outletId,
-      orderId,
-      mutation: (order) => order.markRefunded(
-        method: refundMethod,
-        reason: reason,
-      ),
-    );
+  /// Records a partial or full local/demo refund. Inventory is not restored automatically.
+  Future<bool> refundPaidAndPersist(String outletId, String orderId, {required String refundMethod, required String reason, int? amount}) async {
+    return _mutateOrderAndPersist(outletId, orderId, mutation: (order) => order.markRefunded(method: refundMethod, reason: reason, amount: amount));
   }
+
+  /// Records a BON as an outstanding receivable, never as a completed sale.
+  Future<bool> markBonAndPersist(String outletId, String orderId) async => _mutateOrderAndPersist(outletId, orderId, mutation: (order) => order.markBon());
 
   Future<bool> _mutateOrderAndPersist(
     String outletId,
@@ -497,6 +488,8 @@ class FirefaOrderStore extends ChangeNotifier {
     final previousRefundMethod = order.refundMethod;
     final previousRefundReason = order.refundReason;
     final previousCashRefundAmount = order.cashRefundAmount;
+    final previousRefundAmount = order.refundAmount;
+    final previousRefundRecords = List<FirefaRefundRecord>.from(order.refundRecords);
     if (!mutation(order)) return false;
 
     FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
@@ -515,6 +508,8 @@ class FirefaOrderStore extends ChangeNotifier {
       order.refundMethod = previousRefundMethod;
       order.refundReason = previousRefundReason;
       order.cashRefundAmount = previousCashRefundAmount;
+      order.refundAmount = previousRefundAmount;
+      order.refundRecords..clear()..addAll(previousRefundRecords);
       FirefaOfflineSyncQueue.instance.enqueueOrder(order, 'order.updated');
       _scheduleSave();
       notifyListeners();

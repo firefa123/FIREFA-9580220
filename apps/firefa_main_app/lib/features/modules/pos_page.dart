@@ -979,12 +979,15 @@ class _PosPageState extends State<PosPage> {
             : payment.method == 'Split'
                 ? payment.splitCash
                 : 0;
-        if (!await store.markPaidAndPersist(
-          sourceOutlet,
-          order.id,
-          paymentMethod: method,
-          cashPaidAmount: cashPaidAmount,
-        )) {
+        final paymentSaved = payment.method == 'BON'
+            ? await store.markBonAndPersist(sourceOutlet, order.id)
+            : await store.markPaidAndPersist(
+                sourceOutlet,
+                order.id,
+                paymentMethod: method,
+                cashPaidAmount: cashPaidAmount,
+              );
+        if (!paymentSaved) {
           throw StateError('Status pembayaran tidak dapat diperbarui.');
         }
       }
@@ -999,7 +1002,7 @@ class _PosPageState extends State<PosPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(
-          '${order.id} tersimpan — ${payment == null ? 'Unpaid' : 'Paid (simulasi)'}.',
+          '${order.id} tersimpan — ${payment == null ? 'Unpaid' : payment.method == 'BON' ? 'BON / Piutang' : 'Paid (simulasi)'}.',
         )),
       );
       await _showOrderReceipt(order, sourceOutlet);

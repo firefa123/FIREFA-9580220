@@ -6,6 +6,7 @@ class PosPaymentDialog extends StatefulWidget {
   final String orderType;
   final String? table;
   final int itemCount;
+  final bool allowBon;
 
   const PosPaymentDialog({
     super.key,
@@ -13,6 +14,7 @@ class PosPaymentDialog extends StatefulWidget {
     required this.orderType,
     required this.itemCount,
     this.table,
+    this.allowBon = true,
   });
 
   @override
@@ -91,8 +93,8 @@ class _PosPaymentDialogState extends State<PosPaymentDialog> {
         received: method == 'Cash'
             ? cashReceived
             : method == 'Split'
-            ? splitCash + splitOther
-            : widget.total,
+                ? splitCash + splitOther
+                : method == 'BON' ? 0 : widget.total,
         change: change,
         splitMethod: method == 'Split' ? splitMethod : null,
         splitCash: method == 'Split' ? splitCash : 0,

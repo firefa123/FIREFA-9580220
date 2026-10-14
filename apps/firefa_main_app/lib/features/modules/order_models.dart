@@ -10,6 +10,16 @@ enum FirefaOrderStatus {
 
 enum FirefaPaymentStatus { unpaid, paid, refunded }
 
+class FirefaRefundRecord {
+  final int amount;
+  final String method;
+  final String reason;
+  final DateTime createdAt;
+  const FirefaRefundRecord({required this.amount, required this.method, required this.reason, required this.createdAt});
+  Map<String, dynamic> toJson() => {'amount': amount, 'method': method, 'reason': reason, 'createdAt': createdAt.toIso8601String()};
+  factory FirefaRefundRecord.fromJson(Map<String, dynamic> json) => FirefaRefundRecord(amount: json['amount'] as int, method: json['method'] as String, reason: json['reason'] as String, createdAt: DateTime.parse(json['createdAt'] as String));
+}
+
 extension FirefaOrderStatusDetails on FirefaOrderStatus {
   String get label {
     switch (this) {
@@ -102,6 +112,8 @@ class FirefaOrder {
   String? refundMethod;
   String? refundReason;
   int cashRefundAmount;
+  int refundAmount;
+  final List<FirefaRefundRecord> refundRecords;
   final List<FirefaOrderItem> items;
   final int subtotal;
   final int discount;
@@ -126,6 +138,8 @@ class FirefaOrder {
     this.refundMethod,
     this.refundReason,
     this.cashRefundAmount = 0,
+    this.refundAmount = 0,
+    List<FirefaRefundRecord> refundRecords = const [],
     required this.items,
     required this.subtotal,
     required this.discount,
@@ -134,9 +148,11 @@ class FirefaOrder {
     required this.total,
     this.status = FirefaOrderStatus.confirmed,
     this.paymentStatus = FirefaPaymentStatus.unpaid,
-  });
+  }) : refundRecords = List<FirefaRefundRecord>.from(refundRecords);
 
   int get itemCount => items.fold(0, (sum, item) => sum + item.quantity);
+  int get refundableAmount => (total - refundAmount).clamp(0, total);
+  bool get hasPartialRefund => refundAmount > 0 && refundAmount < total;
 
   bool get canComplete =>
       status == FirefaOrderStatus.served &&
@@ -189,20 +205,27 @@ class FirefaOrder {
     return true;
   }
 
-  bool markRefunded({
-    required String method,
-    required String reason,
-    DateTime? refundTime,
-  }) {
-    if (paymentStatus != FirefaPaymentStatus.paid ||
-        method.trim().isEmpty || reason.trim().isEmpty) {
-      return false;
-    }
-    paymentStatus = FirefaPaymentStatus.refunded;
-    refundedAt = refundTime ?? DateTime.now();
-    refundMethod = method.trim();
-    refundReason = reason.trim();
-    cashRefundAmount = method.trim().toLowerCase() == 'cash' ? total : 0;
+  bool markBon() {
+    if (status == FirefaOrderStatus.draft || status == FirefaOrderStatus.cancelled || paymentStatus != FirefaPaymentStatus.unpaid) return false;
+    paymentMethod = 'BON';
+    paidAt = null;
+    cashPaidAmount = 0;
+    return true;
+  }
+
+  bool markRefunded({required String method, required String reason, int? amount, DateTime? refundTime}) {
+    final refundValue = amount ?? refundableAmount;
+    final normalizedMethod = method.trim();
+    final normalizedReason = reason.trim();
+    if (paymentStatus != FirefaPaymentStatus.paid || normalizedMethod.isEmpty || normalizedReason.isEmpty || refundValue <= 0 || refundValue > refundableAmount) return false;
+    final timestamp = refundTime ?? DateTime.now();
+    refundRecords.add(FirefaRefundRecord(amount: refundValue, method: normalizedMethod, reason: normalizedReason, createdAt: timestamp));
+    refundAmount += refundValue;
+    if (normalizedMethod.toLowerCase() == 'cash') cashRefundAmount += refundValue;
+    refundedAt = timestamp;
+    refundMethod = normalizedMethod;
+    refundReason = normalizedReason;
+    if (refundAmount >= total) paymentStatus = FirefaPaymentStatus.refunded;
     return true;
   }
 
@@ -220,6 +243,8 @@ class FirefaOrder {
         'refundMethod': refundMethod,
         'refundReason': refundReason,
         'cashRefundAmount': cashRefundAmount,
+        'refundAmount': refundAmount,
+        'refundRecords': refundRecords.map((record) => record.toJson()).toList(),
         'items': items.map((item) => item.toJson()).toList(),
         'subtotal': subtotal,
         'discount': discount,
@@ -251,6 +276,10 @@ class FirefaOrder {
       refundMethod: json['refundMethod'] as String?,
       refundReason: json['refundReason'] as String?,
       cashRefundAmount: json['cashRefundAmount'] as int? ?? 0,
+      refundAmount: json['refundAmount'] as int? ?? (json['paymentStatus'] == FirefaPaymentStatus.refunded.name ? (json['total'] as int? ?? 0) : 0),
+      refundRecords: json['refundRecords'] is List
+          ? (json['refundRecords'] as List).map((entry) => FirefaRefundRecord.fromJson(Map<String, dynamic>.from(entry as Map))).toList()
+          : (json['paymentStatus'] == FirefaPaymentStatus.refunded.name ? [FirefaRefundRecord(amount: json['total'] as int? ?? 0, method: json['refundMethod'] as String? ?? 'Legacy', reason: json['refundReason'] as String? ?? 'Legacy refund', createdAt: json['refundedAt'] == null ? DateTime.parse(json['createdAt'] as String) : DateTime.parse(json['refundedAt'] as String))] : const <FirefaRefundRecord>[]),
       items: List.unmodifiable(
         (json['items'] as List).map(
           (item) =>
