@@ -4,10 +4,12 @@ import '../../controllers/checkout_controller.dart';
 import '../../controllers/payment_controller.dart';
 import '../../controllers/pos_controller.dart';
 import '../../controllers/receipt_controller.dart';
+import '../../models/cart_item_model.dart';
 import '../../models/payment_model.dart';
 import '../../models/receipt_model.dart';
 import '../../models/transaction_model.dart';
 import '../../repositories/in_memory_order_repository.dart';
+import '../../utils/transaction_receipt_formatter.dart';
 
 class PosPage extends StatefulWidget {
   const PosPage({super.key});
@@ -178,6 +180,15 @@ class _PosPageState extends State<PosPage> {
   }
 
   Widget _receiptSummary() {
+    final currentReceipt = receipt!;
+    final currentTransaction = transaction!;
+    final currentPayment = payment!;
+    final receiptText = TransactionReceiptFormatter.format(
+      receipt: currentReceipt,
+      transaction: currentTransaction,
+      payment: currentPayment,
+      items: posController.cart,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -186,10 +197,18 @@ class _PosPageState extends State<PosPage> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
-        Text('Transaction: ${receipt!.transactionId}'),
-        Text('Payment: ${receipt!.paymentId}'),
-        Text('Metode: ${receipt!.paymentMethod}'),
-        Text('Total: Rp ${receipt!.totalAmount.toStringAsFixed(0)}'),
+        Expanded(
+          child: Card(
+            margin: EdgeInsets.zero,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(10),
+              child: SelectableText(
+                receiptText,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+            ),
+          ),
+        ),
         const SizedBox(height: 8),
         FilledButton.tonal(
           onPressed: _newTransaction,
