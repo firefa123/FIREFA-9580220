@@ -942,6 +942,12 @@ class _OrdersPageState extends State<OrdersPage> {
           if (order.service > 0) amountRow('Service', order.service),
           const Divider(height: 20),
           amountRow('Grand Total', order.total, bold: true),
+          if (order.refundedAt != null) ...[
+            const Divider(height: 20),
+            Text('Waktu refund: ${order.refundedAt!.toLocal()}', style: const TextStyle(color: muted, fontSize: 12)),
+            Text('Metode refund: ${order.refundMethod ?? '-'} • Tunai dikembalikan: ${rupiah(order.cashRefundAmount)}', style: const TextStyle(color: muted, fontSize: 12)),
+            Text('Alasan: ${order.refundReason ?? '-'}', style: const TextStyle(color: muted, fontSize: 12)),
+          ],
           ],
           if (canManage) ...[
             const SizedBox(height: 14),
