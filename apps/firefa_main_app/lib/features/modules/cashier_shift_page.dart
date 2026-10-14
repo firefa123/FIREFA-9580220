@@ -7,6 +7,20 @@ import '../../core/outlet/active_outlet_store.dart';
 import 'order_models.dart';
 import 'order_store.dart';
 
+int calculateCashSalesForShift({
+  required Iterable<FirefaOrder> orders,
+  required DateTime openedAt,
+  required DateTime closedAt,
+}) {
+  return orders.where((order) {
+    final paidAt = order.paidAt;
+    return order.paymentStatus == FirefaPaymentStatus.paid &&
+        paidAt != null &&
+        !paidAt.isBefore(openedAt) &&
+        !paidAt.isAfter(closedAt);
+  }).fold<int>(0, (sum, order) => sum + order.cashPaidAmount);
+}
+
 class FirefaCashierShift {
   final String id;
   final String outletId;
@@ -258,16 +272,11 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
   }
 
   int _cashSalesForShift(FirefaCashierShift shift, {DateTime? until}) {
-    final cutoff = until ?? DateTime.now();
-    return FirefaOrderStore.instance.ordersForOutlet(shift.outletId)
-        .where((order) {
-          final paidAt = order.paidAt;
-          return order.paymentStatus == FirefaPaymentStatus.paid &&
-              paidAt != null &&
-              !paidAt.isBefore(shift.openedAt) &&
-              !paidAt.isAfter(cutoff);
-        })
-        .fold<int>(0, (sum, order) => sum + order.cashPaidAmount);
+    return calculateCashSalesForShift(
+      orders: FirefaOrderStore.instance.ordersForOutlet(shift.outletId),
+      openedAt: shift.openedAt,
+      closedAt: until ?? DateTime.now(),
+    );
   }
 
   Future<void> _closeShift(FirefaCashierShift shift) async {
