@@ -200,8 +200,8 @@ class _SettingsPageState extends State<SettingsPage> {
               Text('${outlet.selectedOutletName} • ${outlet.role.label}',
                   style: const TextStyle(color: muted)),
               const SizedBox(height: 6),
-              const Text('Pengaturan tersimpan di perangkat ini. Belum tersinkronisasi cloud. '
-                  'Detail ini belum otomatis diterapkan ke struk POS.',
+              const Text('Pengaturan tersimpan di perangkat ini dan digunakan pada preview struk setelah checkout. '
+                  'Belum tersinkronisasi cloud atau printer fisik.',
                   style: TextStyle(color: muted, fontSize: 12)),
               const SizedBox(height: 18),
               ConstrainedBox(
