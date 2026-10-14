@@ -316,9 +316,6 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
       return const Center(child: CircularProgressIndicator());
     }
     final outletId = FirefaActiveOutletStore.instance.selectedOutletId;
-    final active = _store.activeForOutlet(outletId);
-    final history = _store.historyForOutlet(outletId);
-
     return AnimatedBuilder(
       animation: _store,
       builder: (context, _) {
@@ -375,7 +372,7 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
                       _amountField('Uang fisik saat tutup', _countedController),
                       const SizedBox(height: 12),
                       Text(
-                        'Estimasi kas: ${_money(current.openingCash + _number(_salesController).clamp(0, 1 << 62) + _number(_cashInController).clamp(0, 1 << 62) - _number(_cashOutController).clamp(0, 1 << 62))}',
+                        'Estimasi kas: ${_money(current.openingCash + (_number(_salesController) < 0 ? 0 : _number(_salesController)) + (_number(_cashInController) < 0 ? 0 : _number(_cashInController)) - (_number(_cashOutController) < 0 ? 0 : _number(_cashOutController)))}',
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 12),
