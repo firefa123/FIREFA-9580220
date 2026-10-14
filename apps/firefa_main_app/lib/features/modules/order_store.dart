@@ -245,8 +245,13 @@ class FirefaOrderStore extends ChangeNotifier {
       for (final table in tables.forOutlet(order.outletId).where(
         (candidate) => candidate.name == order.tableId,
       )) {
-        if (table.occupied != shouldBeOccupied) {
-          tables.setOccupied(order.outletId, table.id, shouldBeOccupied);
+        if (activeOrders.isNotEmpty) {
+          final activeOrder = activeOrders.first;
+          if (table.reservationOrderId != activeOrder.id) {
+            tables.reserveForOrder(order.outletId, table.id, activeOrder.id);
+          }
+        } else if (table.reservationOrderId == order.id) {
+          tables.releaseOrderReservation(order.outletId, table.id, order.id);
         }
       }
       await tables.waitForPendingSave();
