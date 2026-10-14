@@ -5,8 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/outlet_model.dart';
 
 class OutletRepository {
-  OutletRepository({SharedPreferences? preferences})
-      : _preferences = preferences;
+  OutletRepository({SharedPreferences? this._preferences});
 
   static const storageKey = 'firefa_core_outlets_v1';
   SharedPreferences? _preferences;

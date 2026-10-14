@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/menu_item.dart';
 
 class MenuRepository {
-  MenuRepository({SharedPreferences? preferences}) : _preferences = preferences;
+  MenuRepository({SharedPreferences? this._preferences});
 
   static const storageKey = 'firefa_core_products_v1';
   SharedPreferences? _preferences;

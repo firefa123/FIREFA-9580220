@@ -60,7 +60,7 @@ void main() {
 
   test('cancelling unpaid POS order restores recipe stock exactly once', () async {
     SharedPreferences.setMockInitialValues({});
-    final inventory = FirefaInventoryStore.instance;
+    final inventory = legacy.FirefaInventoryStore.instance;
     final orders = FirefaOrderStore.instance;
     await inventory.initialize();
     await orders.initialize();
@@ -233,7 +233,7 @@ void main() {
       isTrue,
     );
 
-    final rawInventory = prefs.getString(FirefaInventoryStore.storageKey);
+    final rawInventory = prefs.getString(legacy.FirefaInventoryStore.storageKey);
     expect(rawInventory, isNotNull);
     final savedInventory = jsonDecode(rawInventory!) as Map<String, dynamic>;
     expect((savedInventory['reversedOrderIds'] as List).cast<String>(),

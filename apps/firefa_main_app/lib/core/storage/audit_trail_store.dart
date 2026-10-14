@@ -49,8 +49,7 @@ class FirefaAuditEntry {
 }
 
 class FirefaAuditTrailStore {
-  FirefaAuditTrailStore({SharedPreferences? preferences})
-      : _preferences = preferences;
+  FirefaAuditTrailStore({SharedPreferences? this._preferences});
 
   static const storageKey = 'firefa_audit_trail_v1';
   SharedPreferences? _preferences;

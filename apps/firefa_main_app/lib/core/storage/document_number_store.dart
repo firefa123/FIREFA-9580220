@@ -4,8 +4,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class FirefaDocumentNumberStore {
-  FirefaDocumentNumberStore({SharedPreferences? preferences})
-      : _preferences = preferences;
+  FirefaDocumentNumberStore({SharedPreferences? this._preferences});
 
   static const storageKey = 'firefa_document_sequences_v1';
   static const Map<String, String> prefixes = {
