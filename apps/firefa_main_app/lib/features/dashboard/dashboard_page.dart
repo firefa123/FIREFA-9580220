@@ -55,7 +55,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'Settings',
     'Suppliers',
     'Purchasing',
-    'Printer Management',
+    'Printer Kasir',
   ];
 
   static const pageDescriptions = [
@@ -70,7 +70,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'Kelola preferensi dan konfigurasi bisnis.',
     'Kelola pemasok dan informasi kontak per outlet.',
     'Buat PO dan terima barang ke stok inventory.',
-    'Kelola printer kasir, kitchen, dan bar.',
+    'Kelola konfigurasi printer struk kasir.',
   ];
 
   static const pagePermissions = [
