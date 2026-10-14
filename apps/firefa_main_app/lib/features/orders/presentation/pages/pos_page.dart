@@ -197,7 +197,8 @@ class _PosPageState extends State<PosPage> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
-        Expanded(
+        SizedBox(
+          height: 240,
           child: Card(
             margin: EdgeInsets.zero,
             child: SingleChildScrollView(
