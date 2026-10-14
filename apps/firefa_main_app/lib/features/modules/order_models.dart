@@ -70,12 +70,12 @@ class FirefaOrderItem {
   int get total => quantity * unitPrice;
 
   Map<String, dynamic> toJson() => {
-    'productName': productName,
-    'quantity': quantity,
-    'unitPrice': unitPrice,
-    'details': details,
-    if (productId != null) 'productId': productId,
-  };
+        'productName': productName,
+        'quantity': quantity,
+        'unitPrice': unitPrice,
+        'details': details,
+        if (productId != null) 'productId': productId,
+      };
 
   factory FirefaOrderItem.fromJson(Map<String, dynamic> json) {
     return FirefaOrderItem(
@@ -94,6 +94,7 @@ class FirefaOrder {
   final String orderType;
   final String? tableId;
   final DateTime createdAt;
+  final DateTime? completedAt;
   final List<FirefaOrderItem> items;
   final int subtotal;
   final int discount;
@@ -110,6 +111,7 @@ class FirefaOrder {
     required this.orderType,
     required this.tableId,
     required this.createdAt,
+    this.completedAt,
     required this.items,
     required this.subtotal,
     required this.discount,
@@ -136,8 +138,15 @@ class FirefaOrder {
     }
 
     status = nextStatus;
+    if (nextStatus == FirefaOrderStatus.completed) {
+      // Record an actual completion time for operational reporting.
+      // Existing persisted orders remain compatible when this field is absent.
+      _completedAt = DateTime.now();
+    }
     return true;
   }
+
+  DateTime? _completedAt;
 
   bool cancel() {
     if (!status.canCancel || paymentStatus == FirefaPaymentStatus.paid) {
@@ -160,28 +169,33 @@ class FirefaOrder {
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'outletId': outletId,
-    'orderType': orderType,
-    'tableId': tableId,
-    'createdAt': createdAt.toIso8601String(),
-    'items': items.map((item) => item.toJson()).toList(),
-    'subtotal': subtotal,
-    'discount': discount,
-    'tax': tax,
-    'service': service,
-    'total': total,
-    'status': status.name,
-    'paymentStatus': paymentStatus.name,
-  };
+        'id': id,
+        'outletId': outletId,
+        'orderType': orderType,
+        'tableId': tableId,
+        'createdAt': createdAt.toIso8601String(),
+        'completedAt': completedAt?.toIso8601String() ??
+            _completedAt?.toIso8601String(),
+        'items': items.map((item) => item.toJson()).toList(),
+        'subtotal': subtotal,
+        'discount': discount,
+        'tax': tax,
+        'service': service,
+        'total': total,
+        'status': status.name,
+        'paymentStatus': paymentStatus.name,
+      };
 
   factory FirefaOrder.fromJson(Map<String, dynamic> json) {
-    return FirefaOrder(
+    final order = FirefaOrder(
       id: json['id'] as String,
       outletId: json['outletId'] as String,
       orderType: json['orderType'] as String,
       tableId: json['tableId'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      completedAt: json['completedAt'] == null
+          ? null
+          : DateTime.parse(json['completedAt'] as String),
       items: List.unmodifiable(
         (json['items'] as List).map(
           (item) =>
@@ -198,5 +212,7 @@ class FirefaOrder {
         json['paymentStatus'] as String,
       ),
     );
+    order._completedAt = order.completedAt;
+    return order;
   }
 }
