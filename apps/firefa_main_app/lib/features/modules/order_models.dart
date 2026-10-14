@@ -8,7 +8,7 @@ enum FirefaOrderStatus {
   cancelled,
 }
 
-enum FirefaPaymentStatus { unpaid, paid }
+enum FirefaPaymentStatus { unpaid, paid, refunded }
 
 extension FirefaOrderStatusDetails on FirefaOrderStatus {
   String get label {
@@ -98,6 +98,10 @@ class FirefaOrder {
   DateTime? paidAt;
   String? paymentMethod;
   int cashPaidAmount;
+  DateTime? refundedAt;
+  String? refundMethod;
+  String? refundReason;
+  int cashRefundAmount;
   final List<FirefaOrderItem> items;
   final int subtotal;
   final int discount;
@@ -118,6 +122,10 @@ class FirefaOrder {
     this.paidAt,
     this.paymentMethod,
     this.cashPaidAmount = 0,
+    this.refundedAt,
+    this.refundMethod,
+    this.refundReason,
+    this.cashRefundAmount = 0,
     required this.items,
     required this.subtotal,
     required this.discount,
@@ -181,6 +189,23 @@ class FirefaOrder {
     return true;
   }
 
+  bool markRefunded({
+    required String method,
+    required String reason,
+    DateTime? refundTime,
+  }) {
+    if (paymentStatus != FirefaPaymentStatus.paid ||
+        method.trim().isEmpty || reason.trim().isEmpty) {
+      return false;
+    }
+    paymentStatus = FirefaPaymentStatus.refunded;
+    refundedAt = refundTime ?? DateTime.now();
+    refundMethod = method.trim();
+    refundReason = reason.trim();
+    cashRefundAmount = method.trim().toLowerCase() == 'cash' ? total : 0;
+    return true;
+  }
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'outletId': outletId,
@@ -191,6 +216,10 @@ class FirefaOrder {
         'paidAt': paidAt?.toIso8601String(),
         'paymentMethod': paymentMethod,
         'cashPaidAmount': cashPaidAmount,
+        'refundedAt': refundedAt?.toIso8601String(),
+        'refundMethod': refundMethod,
+        'refundReason': refundReason,
+        'cashRefundAmount': cashRefundAmount,
         'items': items.map((item) => item.toJson()).toList(),
         'subtotal': subtotal,
         'discount': discount,
@@ -216,6 +245,12 @@ class FirefaOrder {
           : DateTime.parse(json['paidAt'] as String),
       paymentMethod: json['paymentMethod'] as String?,
       cashPaidAmount: json['cashPaidAmount'] as int? ?? 0,
+      refundedAt: json['refundedAt'] == null
+          ? null
+          : DateTime.parse(json['refundedAt'] as String),
+      refundMethod: json['refundMethod'] as String?,
+      refundReason: json['refundReason'] as String?,
+      cashRefundAmount: json['cashRefundAmount'] as int? ?? 0,
       items: List.unmodifiable(
         (json['items'] as List).map(
           (item) =>
