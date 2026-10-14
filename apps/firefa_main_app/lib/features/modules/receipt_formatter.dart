@@ -13,7 +13,8 @@ class FirefaReceiptFormatter {
     if (settings.outletId != order.outletId) {
       throw ArgumentError('Receipt settings must match order outlet');
     }
-    String money(int value) => 'Rp $value';
+    String money(int value) =>
+        'Rp ${value.toString().replaceAllMapped(RegExp(r'\\B(?=(\\d{3})+(?!\\d))'), (_) => '.')}';
     final lines = <String>[
       outletName,
       if (settings.address.trim().isNotEmpty) settings.address.trim(),
