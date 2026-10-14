@@ -16,9 +16,11 @@ class FirefaOutletContext {
     required this.assignedOutlets,
   });
 
-  bool get canViewAllOutlets => role == FirefaRole.owner;
+  bool get canViewAllOutlets =>
+      role == FirefaRole.owner || role == FirefaRole.manager;
 
-  List<FirefaOutlet> get availableOutlets => assignedOutlets;
+  List<FirefaOutlet> get availableOutlets =>
+      List.unmodifiable(assignedOutlets);
 
   bool canAccessOutlet(String outletId) =>
       assignedOutlets.any((outlet) => outlet.id == outletId);
@@ -29,11 +31,13 @@ class FirefaOutletContext {
 
     switch (role) {
       case FirefaRole.owner:
+      case FirefaRole.manager:
         return FirefaOutletContext(
           role: role,
           assignedOutlets: [outletUtama, outletDua],
         );
       case FirefaRole.cashier:
+      case FirefaRole.kitchenBar:
         return FirefaOutletContext(
           role: role,
           assignedOutlets: [outletUtama],

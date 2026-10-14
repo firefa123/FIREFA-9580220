@@ -27,15 +27,13 @@ class FirefaActiveOutletStore extends ChangeNotifier {
   FirefaRole get role => _role;
   String get selectedOutletId => _selectedOutletId;
 
-  bool get canViewAllOutlets => _role == FirefaRole.owner;
+  bool get canViewAllOutlets =>
+      _role == FirefaRole.owner || _role == FirefaRole.manager;
 
   List<FirefaOutlet> get accessibleOutlets {
     if (canViewAllOutlets) {
       return List.unmodifiable(availableOutlets);
     }
-
-    // Kasir demo hanya ditugaskan ke Outlet Utama.
-    // Penugasan final perlu diambil dari membership pengguna di backend.
     return List.unmodifiable(
       availableOutlets.where((outlet) => outlet.id == 'outlet-001'),
     );
