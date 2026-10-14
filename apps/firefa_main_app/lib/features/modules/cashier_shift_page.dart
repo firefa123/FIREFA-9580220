@@ -227,7 +227,12 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
   @override
   void initState() {
     super.initState();
+    FirefaOrderStore.instance.addListener(_onOrdersChanged);
     _load();
+  }
+
+  void _onOrdersChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _load() async {
@@ -237,6 +242,7 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
 
   @override
   void dispose() {
+    FirefaOrderStore.instance.removeListener(_onOrdersChanged);
     _openingController.dispose();
     _cashInController.dispose();
     _cashOutController.dispose();
