@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/outlet/active_outlet_store.dart';
+import 'order_models.dart';
+import 'order_store.dart';
 
 class FirefaCashierShift {
   final String id;
@@ -199,7 +201,6 @@ class CashierShiftPage extends StatefulWidget {
 class _CashierShiftPageState extends State<CashierShiftPage> {
   final _store = FirefaCashierShiftStore.instance;
   final _openingController = TextEditingController();
-  final _salesController = TextEditingController(text: '0');
   final _cashInController = TextEditingController(text: '0');
   final _cashOutController = TextEditingController(text: '0');
   final _countedController = TextEditingController();
@@ -220,7 +221,6 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
   @override
   void dispose() {
     _openingController.dispose();
-    _salesController.dispose();
     _cashInController.dispose();
     _cashOutController.dispose();
     _countedController.dispose();
@@ -257,12 +257,26 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
     }
   }
 
+  int _cashSalesForShift(FirefaCashierShift shift, {DateTime? until}) {
+    final cutoff = until ?? DateTime.now();
+    return FirefaOrderStore.instance.ordersForOutlet(shift.outletId)
+        .where((order) {
+          final paidAt = order.paidAt;
+          return order.paymentStatus == FirefaPaymentStatus.paid &&
+              paidAt != null &&
+              !paidAt.isBefore(shift.openedAt) &&
+              !paidAt.isAfter(cutoff);
+        })
+        .fold<int>(0, (sum, order) => sum + order.cashPaidAmount);
+  }
+
   Future<void> _closeShift(FirefaCashierShift shift) async {
-    final sales = _number(_salesController);
+    final closingTime = DateTime.now();
+    final cashSales = _cashSalesForShift(shift, until: closingTime);
     final cashIn = _number(_cashInController);
     final cashOut = _number(_cashOutController);
     final counted = _number(_countedController);
-    if ([sales, cashIn, cashOut, counted].any((value) => value < 0)) {
+    if ([cashIn, cashOut, counted].any((value) => value < 0)) {
       _message('Semua nominal penutupan wajib diisi dengan angka nol atau lebih.');
       return;
     }
@@ -270,13 +284,13 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
     try {
       final closed = _store.closeShift(
         shiftId: shift.id,
-        cashSales: sales,
+        cashSales: cashSales,
         cashIn: cashIn,
         cashOut: cashOut,
         countedCash: counted,
+        closedAt: closingTime,
       );
       await _store.waitForPendingSave();
-      _salesController.text = '0';
       _cashInController.text = '0';
       _cashOutController.text = '0';
       _countedController.clear();
@@ -302,6 +316,7 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
       controller: controller,
       autofocus: autofocus,
       keyboardType: TextInputType.number,
+      onChanged: (_) { if (mounted) setState(() {}); },
       decoration: InputDecoration(
         labelText: label,
         prefixText: 'Rp ',
@@ -360,10 +375,13 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
                       Text('Modal awal: ${_money(current.openingCash)}'),
                       const SizedBox(height: 16),
                       const Text(
-                        'Isi ringkasan tunai secara manual. Penjualan belum otomatis dikelompokkan berdasarkan metode pembayaran.',
+                        'Penjualan tunai dihitung otomatis dari transaksi yang dibayar dengan tunai atau bagian tunai dari split payment selama shift ini.',
                       ),
                       const SizedBox(height: 12),
-                      _amountField('Penjualan tunai', _salesController),
+                      Text(
+                        'Penjualan tunai otomatis: ${_money(_cashSalesForShift(current))}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       const SizedBox(height: 10),
                       _amountField('Kas masuk tambahan', _cashInController),
                       const SizedBox(height: 10),
@@ -372,7 +390,7 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
                       _amountField('Uang fisik saat tutup', _countedController),
                       const SizedBox(height: 12),
                       Text(
-                        'Estimasi kas: ${_money(current.openingCash + (_number(_salesController) < 0 ? 0 : _number(_salesController)) + (_number(_cashInController) < 0 ? 0 : _number(_cashInController)) - (_number(_cashOutController) < 0 ? 0 : _number(_cashOutController)))}',
+                        'Estimasi kas: ${_money(current.openingCash + _cashSalesForShift(current) + (_number(_cashInController) < 0 ? 0 : _number(_cashInController)) - (_number(_cashOutController) < 0 ? 0 : _number(_cashOutController)))}',
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 12),
@@ -409,7 +427,7 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
                 ),
             const SizedBox(height: 8),
             const Text(
-              'Mode lokal: data tersimpan di perangkat ini. Rekonsiliasi penjualan masih manual dan belum menjadi laporan kas final.',
+              'Mode lokal: data tersimpan di perangkat ini. Pembayaran QRIS/transfer tidak menambah estimasi uang fisik. Transaksi lama tanpa waktu/metode pembayaran tidak dihitung otomatis.',
               style: TextStyle(color: Colors.black54, fontSize: 12),
             ),
           ],
