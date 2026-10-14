@@ -203,6 +203,9 @@ class FirefaLocalStore extends ChangeNotifier {
     String? table,
   }) async {
     if (quantities.isEmpty) throw StateError('Keranjang masih kosong.');
+    if (type == 'Dine In' && (table == null || isTableOccupied(table))) {
+      throw StateError('Meja belum dipilih atau sudah terisi.');
+    }
     for (final entry in quantities.entries) {
       final product = products.firstWhere(
         (item) => item.id == entry.key,
@@ -704,7 +707,9 @@ class _PosViewState extends State<PosView> {
             childAspectRatio: 2.6,
             children: [for (final product in visible) Card(child: InkWell(
               borderRadius: BorderRadius.circular(16),
-              onTap: product.stock <= 0 ? null : () => setState(() => cart.update(product.id, (qty) => qty + 1, ifAbsent: () => 1)),
+              onTap: product.stock <= (cart[product.id] ?? 0)
+                  ? null
+                  : () => setState(() => cart.update(product.id, (qty) => qty + 1, ifAbsent: () => 1)),
               child: Padding(padding: const EdgeInsets.all(14), child: Row(children: [
                 Container(width: 46, height: 46, decoration: BoxDecoration(color: const Color(0xFFE0F2F1), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.restaurant, color: _teal)),
                 const SizedBox(width: 12),
