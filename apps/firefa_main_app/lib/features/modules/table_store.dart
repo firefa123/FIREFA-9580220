@@ -5,21 +5,24 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class FirefaTable {
-  const FirefaTable({required this.id, required this.outletId, required this.name, required this.occupied});
+  const FirefaTable({required this.id, required this.outletId, required this.name, required this.occupied, this.reservationOrderId});
   final String id;
   final String outletId;
   final String name;
   final bool occupied;
+  final String? reservationOrderId;
 
-  Map<String, dynamic> toJson() => {'id': id, 'outletId': outletId, 'name': name, 'occupied': occupied};
+  Map<String, dynamic> toJson() => {'id': id, 'outletId': outletId, 'name': name, 'occupied': occupied, if (reservationOrderId != null) 'reservationOrderId': reservationOrderId};
   factory FirefaTable.fromJson(Map<String, dynamic> json) => FirefaTable(
     id: json['id'] as String,
     outletId: json['outletId'] as String,
     name: json['name'] as String,
     occupied: json['occupied'] as bool,
+    reservationOrderId: json['reservationOrderId'] as String?,
   );
-  FirefaTable copyWith({bool? occupied, String? name}) => FirefaTable(
+  FirefaTable copyWith({bool? occupied, String? name, String? reservationOrderId, bool clearReservationOrderId = false}) => FirefaTable(
     id: id, outletId: outletId, name: name ?? this.name, occupied: occupied ?? this.occupied,
+    reservationOrderId: clearReservationOrderId ? null : reservationOrderId ?? this.reservationOrderId,
   );
 }
 
@@ -78,6 +81,41 @@ class FirefaTableStore extends ChangeNotifier {
     if (_tables[index].occupied == occupied) return true;
     if (!occupied && _hasActiveOrderFor(_tables[index])) return false;
     _tables[index] = _tables[index].copyWith(occupied: occupied);
+    notifyListeners();
+    _save();
+    return true;
+  }
+
+  /// Reserves a table for a specific POS order, distinguishing order reservations
+  /// from manual occupancy so interrupted completion can be repaired on restart.
+  bool reserveForOrder(String outletId, String id, String orderId) {
+    if (!_initialized || orderId.trim().isEmpty) return false;
+    final index = _tables.indexWhere((t) => t.id == id && t.outletId == outletId);
+    if (index < 0) return false;
+    final table = _tables[index];
+    if (table.reservationOrderId != null && table.reservationOrderId != orderId) {
+      return false;
+    }
+    if (table.occupied && table.reservationOrderId == null &&
+        !_hasActiveOrderFor(table)) {
+      // A manually occupied table cannot be silently taken by a new order.
+      return false;
+    }
+    _tables[index] = table.copyWith(occupied: true, reservationOrderId: orderId);
+    notifyListeners();
+    _save();
+    return true;
+  }
+
+  /// Releases only the reservation owned by the specified order.
+  bool releaseOrderReservation(String outletId, String id, String orderId) {
+    if (!_initialized) return false;
+    final index = _tables.indexWhere((t) => t.id == id && t.outletId == outletId);
+    if (index < 0 || _tables[index].reservationOrderId != orderId) return false;
+    _tables[index] = _tables[index].copyWith(
+      occupied: false,
+      clearReservationOrderId: true,
+    );
     notifyListeners();
     _save();
     return true;
