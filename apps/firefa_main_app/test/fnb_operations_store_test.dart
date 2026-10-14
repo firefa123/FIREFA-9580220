@@ -4,6 +4,10 @@ import 'package:firefa_main_app/features/modules/fnb_operations_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    SharedPreferences.setMockInitialValues({});
+    await FirefaFnbOperationsStore.instance.initialize();
+  });
   test('reservation JSON round trip preserves schedule and status', () {
     final value = FirefaReservation(id:'RSV-1', outletId:'outlet-a', guest:'Nisa',
       phone:'0812', partySize:4, at:DateTime(2026,10,20,19), status:'booked', table:'A1');
@@ -28,9 +32,7 @@ void main() {
     expect(promo.discountAt(DateTime(2027,1),100000),0);
   });
   test('promo code is required when a promo has a code and type pricing validates', () async {
-    SharedPreferences.setMockInitialValues({});
     final store = FirefaFnbOperationsStore.instance;
-    await store.initialize();
     final now = DateTime.now();
     expect(store.savePromo(outlet:'promo-test-outlet',name:'Promo Kode',code:'HEMAT20',type:'percent',value:20,minimum:10000,start:now.subtract(const Duration(days:1)),end:now.add(const Duration(days:1))),true);
     expect(store.promoDiscount('promo-test-outlet',50000),0);
