@@ -995,30 +995,116 @@ class OrdersView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visible = kitchenMode ? store.orders.where((order) => order.active).toList() : store.orders;
+    final visible = kitchenMode
+        ? store.orders.where((order) => order.active).toList()
+        : store.orders;
+
     return PageFrame(
       title: kitchenMode ? 'Antrean Kitchen / Bar' : 'Manajemen Pesanan',
       subtitle: 'Perubahan status tersimpan di perangkat ini.',
       child: visible.isEmpty
-          ? const Card(child: Padding(padding: EdgeInsets.all(28), child: Center(child: Text('Belum ada pesanan.'))))
-          : Column(children: [for (final order in visible) Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Row(children: [Expanded(child: Text(order.id, style: const TextStyle(fontWeight: FontWeight.w800, color: _ink))), Chip(label: Text(order.status))]),
-              Text('${order.type}${order.table == null ? '' : ' • Meja ${order.table}'} • ${order.paid ? 'Paid (demo)' : 'Unpaid'}', style: const TextStyle(color: _muted, fontSize: 12)),
-              const SizedBox(height: 8),
-              for (final line in order.lines) Text('${line.quantity}× ${line.name} — ${_rupiah(line.total)}'),
-              const Divider(),
-              Row(children: [const Expanded(child: Text('Total', style: TextStyle(fontWeight: FontWeight.w700))), Text(_rupiah(order.total), style: const TextStyle(fontWeight: FontWeight.w800, color: _teal))]),
-              const SizedBox(height: 8),
-              Wrap(alignment: WrapAlignment.end, spacing: 8, children: [
-                OutlinedButton.icon(onPressed: () => _showReceipt(context, order), icon: const Icon(Icons.receipt_long), label: const Text('Struk')),
-                if (order.active) OutlinedButton(onPressed: () async {
-                  try { await store.cancelOrder(order); } catch (error) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Pembatalan gagal: $error'))); }
-                }, child: const Text('Batalkan')),
-                if (order.active) FilledButton(onPressed: () async {
-                  try { await store.advanceOrder(order); } catch (error) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Status gagal disimpan: $error'))); }
-                }, child: Text(_nextStatusLabel(order.status))),
-              ]),
-            ]))]),
+          ? const Card(
+              child: Padding(
+                padding: EdgeInsets.all(28),
+                child: Center(child: Text('Belum ada pesanan.')),
+              ),
+            )
+          : Column(
+              children: [
+                for (final order in visible)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  order.id,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: _ink,
+                                  ),
+                                ),
+                              ),
+                              Chip(label: Text(order.status)),
+                            ],
+                          ),
+                          Text(
+                            '${order.type}${order.table == null ? '' : ' • Meja ${order.table}'} • ${order.paid ? 'Paid (demo)' : 'Unpaid'}',
+                            style: const TextStyle(color: _muted, fontSize: 12),
+                          ),
+                          const SizedBox(height: 8),
+                          for (final line in order.lines)
+                            Text('${line.quantity}× ${line.name} — ${_rupiah(line.total)}'),
+                          const Divider(),
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Total',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                              Text(
+                                _rupiah(order.total),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: _teal,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            alignment: WrapAlignment.end,
+                            spacing: 8,
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: () => _showReceipt(context, order),
+                                icon: const Icon(Icons.receipt_long),
+                                label: const Text('Struk'),
+                              ),
+                              if (order.active)
+                                OutlinedButton(
+                                  onPressed: () async {
+                                    try {
+                                      await store.cancelOrder(order);
+                                    } catch (error) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Pembatalan gagal: $error')),
+                                        );
+                                      }
+                                    }
+                                  },
+                                  child: const Text('Batalkan'),
+                                ),
+                              if (order.active)
+                                FilledButton(
+                                  onPressed: () async {
+                                    try {
+                                      await store.advanceOrder(order);
+                                    } catch (error) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Status gagal disimpan: $error')),
+                                        );
+                                      }
+                                    }
+                                  },
+                                  child: Text(_nextStatusLabel(order.status)),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
     );
   }
 
