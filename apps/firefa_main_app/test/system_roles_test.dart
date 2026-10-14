@@ -18,6 +18,7 @@ void main() {
       expect(FirefaAccess.can(FirefaRole.cashier, FirefaPermission.ordersView), isTrue);
       expect(FirefaAccess.can(FirefaRole.cashier, FirefaPermission.tablesManage), isTrue);
       expect(FirefaAccess.can(FirefaRole.cashier, FirefaPermission.printerManage), isTrue);
+      expect(FirefaAccess.can(FirefaRole.cashier, FirefaPermission.cashierShiftManage), isTrue);
       expect(FirefaAccess.can(FirefaRole.cashier, FirefaPermission.settingsManage), isFalse);
       expect(FirefaAccess.can(FirefaRole.cashier, FirefaPermission.inventoryManage), isFalse);
       expect(FirefaAccess.can(FirefaRole.cashier, FirefaPermission.reportsView), isFalse);
