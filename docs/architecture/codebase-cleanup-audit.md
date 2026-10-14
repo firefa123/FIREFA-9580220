@@ -20,10 +20,11 @@ Removed from the tracked repository:
 - 1 unused legacy POS screen with hard-coded demo products. The active POS screen under `features/modules/pos_page.dart` remains.
 - 8 unused settings prototypes: branding persistence/state DTOs, a multi-outlet branding scope DTO, duplicate owner permission/access/navigation helpers, an empty staff-management controller, and a duplicate theme controller. The active settings store/controller and core role permissions remain.
 - 4 unused dashboard widgets: a duplicate singular recent-order card, an unused header, operation status widget, and quick-action card. Widgets imported by the active dashboard remain.
+- 3 final isolated stubs: an in-memory notification model/store with no active notification UI, plus a duplicate customer-cart count/subtotal DTO not used by the real customer cart store.
 
 ## Current cleanup totals
 
-Across the first two cleanup passes, 131 Dart files were removed from the tracked tree. The repository now has 226 Dart files and 40 Dart test files. This is a file-count checkpoint only; successful CI and local validation remain the correctness checks.
+Across the first two cleanup passes, 134 Dart files were removed from the tracked tree. The repository now has 223 Dart files and 40 Dart test files. This is a file-count checkpoint only; successful CI and local validation remain the correctness checks.
 
 The separate `apps/firefa_main_app_rebuild/` prototype had already been removed in an earlier commit and remains absent. The active app directory `apps/firefa_main_app/` is retained.
 
