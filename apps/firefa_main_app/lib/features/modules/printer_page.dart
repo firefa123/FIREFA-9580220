@@ -260,9 +260,9 @@ class _PrinterPageState extends State<PrinterPage> {
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Konfigurasi printer ${outlet.selectedOutletName} disimpan lokal pada perangkat ini.',
-              style: TextStyle(
+              style: const TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 13,
               ),
