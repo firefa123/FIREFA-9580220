@@ -42,6 +42,7 @@ void main() {
     // Repairs a reservation missed if the app stopped between order and table writes.
     await orders.synchronizeTableOccupancy();
     expect(tables.forOutlet(outletId).single.occupied, isTrue);
+    expect(tables.forOutlet(outletId).single.reservationOrderId, order.id);
 
     // Active dine-in orders own the table lifecycle; manual release is blocked.
     expect(tables.setOccupied(outletId, table.id, false), isFalse);
@@ -60,6 +61,12 @@ void main() {
     await tables.waitForPendingSave();
     expect(tables.forOutlet(outletId).single.occupied, isFalse);
     expect(tables.setOccupied(outletId, table.id, true), isTrue);
+
+    // A persisted reservation without an active order is repaired on startup.
+    expect(tables.reserveForOrder(outletId, table.id, 'ORD-STALE'), isTrue);
+    await orders.synchronizeTableOccupancy();
+    expect(tables.forOutlet(outletId).single.occupied, isFalse);
+    expect(tables.forOutlet(outletId).single.reservationOrderId, isNull);
 
     await orders.waitForPendingSave();
     await tables.waitForPendingSave();
