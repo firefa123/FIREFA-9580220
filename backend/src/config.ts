@@ -12,5 +12,17 @@ const envSchema = z.object({
 export type AppConfig = z.infer<typeof envSchema>;
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
-  return envSchema.parse(env);
+  const config = envSchema.parse(env);
+  if (config.NODE_ENV === "production") {
+    const secrets = [config.JWT_SECRET, config.BOOTSTRAP_TOKEN];
+    if (secrets.some((secret) =>
+      secret.toLowerCase().includes("replace-with") ||
+      secret.toLowerCase().includes("change-this") ||
+      secret.toLowerCase().includes("example") ||
+      secret.toLowerCase().includes("secret-that-is-at-least")
+    )) {
+      throw new Error("Production JWT_SECRET and BOOTSTRAP_TOKEN must be unique random secrets, not template values");
+    }
+  }
+  return config;
 }
