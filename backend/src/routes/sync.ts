@@ -394,7 +394,8 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
           return reply.code(403).send({ error: "owner_required_for_recovery" });
         }
         const reportedCashPayment = hasReportedCashPayment(event.orderSnapshot);
-        if (event.orderSnapshot.status === "completed" && !reportedCashPayment) {
+        const bonSale = isBonSale(event.orderSnapshot);
+        if (event.orderSnapshot.status === "completed" && !reportedCashPayment && !bonSale) {
           await client.query("ROLLBACK");
           inTransaction = false;
           return reply.code(422).send({ error: "payment_verification_required" });
@@ -445,6 +446,14 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
              event.eventId + ":cash-payment", request.user.sub],
           );
         }
+        if (bonSale) {
+          await persistBonReceivable(client, request.user.tenantId, event.outletId, globalOrderId, event.orderSnapshot);
+        }
+        if (event.orderSnapshot.refundRecords.length > 0) {
+          await client.query("ROLLBACK");
+          inTransaction = false;
+          return reply.code(422).send({ error: "refund_requires_existing_paid_order" });
+        }
       } else {
         const currentResult = await client.query<{
           id: string;
@@ -482,12 +491,45 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
           });
         }
         const reportedCashPayment = hasReportedCashPayment(event.orderSnapshot);
-        const nextPaymentStatus = current.payment_status === "paid" || reportedCashPayment
-          ? "paid"
-          : current.payment_status;
+        const bonSale = isBonSale(event.orderSnapshot);
+        const previousRefundAmount = Number(current.snapshot.refundAmount ?? 0);
+        const incomingRefundAmount = event.orderSnapshot.refundAmount;
+        const previousRefunds = Array.isArray(current.snapshot.refundRecords)
+          ? current.snapshot.refundRecords as Array<Record<string, unknown>>
+          : [];
+        const newRefunds = event.orderSnapshot.refundRecords.filter((refund) =>
+          !previousRefunds.some((oldRefund) =>
+            oldRefund.amount === refund.amount &&
+            oldRefund.method === refund.method &&
+            oldRefund.reason === refund.reason &&
+            oldRefund.createdAt === refund.createdAt
+          )
+        );
+        const newRefundTotal = newRefunds.reduce((sum, refund) => sum + refund.amount, 0);
+        if (incomingRefundAmount < previousRefundAmount) {
+          await client.query("ROLLBACK");
+          inTransaction = false;
+          return reply.code(422).send({ error: "refund_total_cannot_decrease" });
+        }
+        if (incomingRefundAmount > previousRefundAmount) {
+          if (current.payment_status !== "paid" ||
+              Math.abs(newRefundTotal - (incomingRefundAmount - previousRefundAmount)) > 0.01 ||
+              newRefunds.some((refund) => refund.method.toLowerCase() !== "cash")) {
+            await client.query("ROLLBACK");
+            inTransaction = false;
+            return reply.code(422).send({ error: "refund_verification_required" });
+          }
+        }
+        const nextPaymentStatus = incomingRefundAmount >= event.orderSnapshot.total && incomingRefundAmount > 0
+          ? "refunded"
+          : current.payment_status === "paid" || reportedCashPayment
+            ? "paid"
+            : current.payment_status;
         if (
           event.orderSnapshot.status === "completed" &&
-          nextPaymentStatus !== "paid"
+          nextPaymentStatus !== "paid" &&
+          nextPaymentStatus !== "refunded" &&
+          !bonSale
         ) {
           await client.query("ROLLBACK");
           inTransaction = false;
@@ -525,6 +567,21 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
             [request.user.tenantId, event.outletId, globalOrderId, event.orderSnapshot.total,
              event.eventId + ":cash-payment", request.user.sub],
           );
+        }
+        if (newRefunds.length > 0) {
+          await persistReportedRefunds(
+            client, request.user.tenantId, event.outletId, globalOrderId,
+            event.deviceId, request.user.sub, newRefunds,
+          );
+        }
+        if (nextPaymentStatus === "refunded") {
+          await client.query(
+            "UPDATE payments SET status = 'refunded' WHERE tenant_id = $1 AND order_id = $2 AND method = 'cash' AND status = 'reported'",
+            [request.user.tenantId, globalOrderId],
+          );
+        }
+        if (bonSale) {
+          await persistBonReceivable(client, request.user.tenantId, event.outletId, globalOrderId, event.orderSnapshot);
         }
       }
 
