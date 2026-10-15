@@ -1166,18 +1166,24 @@ class _PosPageState extends State<PosPage> {
             children: [
               Expanded(child: buildCatalog()),
               const SizedBox(width: 20),
-              SizedBox(width: cartWidth, child: buildCart()),
+              SizedBox(
+                width: cartWidth,
+                height: constraints.maxHeight,
+                child: SingleChildScrollView(child: buildCart()),
+              ),
             ],
           );
         }
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            buildCatalog(),
-            const SizedBox(height: 20),
-            buildCart(),
-          ],
+        return SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              buildCatalog(),
+              const SizedBox(height: 20),
+              buildCart(),
+            ],
+          ),
         );
       },
     );
