@@ -19,8 +19,25 @@ permissions:
 
 jobs:
   validate:
-    name: Backend typecheck, tests, and build
+    name: Backend typecheck, tests, migration, and readiness
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: firefa_ci
+          POSTGRES_USER: firefa_ci
+          POSTGRES_PASSWORD: firefa_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U firefa_ci -d firefa_ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://firefa_ci:firefa_ci_password@localhost:5432/firefa_ci
+      NODE_ENV: test
     defaults:
       run:
         working-directory: backend
@@ -35,7 +52,27 @@ jobs:
         run: npm install
       - name: Typecheck
         run: npm run typecheck
-      - name: Test
+      - name: Unit tests
         run: npm test
       - name: Build
         run: npm run build
+      - name: Apply PostgreSQL migrations
+        run: npm run db:migrate
+      - name: Verify migrations are idempotent
+        run: npm run db:migrate
+      - name: Verify schema tables exist
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT to_regclass('public.tenants'), to_regclass('public.outlets'), to_regclass('public.users'), to_regclass('public.orders'), to_regclass('public.sync_receipts'), to_regclass('public.order_events');"
+      - name: Verify API readiness against PostgreSQL
+        run: |
+          node dist/server.js > /tmp/firefa-backend.log 2>&1 &
+          echo $! > /tmp/firefa-backend.pid
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3000/health/ready; then
+              echo
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/firefa-backend.log
+          exit 1
