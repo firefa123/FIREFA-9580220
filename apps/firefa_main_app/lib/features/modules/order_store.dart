@@ -489,6 +489,8 @@ class FirefaOrderStore extends ChangeNotifier {
     final previousCompletedAt = order.completedAt;
     final previousPaidAt = order.paidAt;
     final previousPaymentMethod = order.paymentMethod;
+    final previousCustomerId = order.customerId;
+    final previousCustomerName = order.customerName;
     final previousCashPaidAmount = order.cashPaidAmount;
     final previousRefundedAt = order.refundedAt;
     final previousRefundMethod = order.refundMethod;
@@ -509,6 +511,8 @@ class FirefaOrderStore extends ChangeNotifier {
       order.completedAt = previousCompletedAt;
       order.paidAt = previousPaidAt;
       order.paymentMethod = previousPaymentMethod;
+      order.customerId = previousCustomerId;
+      order.customerName = previousCustomerName;
       order.cashPaidAmount = previousCashPaidAmount;
       order.refundedAt = previousRefundedAt;
       order.refundMethod = previousRefundMethod;
