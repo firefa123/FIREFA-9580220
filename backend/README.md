@@ -16,7 +16,7 @@ Implemented in this foundation slice:
 - PostgreSQL migrations for tenant/outlet/auth, orders and normalized order items, products/categories, inventory ledger, reported payments, devices, sync receipts, order events, and audit logs.
 - Main App has opt-in backend login and a REST sync adapter. Existing local-first mode stays unchanged unless explicitly enabled at build time.
 
-Not implemented yet: staff CRUD, attendance/geofence endpoints, refunds and BON receivables, external payment-provider verification, automatic menu/inventory migration from local stores, and production deployment. Do not treat the database as deployed until the Compose stack is started on the target server.
+Not implemented yet: staff CRUD, attendance/geofence endpoints, collection/settlement endpoints for BON receivables, external payment-provider verification for non-cash payments/refunds, automatic menu/inventory migration from local stores, and production deployment. Cash refunds are recorded as cashier-reported entries; they are not provider-verified. Do not treat the database as deployed until the Compose stack is started on the target server.
 
 ## Requirements
 
