@@ -45,6 +45,11 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
 
   String _versionKey(String outletId, String orderId) => '$outletId|$orderId';
 
+  String? _utcIso(dynamic value) {
+    if (value is! String || value.isEmpty) return null;
+    return DateTime.tryParse(value)?.toUtc().toIso8601String();
+  }
+
   Future<int?> _version(String key) async {
     final prefs = await SharedPreferences.getInstance();
     try {
@@ -153,7 +158,7 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
       'outletId': serverOutletId,
       'orderType': source['orderType'] ?? 'Take Away',
       'tableId': source['tableId'],
-      'createdAt': source['createdAt'] ?? event.createdAt.toUtc().toIso8601String(),
+      'createdAt': _utcIso(source['createdAt']) ?? event.createdAt.toUtc().toIso8601String(),
       'items': items,
       'subtotal': source['subtotal'],
       'discount': source['discount'],
@@ -164,15 +169,23 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
       'paymentStatus': source['paymentStatus'] ?? 'unpaid',
       'paymentMethod': source['paymentMethod'],
       'cashPaidAmount': source['cashPaidAmount'] ?? 0,
-      'paidAt': source['paidAt'],
+      'paidAt': _utcIso(source['paidAt']),
       'customerId': source['customerId'],
       'customerName': source['customerName'],
       'refundAmount': source['refundAmount'] ?? 0,
       'cashRefundAmount': source['cashRefundAmount'] ?? 0,
-      'refundedAt': source['refundedAt'],
+      'refundedAt': _utcIso(source['refundedAt']),
       'refundMethod': source['refundMethod'],
       'refundReason': source['refundReason'],
-      'refundRecords': refundRecords.map((entry) => Map<String, dynamic>.from(entry as Map)).toList(),
+      'refundRecords': refundRecords.map((entry) {
+        final refund = Map<String, dynamic>.from(entry as Map);
+        return {
+          'amount': refund['amount'],
+          'method': refund['method'],
+          'reason': refund['reason'],
+          'createdAt': _utcIso(refund['createdAt']) ?? event.createdAt.toUtc().toIso8601String(),
+        };
+      }).toList(),
     };
     final payload = <String, dynamic>{
       'schemaVersion': 1,
