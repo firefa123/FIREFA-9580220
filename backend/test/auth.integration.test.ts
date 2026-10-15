@@ -549,8 +549,38 @@ authSuite("authentication endpoints", () => {
     const created = makeSyncEvent(owner.outletIds[0], deviceId, "evt-bon-create-0001");
     expect((await postSyncEvent(ownerApp, owner.accessToken, created)).statusCode).toBe(201);
 
-    const updated = makeSyncEvent(
+    const preparing = makeSyncEvent(
       owner.outletIds[0], deviceId, "evt-bon-update-0002", "order.updated", 1,
+    );
+    preparing.orderSnapshot.status = "preparing";
+    preparing.orderSnapshot.paymentStatus = "unpaid";
+    preparing.orderSnapshot.paymentMethod = "BON";
+    preparing.orderSnapshot.customerId = "CUSTOMER-001";
+    preparing.orderSnapshot.customerName = "Customer Test";
+    expect((await postSyncEvent(ownerApp, owner.accessToken, preparing)).statusCode).toBe(201);
+
+    const ready = makeSyncEvent(
+      owner.outletIds[0], deviceId, "evt-bon-update-0003", "order.updated", 2,
+    );
+    ready.orderSnapshot.status = "ready";
+    ready.orderSnapshot.paymentStatus = "unpaid";
+    ready.orderSnapshot.paymentMethod = "BON";
+    ready.orderSnapshot.customerId = "CUSTOMER-001";
+    ready.orderSnapshot.customerName = "Customer Test";
+    expect((await postSyncEvent(ownerApp, owner.accessToken, ready)).statusCode).toBe(201);
+
+    const served = makeSyncEvent(
+      owner.outletIds[0], deviceId, "evt-bon-update-0004", "order.updated", 3,
+    );
+    served.orderSnapshot.status = "served";
+    served.orderSnapshot.paymentStatus = "unpaid";
+    served.orderSnapshot.paymentMethod = "BON";
+    served.orderSnapshot.customerId = "CUSTOMER-001";
+    served.orderSnapshot.customerName = "Customer Test";
+    expect((await postSyncEvent(ownerApp, owner.accessToken, served)).statusCode).toBe(201);
+
+    const updated = makeSyncEvent(
+      owner.outletIds[0], deviceId, "evt-bon-update-0005", "order.updated", 4,
     );
     updated.orderSnapshot.status = "completed";
     updated.orderSnapshot.paymentStatus = "unpaid";
