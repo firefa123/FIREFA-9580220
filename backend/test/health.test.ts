@@ -2,6 +2,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app";
 
+const testSecrets = {
+  jwtSecret: "test-jwt-secret-that-is-at-least-thirty-two-characters",
+  bootstrapToken: "test-bootstrap-token-that-is-at-least-thirty-two-characters",
+};
+
 describe("health routes", () => {
   let app: FastifyInstance | undefined;
 
@@ -13,7 +18,7 @@ describe("health routes", () => {
   });
 
   it("returns liveness without requiring a database", async () => {
-    app = buildApp({ checkDatabase: async () => undefined });
+    app = buildApp({ ...testSecrets, checkDatabase: async () => undefined });
     const response = await app.inject({ method: "GET", url: "/health/live" });
 
     expect(response.statusCode).toBe(200);
@@ -36,6 +41,7 @@ describe("health routes", () => {
 
   it("returns 503 when the database is unavailable", async () => {
     app = buildApp({
+      ...testSecrets,
       checkDatabase: async () => {
         throw new Error("database unavailable");
       },
