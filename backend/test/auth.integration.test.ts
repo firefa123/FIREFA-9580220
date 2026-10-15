@@ -255,6 +255,11 @@ authSuite("authentication endpoints", () => {
     expect(rows.rows[0].payment_status).toBe("unpaid");
     expect(rows.rows[0].snapshot.paymentStatus).toBe("unpaid");
     expect(rows.rows[0].snapshot.customerName).toBeUndefined();
+    const audit = await adminPool.query(
+      "SELECT action, resource_type FROM audit_logs WHERE resource_id = $1",
+      ["ORD-1001"],
+    );
+    expect(audit.rows).toContainEqual({ action: "order.created", resource_type: "order" });
   });
 
   it("rejects reuse of an event ID with a different payload", async () => {
