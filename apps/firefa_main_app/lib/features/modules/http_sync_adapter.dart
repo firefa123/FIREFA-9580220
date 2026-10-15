@@ -1,0 +1,254 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'backend_client.dart';
+import 'offline_sync_queue.dart';
+import 'sync_adapter.dart';
+
+/// REST adapter matching backend/src/routes/sync.ts.
+/// Local IDs are mapped to server outlet UUIDs; cloud sync is never inferred
+/// from a successful socket connection alone.
+class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
+  const FirefaHttpSyncAdapter();
+
+  static const _deviceKey = 'firefa_backend_device_id_v1';
+  static const _versionsKey = 'firefa_backend_order_versions_v1';
+
+  bool _isUuid(String value) => RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+  ).hasMatch(value);
+
+  Future<String> _deviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_deviceKey);
+    if (saved != null && _isUuid(saved)) return saved;
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    final parts = [
+      hex.substring(0, 8),
+      hex.substring(8, 12),
+      hex.substring(12, 16),
+      hex.substring(16, 20),
+      hex.substring(20),
+    ];
+    final id = parts.join('-');
+    await prefs.setString(_deviceKey, id);
+    return id;
+  }
+
+  String _versionKey(String outletId, String orderId) => outletId + '|' + orderId;
+
+  Future<int?> _version(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    try {
+      final data = Map<String, dynamic>.from(
+        jsonDecode(prefs.getString(_versionsKey) ?? '{}') as Map,
+      );
+      return data[key] as int?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _saveVersion(String key, int version) async {
+    final prefs = await SharedPreferences.getInstance();
+    final data = Map<String, dynamic>.from(
+      jsonDecode(prefs.getString(_versionsKey) ?? '{}') as Map,
+    );
+    data[key] = version;
+    await prefs.setString(_versionsKey, jsonEncode(data));
+  }
+
+  @override
+  Future<FirefaSyncReceipt> send(FirefaSyncEnvelope event) async {
+    if (!FirefaBackendConfig.isConfigured) {
+      return FirefaSyncReceipt(
+        eventId: event.eventId,
+        outcome: FirefaSyncOutcome.retryableFailure,
+        message: 'Backend belum dikonfigurasi; event tetap tersimpan lokal.',
+      );
+    }
+
+    final serverOutletId = FirefaBackendConfig.outletMap[event.outletId];
+    if (serverOutletId == null || !_isUuid(serverOutletId)) {
+      return FirefaSyncReceipt(
+        eventId: event.eventId,
+        outcome: FirefaSyncOutcome.permanentFailure,
+        message: 'Pemetaan outlet lokal ke UUID server belum dikonfigurasi.',
+      );
+    }
+
+    final source = event.orderSnapshot;
+    final deviceId = await _deviceId();
+    final versionKey = _versionKey(event.outletId, event.orderId);
+    final isCreate = event.eventType == 'order.created';
+    final expectedVersion = isCreate || event.eventType == 'order.recovered'
+        ? null
+        : await _version(versionKey);
+    if (!isCreate && event.eventType != 'order.recovered' && expectedVersion == null) {
+      return FirefaSyncReceipt(
+        eventId: event.eventId,
+        outcome: FirefaSyncOutcome.permanentFailure,
+        message: 'Versi server pesanan belum tersedia; event ditahan untuk rekonsiliasi.',
+      );
+    }
+
+    final rawItems = source['items'];
+    if (rawItems is! List || rawItems.isEmpty) {
+      return FirefaSyncReceipt(
+        eventId: event.eventId,
+        outcome: FirefaSyncOutcome.permanentFailure,
+        message: 'Pesanan tidak memiliki item yang dapat disinkronkan.',
+      );
+    }
+    final items = rawItems.map((item) {
+      final value = Map<String, dynamic>.from(item as Map);
+      return {
+        'productName': value['productName'],
+        'quantity': value['quantity'],
+        'unitPrice': value['unitPrice'],
+        'details': value['details'] ?? '',
+      };
+    }).toList();
+
+    final snapshot = <String, dynamic>{
+      'id': event.orderId,
+      'outletId': serverOutletId,
+      'orderType': source['orderType'] ?? 'Take Away',
+      'tableId': source['tableId'],
+      'createdAt': source['createdAt'] ?? event.createdAt.toUtc().toIso8601String(),
+      'items': items,
+      'subtotal': source['subtotal'],
+      'discount': source['discount'],
+      'tax': source['tax'],
+      'service': source['service'],
+      'total': source['total'],
+      'status': source['status'],
+      'paymentStatus': source['paymentStatus'] ?? 'unpaid',
+    };
+    final payload = <String, dynamic>{
+      'schemaVersion': 1,
+      'eventId': event.eventId,
+      'deviceId': deviceId,
+      'outletId': serverOutletId,
+      'orderId': event.orderId,
+      'eventType': event.eventType,
+      'createdAt': event.createdAt.toUtc().toIso8601String(),
+      if (expectedVersion != null) 'expectedServerVersion': expectedVersion,
+      'orderSnapshot': snapshot,
+    };
+
+    final client = FirefaBackendClient.instance;
+    Future<http.Response> post(String token) => http.post(
+      Uri.parse(client.baseUrl + '/api/v1/sync/events'),
+      headers: {
+        'content-type': 'application/json',
+        'authorization': 'Bearer ' + token,
+        'idempotency-key': event.eventId,
+      },
+      body: jsonEncode(payload),
+    ).timeout(const Duration(seconds: 20));
+
+    try {
+      var token = await client.accessToken();
+      if (token == null) {
+        return FirefaSyncReceipt(
+          eventId: event.eventId,
+          outcome: FirefaSyncOutcome.permanentFailure,
+          message: 'Login backend diperlukan sebelum sinkronisasi.',
+        );
+      }
+      var response = await post(token);
+      if (response.statusCode == 401) {
+        token = await client.accessToken(forceRefresh: true);
+        if (token == null) {
+          return FirefaSyncReceipt(
+            eventId: event.eventId,
+            outcome: FirefaSyncOutcome.permanentFailure,
+            message: 'Sesi backend berakhir; login kembali.',
+          );
+        }
+        response = await post(token);
+      }
+
+      final body = _tryJson(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        if (body == null ||
+            body['eventId'] != event.eventId ||
+            body['outcome'] != 'acknowledged' ||
+            body['serverReference'] is! String ||
+            body['globalOrderId'] is! String ||
+            body['serverVersion'] is! int) {
+          return FirefaSyncReceipt(
+            eventId: event.eventId,
+            outcome: FirefaSyncOutcome.permanentFailure,
+            message: 'Tanda terima server tidak valid; event tidak ditandai tersinkron.',
+          );
+        }
+        await _saveVersion(versionKey, body['serverVersion'] as int);
+        return FirefaSyncReceipt(
+          eventId: event.eventId,
+          outcome: FirefaSyncOutcome.acknowledged,
+          serverReference: body['serverReference'] as String,
+          serverOutletId: event.outletId,
+          serverOrderId: event.orderId,
+        );
+      }
+
+      if (response.statusCode == 409 && body?['error'] == 'stale_order_version') {
+        final rawServerSnapshot = body?['serverSnapshot'];
+        if (rawServerSnapshot is Map) {
+          final serverSnapshot = Map<String, dynamic>.from(rawServerSnapshot);
+          serverSnapshot['outletId'] = event.outletId;
+          serverSnapshot['id'] = event.orderId;
+          return FirefaSyncReceipt(
+            eventId: event.eventId,
+            outcome: FirefaSyncOutcome.conflict,
+            serverOutletId: event.outletId,
+            serverOrderId: event.orderId,
+            serverSnapshot: serverSnapshot,
+            message: 'Pesanan berubah di server.',
+          );
+        }
+      }
+
+      final permanent = response.statusCode >= 400 &&
+          response.statusCode < 500 &&
+          response.statusCode != 408 &&
+          response.statusCode != 429;
+      return FirefaSyncReceipt(
+        eventId: event.eventId,
+        outcome: permanent ? FirefaSyncOutcome.permanentFailure : FirefaSyncOutcome.retryableFailure,
+        message: (body?['error'] as String?)?.replaceAll('_', ' ') ??
+            'Sinkronisasi gagal (' + response.statusCode.toString() + ').',
+      );
+    } on TimeoutException {
+      return FirefaSyncReceipt(
+        eventId: event.eventId,
+        outcome: FirefaSyncOutcome.retryableFailure,
+        message: 'Koneksi habis waktu; event tetap tersimpan lokal.',
+      );
+    } catch (_) {
+      return FirefaSyncReceipt(
+        eventId: event.eventId,
+        outcome: FirefaSyncOutcome.retryableFailure,
+        message: 'Backend tidak dapat dijangkau; event tetap tersimpan lokal.',
+      );
+    }
+  }
+
+  Map<String, dynamic>? _tryJson(String value) {
+    try {
+      return Map<String, dynamic>.from(jsonDecode(value) as Map);
+    } catch (_) {
+      return null;
+    }
+  }
+}
