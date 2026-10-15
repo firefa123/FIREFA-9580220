@@ -211,7 +211,6 @@ class _FnbOperationsPageState extends State<FnbOperationsPage> with SingleTicker
               for(final p in store.promos(id)) _promoTile(p,id),
             ]),
           ])),
-          ),
         ]);
       },
     );
