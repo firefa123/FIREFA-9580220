@@ -307,36 +307,71 @@ class _DashboardPageState extends State<DashboardPage> {
                         ),
                       ),
                     Expanded(
-                      child: SingleChildScrollView(
-                        key: ValueKey(selectedIndex),
-                        padding: EdgeInsets.all(isPhone ? 16 : 24),
-                        child: Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 1440),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                      child: selectedIndex == 0
+                          ? SingleChildScrollView(
+                              key: ValueKey(selectedIndex),
+                              padding: EdgeInsets.all(isPhone ? 16 : 24),
+                              child: Center(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(maxWidth: 1440),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      _buildTopbar(),
+                                      const SizedBox(height: 28),
+                                      _buildPageHeading(),
+                                      const SizedBox(height: 24),
+                                      _buildDashboardContent(),
+                                      const SizedBox(height: 24),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            )
+                          : Column(
+                              key: ValueKey(selectedIndex),
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                _buildTopbar(),
-                                const SizedBox(height: 28),
-                                if (selectedIndex >= 0) ...[
-                                  _buildPageHeading(),
-                                  const SizedBox(height: 24),
-                                  if (selectedIndex == 0)
-                                    _buildDashboardContent()
-                                  else
-                                    _buildModuleContent(),
-                                ] else
-                                  const Center(
-                                    child: Text(
-                                      'Tidak ada modul yang dapat diakses.',
+                                SingleChildScrollView(
+                                  padding: EdgeInsets.fromLTRB(
+                                    isPhone ? 16 : 24,
+                                    isPhone ? 16 : 24,
+                                    isPhone ? 16 : 24,
+                                    12,
+                                  ),
+                                  child: Center(
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(maxWidth: 1440),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          _buildTopbar(),
+                                          const SizedBox(height: 28),
+                                          _buildPageHeading(),
+                                          const SizedBox(height: 12),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                const SizedBox(height: 24),
+                                ),
+                                Expanded(
+                                  child: Padding(
+                                    padding: EdgeInsets.fromLTRB(
+                                      isPhone ? 16 : 24,
+                                      0,
+                                      isPhone ? 16 : 24,
+                                      isPhone ? 16 : 24,
+                                    ),
+                                    child: Center(
+                                      child: ConstrainedBox(
+                                        constraints: const BoxConstraints(maxWidth: 1440),
+                                        child: _buildModuleContent(),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
-                          ),
-                        ),
-                      ),
                     ),
                   ],
                 ),
