@@ -58,7 +58,7 @@ void main() {
     expect(inventory.forOutlet(outlet).single.stock, 11);
     expect(finance.recordConsignmentSale(outletId: outlet, batchId: batch.id, quantity: 3), isTrue);
     expect(finance.recordConsignmentSale(outletId: outlet, batchId: batch.id, quantity: 6), isFalse);
-    expect(finance.settleConsignment(outletId: outlet, batchId: batch.id, amount: 16000), isTrue);
+    expect(finance.settleConsignment(outletId: outlet, batchId: batch.id, amount: 15000), isTrue);
     expect(finance.addExpense(outletId: outlet, category: 'Listrik', amount: 125000, method: 'Transfer', note: 'Tagihan bulanan'), isTrue);
     await finance.waitForPendingSave();
     batch = finance.consignmentsForOutlet(outlet).single;
