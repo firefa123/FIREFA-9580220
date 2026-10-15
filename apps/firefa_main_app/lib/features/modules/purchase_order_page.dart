@@ -647,7 +647,8 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
       final supplierSummary = bySupplier.entries.toList()
         ..sort((a, b) => a.key.compareTo(b.key));
       return Padding(padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        child: SingleChildScrollView(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Wrap(spacing: 12, runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center, children: [
               const Icon(Icons.receipt_long_outlined, color: primary),
@@ -1000,7 +1001,8 @@ class _PurchaseOrderPageState extends State<PurchaseOrderPage> {
           const SizedBox(height: 12),
           const Text('Local Only • Mendukung penerimaan parsial • Tidak ada sinkronisasi cloud',
             style: TextStyle(color: Colors.blueGrey, fontSize: 12)),
-        ]),
+          ]),
+        ),
       );
     },
   );
