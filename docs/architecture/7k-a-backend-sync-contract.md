@@ -30,13 +30,14 @@ Status: **PROPOSED / NOT IMPLEMENTED**. This is an architecture contract, not a 
 {
   "schemaVersion": 1,
   "eventId": "evt-128bit-random-1",
-  "outletId": "outlet-example",
+  "deviceId": "7a2aeb3a-4b76-4e51-8c51-3cb4f8a4c2d0",
+  "outletId": "2b6b7b60-8b90-4a56-92b0-9b6e0d1f3a10",
   "orderId": "ORD-1001",
   "eventType": "order.created",
   "createdAt": "2026-10-09T04:00:00Z",
   "orderSnapshot": {
     "id": "ORD-1001",
-    "outletId": "outlet-example",
+    "outletId": "2b6b7b60-8b90-4a56-92b0-9b6e0d1f3a10",
     "orderType": "Take Away",
     "tableId": null,
     "createdAt": "2026-10-09T04:00:00Z",
@@ -52,7 +53,7 @@ Status: **PROPOSED / NOT IMPLEMENTED**. This is an architecture contract, not a 
 }
 ```
 
-`order.updated` and `order.recovered` are also current local event types. Treat the snapshot as an asserted client state, **not** automatically authoritative server state.
+`order.updated` requires `expectedServerVersion` and is rejected when the client version is stale. `order.recovered` remains rejected with HTTP 422 until a reconciliation policy is defined. Treat the snapshot as an asserted client state, **not** automatically authoritative server state. The `deviceId` is a stable UUID per installation, and `outletId` is the server-issued outlet UUID; a future client adapter must map local outlet IDs to this UUID.
 
 ### Acknowledged response (illustrative)
 
