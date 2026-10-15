@@ -3,6 +3,7 @@ import jwt from "@fastify/jwt";
 import { Pool } from "pg";
 import { authRoutes } from "./routes/auth";
 import { syncRoutes } from "./routes/sync";
+import { catalogRoutes } from "./routes/catalog";
 
 export interface AppDependencies {
   checkDatabase?: () => Promise<void>;
@@ -41,6 +42,10 @@ export function buildApp(dependencies: AppDependencies = {}): FastifyInstance {
   });
   app.register(syncRoutes, {
     prefix: "/api/v1/sync",
+    pool,
+  });
+  app.register(catalogRoutes, {
+    prefix: "/api/v1",
     pool,
   });
 
