@@ -85,6 +85,34 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
     }
 
     final source = event.orderSnapshot;
+    final paymentStatus = source['paymentStatus'] as String? ?? 'unpaid';
+    final paymentMethod = (source['paymentMethod'] as String?)?.toLowerCase();
+    final refundRecords = source['refundRecords'];
+    if (paymentStatus == 'refunded' ||
+        (source['refundAmount'] as num? ?? 0) > 0 ||
+        (refundRecords is List && refundRecords.isNotEmpty)) {
+      return FirefaSyncReceipt(
+        eventId: event.eventId,
+        outcome: FirefaSyncOutcome.permanentFailure,
+        message: 'Sinkronisasi refund belum tersedia; data refund tetap lokal dan tidak ditandai tersinkron.',
+      );
+    }
+    if (paymentStatus == 'paid' && paymentMethod != 'cash') {
+      return FirefaSyncReceipt(
+        eventId: event.eventId,
+        outcome: FirefaSyncOutcome.permanentFailure,
+        message: 'Pembayaran non-tunai memerlukan endpoint verifikasi pembayaran.',
+      );
+    }
+    if (source['status'] == 'completed' &&
+        paymentStatus != 'paid' &&
+        paymentMethod == 'bon') {
+      return FirefaSyncReceipt(
+        eventId: event.eventId,
+        outcome: FirefaSyncOutcome.permanentFailure,
+        message: 'Sinkronisasi piutang BON belum tersedia.',
+      );
+    }
     final deviceId = await _deviceId();
     final versionKey = _versionKey(event.outletId, event.orderId);
     final isCreate = event.eventType == 'order.created';
