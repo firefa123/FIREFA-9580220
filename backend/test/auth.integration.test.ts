@@ -103,6 +103,9 @@ authSuite("authentication endpoints", () => {
         total: 10000,
         status: eventType === "order.updated" ? "preparing" : "confirmed",
         paymentStatus: "paid",
+        paymentMethod: null,
+        cashPaidAmount: 0,
+        paidAt: null,
         customerName: "must-not-be-synced",
       },
     };
@@ -452,6 +455,40 @@ authSuite("authentication endpoints", () => {
     });
     expect(oversell.statusCode).toBe(409);
     expect(oversell.json().error).toBe("insufficient_stock");
+  });
+
+  it("stores order items and a cashier-reported cash payment atomically", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const payload = makeSyncEvent(
+      owner.outletIds[0],
+      "11111111-1111-4111-8111-111111111111",
+      "evt-cash-payment-0001",
+    );
+    payload.orderSnapshot.status = "completed";
+    payload.orderSnapshot.paymentMethod = "Cash";
+    payload.orderSnapshot.cashPaidAmount = 10000;
+    payload.orderSnapshot.paidAt = new Date().toISOString();
+
+    const response = await postSyncEvent(ownerApp, owner.accessToken, payload);
+    expect(response.statusCode).toBe(201);
+    const orderId = response.json().globalOrderId;
+    const stored = await adminPool.query(
+      "SELECT payment_status, status FROM orders WHERE id = $1",
+      [orderId],
+    );
+    expect(stored.rows[0].payment_status).toBe("paid");
+    expect(stored.rows[0].status).toBe("completed");
+    const items = await adminPool.query(
+      "SELECT count(*)::int AS count FROM order_items WHERE order_id = $1",
+      [orderId],
+    );
+    expect(items.rows[0].count).toBe(1);
+    const payments = await adminPool.query(
+      "SELECT method, amount::float8 AS amount, status FROM payments WHERE order_id = $1",
+      [orderId],
+    );
+    expect(payments.rows).toEqual([{ method: "cash", amount: 10000, status: "reported" }]);
   });
 
 });
