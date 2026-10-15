@@ -103,9 +103,9 @@ authSuite("authentication endpoints", () => {
         total: 10000,
         status: eventType === "order.updated" ? "preparing" : "confirmed",
         paymentStatus: "paid",
-        paymentMethod: null,
+        paymentMethod: null as string | null,
         cashPaidAmount: 0,
-        paidAt: null,
+        paidAt: null as string | null,
         customerName: "must-not-be-synced",
       },
     };
