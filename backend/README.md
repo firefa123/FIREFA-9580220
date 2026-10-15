@@ -82,7 +82,22 @@ Health checks:
 - Sync writes, immutable order event, and acknowledgment receipt commit in one PostgreSQL transaction. Replaying the same event ID and payload returns the same receipt; reusing the ID with a different payload returns 409.
 - The server strips unapproved snapshot fields such as customer name. It records cash payment as a cashier-reported payment only when method is cash and the amount covers the total; non-cash payment-provider settlement is not inferred from client flags. Refund and BON receivable sync remain disabled until dedicated endpoints exist.
 
-Generate unique random secrets of at least 32 characters for `JWT_SECRET` and `BOOTSTRAP_TOKEN`. Keep the bootstrap token private and remove/rotate it after the initial owner is created. Never place production secrets in Flutter source or commit them to Git.
+Generate unique random secrets of at least 32 characters for `JWT_SECRET` and `BOOTSTRAP_TOKEN`. Keep the bootstrap token private and rotate it after the initial owner is created; the endpoint cannot create a second owner once a user exists. Never place production secrets in Flutter source or commit them to Git.
+
+## Main App configuration
+
+The existing local/demo login remains the default. To opt into the backend after deploying it behind HTTPS, build/run Main App with the real API URL and a map from each existing local outlet ID to its server UUID. Never put passwords, JWT secrets, or the bootstrap token in Flutter build defines.
+
+Example PowerShell command (replace the sample host and UUIDs):
+
+```powershell
+flutter run `
+  --dart-define=FIREFA_BACKEND_ENABLED=true `
+  --dart-define=FIREFA_API_BASE_URL=https://api.your-domain.example `
+  '--dart-define=FIREFA_OUTLET_MAP={"outlet-001":"SERVER-OUTLET-UUID-1","outlet-002":"SERVER-OUTLET-UUID-2"}'
+```
+
+The first Owner/outlet must be created once through `POST /api/v1/auth/bootstrap-owner` with the private `x-bootstrap-token` header. Main App login then uses the backend account and role. Order sync runs when the dashboard receives order/outlet changes; failed or unsupported events remain in the local outbox and are not marked synced. Refund, non-cash settlement, and BON receivables are intentionally rejected until their dedicated server endpoints are implemented.
 
 ## Docker Compose
 
