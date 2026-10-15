@@ -20,7 +20,9 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
 
     expect(find.text('Pembelian & Keuangan'), findsOneWidget);
     expect(find.text('Utang Pemasok'), findsOneWidget);
@@ -37,7 +39,9 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
 
     expect(find.text('Pelanggan & Loyalitas'), findsOneWidget);
     expect(find.text('Pelanggan & RFM'), findsOneWidget);
