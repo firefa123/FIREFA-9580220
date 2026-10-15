@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -72,6 +73,14 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
         eventId: event.eventId,
         outcome: FirefaSyncOutcome.retryableFailure,
         message: 'Backend belum dikonfigurasi; event tetap tersimpan lokal.',
+      );
+    }
+
+    if (!FirefaBackendConfig.baseUrl.toLowerCase().startsWith('https://') && !kDebugMode) {
+      return FirefaSyncReceipt(
+        eventId: event.eventId,
+        outcome: FirefaSyncOutcome.permanentFailure,
+        message: 'Backend production wajib menggunakan HTTPS.',
       );
     }
 
