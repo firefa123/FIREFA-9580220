@@ -15,14 +15,16 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  test('role permissions separate owner, manager, cashier and kitchen/bar', () {
+  test('role permissions expose owner and cashier only', () {
+    expect(FirefaRole.values, [FirefaRole.owner, FirefaRole.cashier]);
     expect(FirefaAccess.can(FirefaRole.owner, FirefaPermission.settingsManage), isTrue);
-    expect(FirefaAccess.can(FirefaRole.manager, FirefaPermission.inventoryManage), isTrue);
-    expect(FirefaAccess.can(FirefaRole.manager, FirefaPermission.settingsManage), isFalse);
+    expect(FirefaAccess.can(FirefaRole.owner, FirefaPermission.inventoryManage), isTrue);
     expect(FirefaAccess.can(FirefaRole.cashier, FirefaPermission.posAccess), isTrue);
+    expect(FirefaAccess.can(FirefaRole.cashier, FirefaPermission.ordersView), isTrue);
+    expect(FirefaAccess.can(FirefaRole.cashier, FirefaPermission.printerManage), isTrue);
+    expect(FirefaAccess.can(FirefaRole.cashier, FirefaPermission.settingsManage), isFalse);
+    expect(FirefaAccess.can(FirefaRole.cashier, FirefaPermission.inventoryManage), isFalse);
     expect(FirefaAccess.can(FirefaRole.cashier, FirefaPermission.reportsView), isFalse);
-    expect(FirefaAccess.can(FirefaRole.kitchenBar, FirefaPermission.ordersView), isTrue);
-    expect(FirefaAccess.can(FirefaRole.kitchenBar, FirefaPermission.posAccess), isFalse);
   });
 
   test('outlet repository persists, updates and filters active outlets', () async {
