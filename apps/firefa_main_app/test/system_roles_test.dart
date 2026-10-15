@@ -3,21 +3,21 @@ import 'package:firefa_main_app/core/auth/role_permissions.dart';
 import 'package:firefa_main_app/core/navigation/app_routes.dart';
 
 void main() {
-  group('FIREFA system roles', () {
-    test('all roles required by the product brief are available', () {
-      expect(
-        FirefaRole.values,
-        [
-          FirefaRole.owner,
-          FirefaRole.manager,
-          FirefaRole.cashier,
-          FirefaRole.kitchenBar,
-        ],
-      );
+  group('FIREFA supported roles', () {
+    test('only owner and cashier roles are exposed', () {
+      expect(FirefaRole.values, [FirefaRole.owner, FirefaRole.cashier]);
       expect(FirefaRole.owner.label, 'Owner');
-      expect(FirefaRole.manager.label, 'Manager');
       expect(FirefaRole.cashier.label, 'Kasir');
-      expect(FirefaRole.kitchenBar.label, 'Kitchen/Bar');
+    });
+
+    test('owner has access to all registered modules', () {
+      for (final module in FirefaNavigation.modules) {
+        expect(
+          FirefaNavigation.canOpen(FirefaRole.owner, module.id),
+          isTrue,
+          reason: 'Owner should be able to open ${module.id}.',
+        );
+      }
     });
 
     test('cashier can use POS, orders, tables, and printer setup only', () {
@@ -31,16 +31,9 @@ void main() {
       expect(FirefaAccess.can(FirefaRole.cashier, FirefaPermission.reportsView), isFalse);
     });
 
-    test('kitchen/bar can view orders but cannot access POS or inventory', () {
-      expect(FirefaAccess.can(FirefaRole.kitchenBar, FirefaPermission.ordersView), isTrue);
-      expect(FirefaAccess.can(FirefaRole.kitchenBar, FirefaPermission.posAccess), isFalse);
-      expect(FirefaAccess.can(FirefaRole.kitchenBar, FirefaPermission.inventoryManage), isFalse);
-    });
-
-    test('manager can manage operations but cannot change global settings', () {
-      expect(FirefaAccess.can(FirefaRole.manager, FirefaPermission.inventoryManage), isTrue);
-      expect(FirefaAccess.can(FirefaRole.manager, FirefaPermission.reportsView), isTrue);
-      expect(FirefaAccess.can(FirefaRole.manager, FirefaPermission.settingsManage), isFalse);
+    test('cashier cannot access owner-only financial and customer modules', () {
+      expect(FirefaNavigation.canOpen(FirefaRole.cashier, 'finance'), isFalse);
+      expect(FirefaNavigation.canOpen(FirefaRole.cashier, 'customers'), isFalse);
     });
 
     test('printer navigation describes one cashier printer configuration', () {
