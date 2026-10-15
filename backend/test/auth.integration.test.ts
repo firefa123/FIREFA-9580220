@@ -106,7 +106,14 @@ authSuite("authentication endpoints", () => {
         paymentMethod: null as string | null,
         cashPaidAmount: 0,
         paidAt: null as string | null,
+        customerId: null as string | null,
         customerName: "must-not-be-synced",
+        refundAmount: 0,
+        cashRefundAmount: 0,
+        refundedAt: null as string | null,
+        refundMethod: null as string | null,
+        refundReason: null as string | null,
+        refundRecords: [] as Array<{ amount: number; method: string; reason: string; createdAt: string }>,
       },
     };
   }
@@ -494,6 +501,76 @@ authSuite("authentication endpoints", () => {
       [orderId],
     );
     expect(payments.rows).toEqual([{ method: "cash", amount: 10000, status: "reported" }]);
+  });
+
+  it("records cash refunds atomically and updates fully refunded payment status", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const deviceId = "11111111-1111-4111-8111-111111111111";
+    const created = makeSyncEvent(owner.outletIds[0], deviceId, "evt-refund-create-0001");
+    created.orderSnapshot.status = "completed";
+    created.orderSnapshot.paymentMethod = "Cash";
+    created.orderSnapshot.cashPaidAmount = 10000;
+    created.orderSnapshot.paidAt = new Date().toISOString();
+    expect((await postSyncEvent(ownerApp, owner.accessToken, created)).statusCode).toBe(201);
+
+    const updated = makeSyncEvent(
+      owner.outletIds[0], deviceId, "evt-refund-update-0002", "order.updated", 1,
+    );
+    updated.orderSnapshot.status = "completed";
+    updated.orderSnapshot.paymentMethod = "Cash";
+    updated.orderSnapshot.cashPaidAmount = 10000;
+    updated.orderSnapshot.paidAt = created.orderSnapshot.paidAt;
+    updated.orderSnapshot.paymentStatus = "refunded";
+    updated.orderSnapshot.refundAmount = 10000;
+    updated.orderSnapshot.cashRefundAmount = 10000;
+    updated.orderSnapshot.refundedAt = new Date().toISOString();
+    updated.orderSnapshot.refundMethod = "Cash";
+    updated.orderSnapshot.refundReason = "Customer request";
+    updated.orderSnapshot.refundRecords = [{
+      amount: 10000, method: "Cash", reason: "Customer request",
+      createdAt: updated.orderSnapshot.refundedAt,
+    }];
+    const response = await postSyncEvent(ownerApp, owner.accessToken, updated);
+    expect(response.statusCode).toBe(201);
+
+    const order = await adminPool.query("SELECT payment_status FROM orders WHERE id = $1", [response.json().globalOrderId]);
+    expect(order.rows[0].payment_status).toBe("refunded");
+    const refunds = await adminPool.query("SELECT amount::float8 AS amount, status FROM refunds WHERE order_id = $1", [response.json().globalOrderId]);
+    expect(refunds.rows).toEqual([{ amount: 10000, status: "reported" }]);
+    const payments = await adminPool.query("SELECT status FROM payments WHERE order_id = $1", [response.json().globalOrderId]);
+    expect(payments.rows[0].status).toBe("refunded");
+  });
+
+  it("creates an open receivable for a completed BON order with customer identity", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const deviceId = "11111111-1111-4111-8111-111111111111";
+    const created = makeSyncEvent(owner.outletIds[0], deviceId, "evt-bon-create-0001");
+    expect((await postSyncEvent(ownerApp, owner.accessToken, created)).statusCode).toBe(201);
+
+    const updated = makeSyncEvent(
+      owner.outletIds[0], deviceId, "evt-bon-update-0002", "order.updated", 1,
+    );
+    updated.orderSnapshot.status = "completed";
+    updated.orderSnapshot.paymentStatus = "unpaid";
+    updated.orderSnapshot.paymentMethod = "BON";
+    updated.orderSnapshot.customerId = "CUSTOMER-001";
+    updated.orderSnapshot.customerName = "Customer Test";
+    const response = await postSyncEvent(ownerApp, owner.accessToken, updated);
+    expect(response.statusCode).toBe(201);
+    const receivable = await adminPool.query(
+      "SELECT customer_id, customer_name, original_amount::float8 AS original_amount, outstanding_amount::float8 AS outstanding_amount, status " +
+        "FROM accounts_receivable WHERE order_id = $1",
+      [response.json().globalOrderId],
+    );
+    expect(receivable.rows).toEqual([{
+      customer_id: "CUSTOMER-001",
+      customer_name: "Customer Test",
+      original_amount: 10000,
+      outstanding_amount: 10000,
+      status: "open",
+    }]);
   });
 
 });
