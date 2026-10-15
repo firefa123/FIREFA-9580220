@@ -101,7 +101,7 @@ class _DashboardPageState extends State<DashboardPage> {
     FirefaPermission.cashierShiftManage,
     FirefaPermission.ordersView,
     FirefaPermission.inventoryManage,
-    FirefaPermission.ordersView,
+    FirefaPermission.reportsView,
   ];
 
   @override

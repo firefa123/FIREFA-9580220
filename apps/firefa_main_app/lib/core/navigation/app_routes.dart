@@ -132,7 +132,7 @@ class FirefaNavigation {
       title: 'Pelanggan & Loyalitas',
       description: 'Piutang BON, limit kredit, loyalty, RFM, dan backup.',
       icon: Icons.people_alt_outlined,
-      permission: FirefaPermission.ordersView,
+      permission: FirefaPermission.reportsView,
     ),
   ];
 
