@@ -1,4 +1,4 @@
-enum FirefaRole { owner, manager, cashier, kitchenBar }
+enum FirefaRole { owner, cashier }
 
 enum FirefaPermission {
   dashboardView,
@@ -24,12 +24,8 @@ extension FirefaRoleDetails on FirefaRole {
     switch (this) {
       case FirefaRole.owner:
         return 'Owner';
-      case FirefaRole.manager:
-        return 'Manager';
       case FirefaRole.cashier:
         return 'Kasir';
-      case FirefaRole.kitchenBar:
-        return 'Kitchen/Bar';
     }
   }
 }
@@ -41,22 +37,6 @@ class FirefaAccess {
     switch (role) {
       case FirefaRole.owner:
         return Set.unmodifiable(FirefaPermission.values);
-      case FirefaRole.manager:
-        return {
-          FirefaPermission.dashboardView,
-          FirefaPermission.posAccess,
-          FirefaPermission.ordersView,
-          FirefaPermission.ordersManage,
-          FirefaPermission.tablesManage,
-          FirefaPermission.menuManage,
-          FirefaPermission.inventoryManage,
-          FirefaPermission.reportsView,
-          FirefaPermission.conflictManage,
-          FirefaPermission.printerManage,
-          FirefaPermission.cashierShiftManage,
-          FirefaPermission.staffManage,
-          FirefaPermission.auditLogView,
-        };
       case FirefaRole.cashier:
         return {
           FirefaPermission.dashboardView,
@@ -66,12 +46,6 @@ class FirefaAccess {
           FirefaPermission.tablesManage,
           FirefaPermission.printerManage,
           FirefaPermission.cashierShiftManage,
-        };
-      case FirefaRole.kitchenBar:
-        return {
-          FirefaPermission.dashboardView,
-          FirefaPermission.ordersView,
-          FirefaPermission.printerManage,
         };
     }
   }
