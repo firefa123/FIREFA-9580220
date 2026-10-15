@@ -1,3 +1,5 @@
+// ignore_for_file: prefer_interpolation_to_compose_strings
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -752,7 +754,7 @@ class _InventoryPageState extends State<InventoryPage> {
                                 tooltip: 'Kelola ${item.name}',
                                 onSelected: (action) => action == 'opname'
                                   ? startOpname(item) : manage(item, action),
-                                itemBuilder: (_) => const [
+                                itemBuilder: (_) => [
                                   PopupMenuItem(value: 'edit', child: Text('Edit Barang')),
                                   PopupMenuItem(value: 'adjust', child: Text('Penyesuaian Stok')),
                                   PopupMenuItem(value: 'cost', child: Text('Atur HPP / Harga Beli')),
