@@ -27,8 +27,7 @@ class FirefaActiveOutletStore extends ChangeNotifier {
   FirefaRole get role => _role;
   String get selectedOutletId => _selectedOutletId;
 
-  bool get canViewAllOutlets =>
-      _role == FirefaRole.owner || _role == FirefaRole.manager;
+  bool get canViewAllOutlets => _role == FirefaRole.owner;
 
   List<FirefaOutlet> get accessibleOutlets {
     if (canViewAllOutlets) {
