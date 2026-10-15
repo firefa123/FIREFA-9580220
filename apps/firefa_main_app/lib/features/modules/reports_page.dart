@@ -229,9 +229,10 @@ class _ReportsPageState extends State<ReportsPage> {
             final qty = b.value.quantity.compareTo(a.value.quantity);
             return qty != 0 ? qty : a.key.compareTo(b.key);
           });
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        return SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             const Text('Reports & Analytics',
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
@@ -342,7 +343,8 @@ class _ReportsPageState extends State<ReportsPage> {
             if (visible.length > 30)
               const Text('Menampilkan 30 pesanan terbaru. CSV mencakup seluruh hasil filter.',
                   style: TextStyle(color: muted, fontSize: 12)),
-          ],
+            ],
+          ),
         );
       },
     );
