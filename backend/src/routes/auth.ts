@@ -63,7 +63,7 @@ async function findMembership(
       "COALESCE(array_agg(o.id::text) FILTER (WHERE o.id IS NOT NULL), ARRAY[]::text[]) AS outlet_ids " +
       "FROM tenant_memberships tm " +
       "JOIN tenants t ON t.id = tm.tenant_id AND t.status = 'active' " +
-      "LEFT JOIN outlet_memberships om ON om.user_id = tm.user_id " +
+      "LEFT JOIN outlet_memberships om ON om.user_id = tm.user_id AND om.tenant_id = tm.tenant_id " +
       "LEFT JOIN outlets o ON o.id = om.outlet_id AND o.tenant_id = tm.tenant_id AND o.status = 'active' " +
       "WHERE tm.user_id = $1 AND tm.status = 'active' " +
       "AND ($2::uuid IS NULL OR tm.tenant_id = $2::uuid) " +
@@ -170,8 +170,8 @@ export const authRoutes: FastifyPluginAsync<AuthRouteOptions> = async (app, opti
         [tenantId, userId],
       );
       await client.query(
-        "INSERT INTO outlet_memberships (outlet_id, user_id) VALUES ($1, $2)",
-        [outletId, userId],
+        "INSERT INTO outlet_memberships (tenant_id, outlet_id, user_id) VALUES ($1, $2, $3)",
+        [tenantId, outletId, userId],
       );
 
       const membership: Membership = {
