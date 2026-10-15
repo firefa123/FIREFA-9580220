@@ -191,9 +191,10 @@ class _SettingsPageState extends State<SettingsPage> {
         final id = outlet.selectedOutletId;
         _load(id);
         return LayoutBuilder(builder: (context, constraints) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+          return SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               const Text('Settings & Konfigurasi Outlet',
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
@@ -336,7 +337,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
               ),
-            ],
+              ],
+            ),
           );
         });
       },
