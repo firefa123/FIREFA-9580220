@@ -8,10 +8,12 @@ Implemented in this foundation slice:
 - Fastify REST server with `/health/live` and database-backed `/health/ready`.
 - Environment validation and graceful shutdown.
 - PostgreSQL schema migration runner.
+- One-time owner bootstrap, login, access JWT, refresh-token rotation, logout, and `/api/v1/auth/me`.
+- Passwords hashed with Argon2id; refresh tokens stored as SHA-256 hashes and revocable.
 - Initial tenant, outlet, user, membership, refresh-token, order, sync receipt, and order-event tables.
 - Automated route tests and a dedicated backend CI workflow.
 
-Not implemented yet: login/token issuance, password hashing and verification, authorization middleware, staff-management endpoints, attendance/geofence endpoints, transactional sync endpoint, or production deployment. Do not connect Flutter clients or mark events synced yet.
+Not implemented yet: Owner-managed staff CRUD, authorization for POS/inventory/business endpoints, attendance/geofence endpoints, transactional sync endpoint, or production deployment. Do not connect Flutter clients or mark events synced yet.
 
 ## Requirements
 
@@ -28,6 +30,8 @@ For a direct Node run:
 cd backend
 npm install
 $env:DATABASE_URL="postgresql://firefa:YOUR_LOCAL_PASSWORD@localhost:5432/firefa"
+$env:JWT_SECRET="replace-with-at-least-32-random-characters"
+$env:BOOTSTRAP_TOKEN="replace-with-another-32-character-random-secret"
 npm run build
 npm run db:migrate
 npm test
@@ -38,6 +42,16 @@ npm start
 Health checks:
 - `GET /health/live` — process liveness only.
 - `GET /health/ready` — returns 200 only when PostgreSQL responds to `SELECT 1`; otherwise 503.
+
+## Authentication endpoints
+
+- `POST /api/v1/auth/bootstrap-owner` — one-time initial owner + tenant + outlet creation. Requires `x-bootstrap-token` matching `BOOTSTRAP_TOKEN`; rejects after the first user exists. Password must be at least 12 characters.
+- `POST /api/v1/auth/login` — validates credentials and returns a 15-minute access token and rotating refresh token. Pass `tenantId` when the user belongs to multiple tenants.
+- `POST /api/v1/auth/refresh` — rotates the refresh token; the previous token cannot be reused.
+- `POST /api/v1/auth/logout` — revokes the supplied refresh token.
+- `GET /api/v1/auth/me` — requires `Authorization: Bearer <access-token>` and rechecks active user and membership.
+
+Generate unique random secrets of at least 32 characters for `JWT_SECRET` and `BOOTSTRAP_TOKEN`. Keep the bootstrap token private and remove/rotate it after the initial owner is created. Never place production secrets in Flutter source or commit them to Git.
 
 ## Docker Compose
 
