@@ -12,9 +12,16 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - apps/firefa_main_app
+          - apps/firefa_staff_app
+    name: Validate ${{ matrix.app }}
     defaults:
       run:
-        working-directory: apps/firefa_main_app
+        working-directory: ${{ matrix.app }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
