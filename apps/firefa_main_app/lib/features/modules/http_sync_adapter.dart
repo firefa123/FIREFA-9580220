@@ -6,7 +6,6 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backend_client.dart';
-import 'offline_sync_queue.dart';
 import 'sync_adapter.dart';
 
 /// REST adapter matching backend/src/routes/sync.ts.
@@ -43,7 +42,7 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
     return id;
   }
 
-  String _versionKey(String outletId, String orderId) => outletId + '|' + orderId;
+  String _versionKey(String outletId, String orderId) => '$outletId|$orderId';
 
   Future<int?> _version(String key) async {
     final prefs = await SharedPreferences.getInstance();
@@ -144,16 +143,16 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
       'orderId': event.orderId,
       'eventType': event.eventType,
       'createdAt': event.createdAt.toUtc().toIso8601String(),
-      if (expectedVersion != null) 'expectedServerVersion': expectedVersion,
+      'expectedServerVersion': ?expectedVersion,
       'orderSnapshot': snapshot,
     };
 
     final client = FirefaBackendClient.instance;
     Future<http.Response> post(String token) => http.post(
-      Uri.parse(client.baseUrl + '/api/v1/sync/events'),
+      Uri.parse('${client.baseUrl}/api/v1/sync/events'),
       headers: {
         'content-type': 'application/json',
-        'authorization': 'Bearer ' + token,
+        'authorization': 'Bearer $token',
         'idempotency-key': event.eventId,
       },
       body: jsonEncode(payload),
@@ -230,7 +229,7 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
         eventId: event.eventId,
         outcome: permanent ? FirefaSyncOutcome.permanentFailure : FirefaSyncOutcome.retryableFailure,
         message: (body?['error'] as String?)?.replaceAll('_', ' ') ??
-            'Sinkronisasi gagal (' + response.statusCode.toString() + ').',
+            'Sinkronisasi gagal (${response.statusCode}).',
       );
     } on TimeoutException {
       return FirefaSyncReceipt(
