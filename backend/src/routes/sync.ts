@@ -40,6 +40,9 @@ const snapshotSchema = z.object({
   total: money,
   status: orderStatus,
   paymentStatus: z.enum(["unpaid", "paid", "refunded"]).default("unpaid"),
+  paymentMethod: z.string().trim().max(64).nullable().optional(),
+  cashPaidAmount: money.default(0),
+  paidAt: z.string().datetime({ offset: true }).nullable().optional(),
 });
 
 const syncEventSchema = z.object({
@@ -74,7 +77,7 @@ const syncEventSchema = z.object({
       message: "order.created must not specify expectedServerVersion",
     });
   }
-  if (event.eventType !== "order.created" && event.expectedServerVersion === undefined) {
+  if (event.eventType === "order.updated" && event.expectedServerVersion === undefined) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["expectedServerVersion"],
@@ -115,7 +118,34 @@ function safeSnapshot(
     status: snapshot.status,
     // Client-side paid/refunded flags are not proof of settlement.
     paymentStatus,
+    paymentMethod: snapshot.paymentMethod ?? null,
+    cashPaidAmount: snapshot.cashPaidAmount,
+    paidAt: snapshot.paidAt ?? null,
   };
+}
+
+function hasReportedCashPayment(snapshot: z.infer<typeof snapshotSchema>): boolean {
+  return snapshot.paymentMethod?.toLowerCase() === "cash" &&
+    snapshot.cashPaidAmount >= snapshot.total &&
+    snapshot.total > 0 &&
+    snapshot.paymentStatus === "paid";
+}
+
+async function insertOrderItems(
+  client: PoolClient,
+  tenantId: string,
+  outletId: string,
+  orderId: string,
+  snapshot: z.infer<typeof snapshotSchema>,
+): Promise<void> {
+  for (const item of snapshot.items) {
+    await client.query(
+      "INSERT INTO order_items (tenant_id, outlet_id, order_id, product_name, quantity, unit_price, line_total, details) " +
+        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+      [tenantId, outletId, orderId, item.productName, item.quantity, item.unitPrice,
+       item.quantity * item.unitPrice, item.details],
+    );
+  }
 }
 
 function isAllowedStatusTransition(current: OrderStatus, next: OrderStatus): boolean {
@@ -205,12 +235,30 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
       }
 
       if (event.eventType === "order.recovered") {
-        await client.query("ROLLBACK");
-        inTransaction = false;
-        return reply.code(422).send({
-          error: "recovery_requires_reconciliation",
-          message: "Recovered orders must be reconciled before server acceptance.",
-        });
+        if (scope.role !== "owner") {
+          await client.query("ROLLBACK");
+          inTransaction = false;
+          return reply.code(403).send({ error: "owner_required_for_recovery" });
+        }
+        const recoveredOrder = await client.query<{
+          id: string;
+          version: number;
+          snapshot: Record<string, unknown>;
+        }>(
+          "SELECT id::text AS id, version, snapshot FROM orders " +
+            "WHERE tenant_id = $1 AND outlet_id = $2 AND device_id = $3 AND client_order_id = $4 FOR UPDATE",
+          [request.user.tenantId, event.outletId, event.deviceId, event.orderId],
+        );
+        if (recoveredOrder.rows[0]) {
+          const existing = recoveredOrder.rows[0];
+          await client.query("ROLLBACK");
+          inTransaction = false;
+          return reply.code(409).send({
+            error: "stale_order_version",
+            serverVersion: existing.version,
+            serverSnapshot: existing.snapshot,
+          });
+        }
       }
 
       let globalOrderId: string;
@@ -218,8 +266,14 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
       let authoritativePaymentStatus = "unpaid";
       let sanitizedSnapshot: Record<string, unknown>;
 
-      if (event.eventType === "order.created") {
-        if (event.orderSnapshot.status === "completed") {
+      if (event.eventType === "order.created" || event.eventType === "order.recovered") {
+        if (event.eventType === "order.recovered" && scope.role !== "owner") {
+          await client.query("ROLLBACK");
+          inTransaction = false;
+          return reply.code(403).send({ error: "owner_required_for_recovery" });
+        }
+        const reportedCashPayment = hasReportedCashPayment(event.orderSnapshot);
+        if (event.orderSnapshot.status === "completed" && !reportedCashPayment) {
           await client.query("ROLLBACK");
           inTransaction = false;
           return reply.code(422).send({ error: "payment_verification_required" });
@@ -235,12 +289,13 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
           return reply.code(409).send({ error: "order_identity_conflict" });
         }
 
+        authoritativePaymentStatus = reportedCashPayment ? "paid" : "unpaid";
         sanitizedSnapshot = safeSnapshot(event.orderSnapshot, authoritativePaymentStatus);
         const orderResult = await client.query<{ id: string; version: number }>(
           "INSERT INTO orders " +
             "(tenant_id, outlet_id, device_id, client_order_id, order_type, status, payment_status, " +
             "subtotal, discount, tax, service_charge, total, snapshot) " +
-            "VALUES ($1, $2, $3, $4, $5, $6, 'unpaid', $7, $8, $9, $10, $11, $12::jsonb) " +
+            "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb) " +
             "RETURNING id::text AS id, version",
           [
             request.user.tenantId,
@@ -249,6 +304,7 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
             event.orderId,
             event.orderSnapshot.orderType,
             event.orderSnapshot.status,
+            authoritativePaymentStatus,
             event.orderSnapshot.subtotal,
             event.orderSnapshot.discount,
             event.orderSnapshot.tax,
@@ -259,6 +315,15 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
         );
         globalOrderId = orderResult.rows[0]!.id;
         serverVersion = orderResult.rows[0]!.version;
+        await insertOrderItems(client, request.user.tenantId, event.outletId, globalOrderId, event.orderSnapshot);
+        if (reportedCashPayment) {
+          await client.query(
+            "INSERT INTO payments (tenant_id, outlet_id, order_id, method, amount, status, idempotency_key, actor_user_id) " +
+              "VALUES ($1, $2, $3, 'cash', $4, 'reported', $5, $6) ON CONFLICT (tenant_id, idempotency_key) DO NOTHING",
+            [request.user.tenantId, event.outletId, globalOrderId, event.orderSnapshot.total,
+             event.eventId + ":cash-payment", request.user.sub],
+          );
+        }
       } else {
         const currentResult = await client.query<{
           id: string;
@@ -283,6 +348,7 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
           return reply.code(409).send({
             error: "stale_order_version",
             serverVersion: current.version,
+            serverSnapshot: current.snapshot,
           });
         }
         if (!isAllowedStatusTransition(current.status, event.orderSnapshot.status)) {
@@ -294,9 +360,13 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
             requestedStatus: event.orderSnapshot.status,
           });
         }
+        const reportedCashPayment = hasReportedCashPayment(event.orderSnapshot);
+        const nextPaymentStatus = current.payment_status === "paid" || reportedCashPayment
+          ? "paid"
+          : current.payment_status;
         if (
           event.orderSnapshot.status === "completed" &&
-          current.payment_status !== "paid"
+          nextPaymentStatus !== "paid"
         ) {
           await client.query("ROLLBACK");
           inTransaction = false;
@@ -304,7 +374,7 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
         }
 
         globalOrderId = current.id;
-        authoritativePaymentStatus = current.payment_status;
+        authoritativePaymentStatus = nextPaymentStatus;
         sanitizedSnapshot = safeSnapshot(event.orderSnapshot, authoritativePaymentStatus);
         sanitizedSnapshot.createdAt = current.snapshot.createdAt;
         const updated = await client.query<{ version: number }>(
@@ -314,6 +384,7 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
           [
             event.orderSnapshot.orderType,
             event.orderSnapshot.status,
+            authoritativePaymentStatus,
             event.orderSnapshot.subtotal,
             event.orderSnapshot.discount,
             event.orderSnapshot.tax,
@@ -324,6 +395,16 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
           ],
         );
         serverVersion = updated.rows[0]!.version;
+        await client.query("DELETE FROM order_items WHERE tenant_id = $1 AND order_id = $2", [request.user.tenantId, globalOrderId]);
+        await insertOrderItems(client, request.user.tenantId, event.outletId, globalOrderId, event.orderSnapshot);
+        if (current.payment_status !== "paid" && reportedCashPayment) {
+          await client.query(
+            "INSERT INTO payments (tenant_id, outlet_id, order_id, method, amount, status, idempotency_key, actor_user_id) " +
+              "VALUES ($1, $2, $3, 'cash', $4, 'reported', $5, $6) ON CONFLICT (tenant_id, idempotency_key) DO NOTHING",
+            [request.user.tenantId, event.outletId, globalOrderId, event.orderSnapshot.total,
+             event.eventId + ":cash-payment", request.user.sub],
+          );
+        }
       }
 
       const safeEventPayload = {
