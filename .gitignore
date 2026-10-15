@@ -10,3 +10,7 @@ backend/node_modules/
 backend/dist/
 backend/coverage/
 *.log
+# Database backups (never commit customer/business data)
+backups/
+backend/backups/
+*.dump
