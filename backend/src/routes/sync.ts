@@ -378,9 +378,9 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
         sanitizedSnapshot = safeSnapshot(event.orderSnapshot, authoritativePaymentStatus);
         sanitizedSnapshot.createdAt = current.snapshot.createdAt;
         const updated = await client.query<{ version: number }>(
-          "UPDATE orders SET version = version + 1, order_type = $1, status = $2, " +
-            "subtotal = $3, discount = $4, tax = $5, service_charge = $6, total = $7, " +
-            "snapshot = $8::jsonb, updated_at = now() WHERE id = $9 RETURNING version",
+          "UPDATE orders SET version = version + 1, order_type = $1, status = $2, payment_status = $3, " +
+            "subtotal = $4, discount = $5, tax = $6, service_charge = $7, total = $8, " +
+            "snapshot = $9::jsonb, updated_at = now() WHERE id = $10 RETURNING version",
           [
             event.orderSnapshot.orderType,
             event.orderSnapshot.status,
