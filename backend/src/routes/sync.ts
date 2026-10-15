@@ -1,0 +1,389 @@
+import { createHash, randomUUID } from "node:crypto";
+import type { FastifyPluginAsync, FastifyReply } from "fastify";
+import type { Pool, PoolClient } from "pg";
+import { z } from "zod";
+
+type OrderStatus = "draft" | "confirmed" | "preparing" | "ready" | "served" | "completed" | "cancelled";
+type EventType = "order.created" | "order.updated" | "order.recovered";
+
+interface SyncRouteOptions {
+  pool: Pool;
+}
+
+const money = z.number().finite().min(0).max(999999999999);
+const orderStatus = z.enum([
+  "draft",
+  "confirmed",
+  "preparing",
+  "ready",
+  "served",
+  "completed",
+  "cancelled",
+]);
+
+const snapshotSchema = z.object({
+  id: z.string().trim().min(1).max(128),
+  outletId: z.string().uuid(),
+  orderType: z.string().trim().min(1).max(64),
+  tableId: z.string().max(128).nullable().optional(),
+  createdAt: z.string().datetime({ offset: true }),
+  items: z.array(z.object({
+    productName: z.string().trim().min(1).max(200),
+    quantity: z.number().int().positive().max(100000),
+    unitPrice: money,
+    details: z.string().max(1000).default(""),
+  })).min(1).max(500),
+  subtotal: money,
+  discount: money,
+  tax: money,
+  service: money,
+  total: money,
+  status: orderStatus,
+  paymentStatus: z.enum(["unpaid", "paid", "refunded"]).default("unpaid"),
+});
+
+const syncEventSchema = z.object({
+  schemaVersion: z.literal(1),
+  eventId: z.string().trim().min(16).max(128),
+  deviceId: z.string().uuid(),
+  outletId: z.string().uuid(),
+  orderId: z.string().trim().min(1).max(128),
+  eventType: z.enum(["order.created", "order.updated", "order.recovered"]),
+  createdAt: z.string().datetime({ offset: true }),
+  expectedServerVersion: z.number().int().positive().optional(),
+  orderSnapshot: snapshotSchema,
+}).superRefine((event, context) => {
+  if (event.orderSnapshot.id !== event.orderId) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["orderSnapshot", "id"],
+      message: "snapshot id must match orderId",
+    });
+  }
+  if (event.orderSnapshot.outletId !== event.outletId) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["orderSnapshot", "outletId"],
+      message: "snapshot outletId must match event outletId",
+    });
+  }
+  if (event.eventType === "order.created" && event.expectedServerVersion !== undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["expectedServerVersion"],
+      message: "order.created must not specify expectedServerVersion",
+    });
+  }
+  if (event.eventType !== "order.created" && event.expectedServerVersion === undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["expectedServerVersion"],
+      message: "updates must specify expectedServerVersion",
+    });
+  }
+});
+
+function hashPayload(payload: unknown): string {
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+function invalidRequest(reply: FastifyReply) {
+  return reply.code(400).send({ error: "invalid_request" });
+}
+
+function safeSnapshot(
+  snapshot: z.infer<typeof snapshotSchema>,
+  paymentStatus: string,
+): Record<string, unknown> {
+  return {
+    id: snapshot.id,
+    outletId: snapshot.outletId,
+    orderType: snapshot.orderType,
+    tableId: snapshot.tableId ?? null,
+    createdAt: snapshot.createdAt,
+    items: snapshot.items.map((item) => ({
+      productName: item.productName,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      details: item.details,
+    })),
+    subtotal: snapshot.subtotal,
+    discount: snapshot.discount,
+    tax: snapshot.tax,
+    service: snapshot.service,
+    total: snapshot.total,
+    status: snapshot.status,
+    // Client-side paid/refunded flags are not proof of settlement.
+    paymentStatus,
+  };
+}
+
+function isAllowedStatusTransition(current: OrderStatus, next: OrderStatus): boolean {
+  const allowed: Record<OrderStatus, OrderStatus[]> = {
+    draft: ["draft", "confirmed", "cancelled"],
+    confirmed: ["confirmed", "preparing", "cancelled"],
+    preparing: ["preparing", "ready", "cancelled"],
+    ready: ["ready", "served", "cancelled"],
+    served: ["served", "completed"],
+    completed: ["completed"],
+    cancelled: ["cancelled"],
+  };
+  return allowed[current].includes(next);
+}
+
+export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, options) => {
+  app.post("/events", {
+    preHandler: async (request, reply) => {
+      try {
+        await request.jwtVerify();
+      } catch {
+        return reply.code(401).send({ error: "unauthorized" });
+      }
+    },
+  }, async (request, reply) => {
+    const parsed = syncEventSchema.safeParse(request.body);
+    if (!parsed.success) return invalidRequest(reply);
+
+    const event = parsed.data;
+    const idempotencyKey = request.headers["idempotency-key"];
+    if (typeof idempotencyKey !== "string" || idempotencyKey !== event.eventId) {
+      return reply.code(400).send({ error: "idempotency_key_mismatch" });
+    }
+
+    const client = await options.pool.connect();
+    let inTransaction = false;
+
+    try {
+      await client.query("BEGIN");
+      inTransaction = true;
+
+      const scopeResult = await client.query<{ role: string }>(
+        "SELECT tm.role " +
+          "FROM users u " +
+          "JOIN tenant_memberships tm ON tm.user_id = u.id AND tm.tenant_id = $2 " +
+          "JOIN outlet_memberships om ON om.user_id = u.id AND om.tenant_id = tm.tenant_id " +
+          "JOIN outlets o ON o.id = om.outlet_id AND o.tenant_id = tm.tenant_id " +
+          "JOIN tenants t ON t.id = tm.tenant_id " +
+          "WHERE u.id = $1 AND u.status = 'active' AND tm.status = 'active' " +
+          "AND t.status = 'active' AND o.status = 'active' AND o.id = $3 " +
+          "FOR SHARE OF u, tm, om, o, t",
+        [request.user.sub, request.user.tenantId, event.outletId],
+      );
+      const scope = scopeResult.rows[0];
+      if (!scope) {
+        await client.query("ROLLBACK");
+        inTransaction = false;
+        return reply.code(403).send({ error: "outlet_forbidden" });
+      }
+      if (scope.role !== "owner" && scope.role !== "cashier") {
+        await client.query("ROLLBACK");
+        inTransaction = false;
+        return reply.code(403).send({ error: "role_forbidden" });
+      }
+
+      if (event.eventType === "order.recovered") {
+        await client.query("ROLLBACK");
+        inTransaction = false;
+        return reply.code(422).send({
+          error: "recovery_requires_reconciliation",
+          message: "Recovered orders must be reconciled before server acceptance.",
+        });
+      }
+
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+        [request.user.tenantId + ":" + event.eventId],
+      );
+
+      const payloadHash = hashPayload(event);
+      const priorReceipt = await client.query<{
+        payload_hash: string;
+        response_body: Record<string, unknown>;
+      }>(
+        "SELECT payload_hash, response_body FROM sync_receipts WHERE tenant_id = $1 AND event_id = $2",
+        [request.user.tenantId, event.eventId],
+      );
+
+      if (priorReceipt.rows[0]) {
+        await client.query("ROLLBACK");
+        inTransaction = false;
+        if (priorReceipt.rows[0].payload_hash !== payloadHash) {
+          return reply.code(409).send({ error: "event_id_payload_mismatch" });
+        }
+        return reply.code(200).send(priorReceipt.rows[0].response_body);
+      }
+
+      let globalOrderId: string;
+      let serverVersion: number;
+      let authoritativePaymentStatus = "unpaid";
+      let sanitizedSnapshot: Record<string, unknown>;
+
+      if (event.eventType === "order.created") {
+        if (event.orderSnapshot.status === "completed") {
+          await client.query("ROLLBACK");
+          inTransaction = false;
+          return reply.code(422).send({ error: "payment_verification_required" });
+        }
+
+        const existingOrder = await client.query(
+          "SELECT id FROM orders WHERE tenant_id = $1 AND device_id = $2 AND client_order_id = $3 FOR UPDATE",
+          [request.user.tenantId, event.deviceId, event.orderId],
+        );
+        if (existingOrder.rowCount) {
+          await client.query("ROLLBACK");
+          inTransaction = false;
+          return reply.code(409).send({ error: "order_identity_conflict" });
+        }
+
+        sanitizedSnapshot = safeSnapshot(event.orderSnapshot, authoritativePaymentStatus);
+        const orderResult = await client.query<{ id: string; version: number }>(
+          "INSERT INTO orders " +
+            "(tenant_id, outlet_id, device_id, client_order_id, order_type, status, payment_status, " +
+            "subtotal, discount, tax, service_charge, total, snapshot) " +
+            "VALUES ($1, $2, $3, $4, $5, $6, 'unpaid', $7, $8, $9, $10, $11, $12::jsonb) " +
+            "RETURNING id::text AS id, version",
+          [
+            request.user.tenantId,
+            event.outletId,
+            event.deviceId,
+            event.orderId,
+            event.orderSnapshot.orderType,
+            event.orderSnapshot.status,
+            event.orderSnapshot.subtotal,
+            event.orderSnapshot.discount,
+            event.orderSnapshot.tax,
+            event.orderSnapshot.service,
+            event.orderSnapshot.total,
+            JSON.stringify(sanitizedSnapshot),
+          ],
+        );
+        globalOrderId = orderResult.rows[0]!.id;
+        serverVersion = orderResult.rows[0]!.version;
+      } else {
+        const currentResult = await client.query<{
+          id: string;
+          version: number;
+          status: OrderStatus;
+          payment_status: string;
+        }>(
+          "SELECT id::text AS id, version, status, payment_status FROM orders " +
+            "WHERE tenant_id = $1 AND outlet_id = $2 AND device_id = $3 AND client_order_id = $4 FOR UPDATE",
+          [request.user.tenantId, event.outletId, event.deviceId, event.orderId],
+        );
+        const current = currentResult.rows[0];
+        if (!current) {
+          await client.query("ROLLBACK");
+          inTransaction = false;
+          return reply.code(404).send({ error: "order_not_found" });
+        }
+        if (current.version !== event.expectedServerVersion) {
+          await client.query("ROLLBACK");
+          inTransaction = false;
+          return reply.code(409).send({
+            error: "stale_order_version",
+            serverVersion: current.version,
+          });
+        }
+        if (!isAllowedStatusTransition(current.status, event.orderSnapshot.status)) {
+          await client.query("ROLLBACK");
+          inTransaction = false;
+          return reply.code(422).send({
+            error: "invalid_order_transition",
+            currentStatus: current.status,
+            requestedStatus: event.orderSnapshot.status,
+          });
+        }
+        if (
+          event.orderSnapshot.status === "completed" &&
+          current.payment_status !== "paid"
+        ) {
+          await client.query("ROLLBACK");
+          inTransaction = false;
+          return reply.code(422).send({ error: "payment_verification_required" });
+        }
+
+        globalOrderId = current.id;
+        authoritativePaymentStatus = current.payment_status;
+        sanitizedSnapshot = safeSnapshot(event.orderSnapshot, authoritativePaymentStatus);
+        const updated = await client.query<{ version: number }>(
+          "UPDATE orders SET version = version + 1, order_type = $1, status = $2, " +
+            "subtotal = $3, discount = $4, tax = $5, service_charge = $6, total = $7, " +
+            "snapshot = $8::jsonb, updated_at = now() WHERE id = $9 RETURNING version",
+          [
+            event.orderSnapshot.orderType,
+            event.orderSnapshot.status,
+            event.orderSnapshot.subtotal,
+            event.orderSnapshot.discount,
+            event.orderSnapshot.tax,
+            event.orderSnapshot.service,
+            event.orderSnapshot.total,
+            JSON.stringify(sanitizedSnapshot),
+            current.id,
+          ],
+        );
+        serverVersion = updated.rows[0]!.version;
+      }
+
+      const safeEventPayload = {
+        schemaVersion: event.schemaVersion,
+        eventId: event.eventId,
+        deviceId: event.deviceId,
+        outletId: event.outletId,
+        orderId: event.orderId,
+        eventType: event.eventType as EventType,
+        createdAt: event.createdAt,
+        ...(event.expectedServerVersion === undefined
+          ? {}
+          : { expectedServerVersion: event.expectedServerVersion }),
+        orderSnapshot: sanitizedSnapshot!,
+      };
+
+      await client.query(
+        "INSERT INTO order_events (tenant_id, outlet_id, order_id, event_id, event_type, actor_user_id, payload) " +
+          "VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)",
+        [
+          request.user.tenantId,
+          event.outletId,
+          globalOrderId!,
+          event.eventId,
+          event.eventType,
+          request.user.sub,
+          JSON.stringify(safeEventPayload),
+        ],
+      );
+
+      const responseBody = {
+        schemaVersion: 1,
+        eventId: event.eventId,
+        outcome: "acknowledged",
+        serverReference: randomUUID(),
+        globalOrderId: globalOrderId!,
+        serverVersion: serverVersion!,
+      };
+
+      await client.query(
+        "INSERT INTO sync_receipts " +
+          "(tenant_id, event_id, payload_hash, server_reference, global_order_id, response_body) " +
+          "VALUES ($1, $2, $3, $4, $5, $6::jsonb)",
+        [
+          request.user.tenantId,
+          event.eventId,
+          payloadHash,
+          responseBody.serverReference,
+          globalOrderId!,
+          JSON.stringify(responseBody),
+        ],
+      );
+
+      await client.query("COMMIT");
+      inTransaction = false;
+      return reply.code(201).send(responseBody);
+    } catch (error) {
+      if (inTransaction) await client.query("ROLLBACK").catch(() => undefined);
+      app.log.error({ err: error }, "Sync event rejected by server");
+      return reply.code(500).send({ error: "internal_error" });
+    } finally {
+      client.release();
+    }
+  });
+};
