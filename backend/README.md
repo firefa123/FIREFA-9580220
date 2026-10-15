@@ -9,11 +9,12 @@ Implemented in this foundation slice:
 - Environment validation and graceful shutdown.
 - PostgreSQL schema migration runner.
 - One-time owner bootstrap, login, access JWT, refresh-token rotation, logout, and `/api/v1/auth/me`.
+- Authenticated `/api/v1/sync/events` for transactional order create/update, idempotency receipts, device-scoped order IDs, and stale-version conflict handling.
 - Passwords hashed with Argon2id; refresh tokens stored as SHA-256 hashes and revocable.
 - Initial tenant, outlet, user, membership, refresh-token, order, sync receipt, and order-event tables.
 - Automated route tests and a dedicated backend CI workflow.
 
-Not implemented yet: Owner-managed staff CRUD, authorization for POS/inventory/business endpoints, attendance/geofence endpoints, transactional sync endpoint, or production deployment. Do not connect Flutter clients or mark events synced yet.
+Not implemented yet: Owner-managed staff CRUD, menu/inventory/attendance sync, geofence check-in endpoints, payment-provider verification, and production deployment. The Flutter sync adapter is still disabled/unimplemented; do not mark local events synced from the client yet.
 
 ## Requirements
 
@@ -52,6 +53,10 @@ Health checks:
 - `POST /api/v1/auth/refresh` — rotates the refresh token; the previous token cannot be reused.
 - `POST /api/v1/auth/logout` — revokes the supplied refresh token.
 - `GET /api/v1/auth/me` — requires `Authorization: Bearer <access-token>` and rechecks active user and membership.
+
+- `POST /api/v1/sync/events` — requires an access token and `Idempotency-Key` equal to the body `eventId`. `deviceId` and the server-issued `outletId` are UUIDs. `order.updated` requires `expectedServerVersion`; stale versions return 409. `order.recovered` returns 422 until reconciliation policy is implemented.
+- Sync writes, immutable order event, and acknowledgment receipt commit in one PostgreSQL transaction. Replaying the same event ID and payload returns the same receipt; reusing the ID with a different payload returns 409.
+- The server strips unapproved snapshot fields such as customer name and does not trust client `paid`/`refunded` flags as payment-provider settlement. Completion requiring verified payment remains blocked until payment integration exists.
 
 Generate unique random secrets of at least 32 characters for `JWT_SECRET` and `BOOTSTRAP_TOKEN`. Keep the bootstrap token private and remove/rotate it after the initial owner is created. Never place production secrets in Flutter source or commit them to Git.
 
