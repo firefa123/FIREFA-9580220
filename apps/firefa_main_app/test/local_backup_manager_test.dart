@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:firefa_main_app/features/modules/inventory_store.dart';
+import 'package:firefa_main_app/features/modules/customer_store.dart';
 import 'package:firefa_main_app/features/modules/local_backup_manager.dart';
 import 'package:firefa_main_app/features/modules/menu_store.dart';
 import 'package:firefa_main_app/features/modules/order_store.dart';
@@ -19,12 +20,15 @@ void main() {
       FirefaInventoryStore.instance.initialize(),
       FirefaMenuStore.instance.initialize(),
       FirefaTableStore.instance.initialize(),
+      FirefaCustomerStore.instance.initialize(),
     ]);
 
     final inventory = FirefaInventoryStore.instance;
     final menu = FirefaMenuStore.instance;
     final tables = FirefaTableStore.instance;
     final backup = FirefaLocalBackupManager.instance;
+    final customers = FirefaCustomerStore.instance;
+    expect(customers.add(outletId: 'OUTLET-A', name: 'Backup Customer', phone: '08123456780', creditLimit: 50000), isTrue);
 
     expect(inventory.add(
       outletId: 'OUTLET-A',
@@ -53,7 +57,8 @@ void main() {
     final stored = jsonDecode(prefs.getString('firefa_local_backup_v1')!) as Map;
     expect(stored['backupVersion'], 2);
     final snapshot = Map<String, dynamic>.from(stored['snapshot'] as Map);
-    expect(snapshot.keys, containsAll(['orders', 'inventory', 'menu', 'tables']));
+    expect(snapshot.keys, containsAll(['orders', 'inventory', 'menu', 'tables', 'customers']));
+    expect(customers.update(outletId: 'OUTLET-A', id: customers.forOutlet('OUTLET-A').single.id, name: 'Changed Customer', phone: '08123456780', email: '', creditLimit: 50000, notes: ''), isTrue);
 
     final ingredientId = inventory.forOutlet('OUTLET-A').single.id;
     final menuId = menu.forOutlet('OUTLET-A').single.id;
@@ -82,6 +87,7 @@ void main() {
     expect(inventory.forOutlet('OUTLET-A').single.stock, 500);
     expect(menu.forOutlet('OUTLET-A').single.name, 'Americano');
     expect(tables.forOutlet('OUTLET-A').single.name, 'Meja 1');
+    expect(customers.forOutlet('OUTLET-A').single.name, 'Backup Customer');
   });
 
   test('unsupported backup version is rejected before changing active data', () async {
