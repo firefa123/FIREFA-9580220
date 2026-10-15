@@ -1,9 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/auth/role_permissions.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/outlet/active_outlet_store.dart';
 import '../modules/pos_page.dart';
+import '../modules/backend_client.dart';
+import '../modules/http_sync_adapter.dart';
+import '../modules/offline_sync_queue.dart';
+import '../modules/conflict_store.dart';
+import '../modules/hybrid_sync_conflict_bridge.dart';
+import '../modules/sync_coordinator.dart';
 import '../conflict/conflict_center_page.dart';
 import '../modules/order_models.dart';
 import '../modules/order_store.dart';
@@ -46,6 +54,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   late int selectedIndex;
   bool sidebarCollapsed = true;
+  bool _syncInProgress = false;
 
   static const pageTitles = [
     'Dashboard',
@@ -116,6 +125,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
     outletStore.addListener(_onOutletChanged);
     orderStore.addListener(_onOutletChanged);
+    unawaited(_syncPendingEvents());
   }
 
   @override
@@ -140,6 +150,32 @@ class _DashboardPageState extends State<DashboardPage> {
 
   void _onOutletChanged() {
     if (mounted) setState(() {});
+    unawaited(_syncPendingEvents());
+  }
+
+  /// Sync only when explicitly configured for a real backend. Local POS
+  /// remains usable offline; failed network attempts never block a sale.
+  Future<void> _syncPendingEvents() async {
+    if (!FirefaBackendConfig.isConfigured || _syncInProgress) return;
+    _syncInProgress = true;
+    try {
+      final queue = FirefaOfflineSyncQueue.instance;
+      await queue.initialize();
+      final conflicts = FirefaConflictStore.instance;
+      await conflicts.initialize();
+      final coordinator = FirefaSyncCoordinator(
+        queue: queue,
+        adapter: const FirefaHttpSyncAdapter(),
+        conflictBridge: FirefaHybridSyncConflictBridge(store: conflicts),
+      );
+      for (final localOutletId in FirefaBackendConfig.outletMap.keys) {
+        await coordinator.syncOutlet(localOutletId);
+      }
+    } catch (_) {
+      // Outbox remains durable; the next order/outlet change retries.
+    } finally {
+      _syncInProgress = false;
+    }
   }
 
   void _selectPage(int index) {
