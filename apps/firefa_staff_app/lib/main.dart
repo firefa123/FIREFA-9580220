@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() => runApp(const FirefaStaffApp());
 
@@ -37,11 +38,49 @@ class StaffShell extends StatefulWidget {
 class _StaffShellState extends State<StaffShell> {
   int _tab = 0;
   bool _checkedIn = false;
+  bool _loading = true;
   final Set<int> _done = <int>{};
+  static const _shiftKey = 'staff_demo_checked_in';
+  static const _tasksKey = 'staff_demo_completed_tasks';
   static const _tasks = ['Persiapan area kerja', 'Periksa perlengkapan', 'Briefing tim'];
 
   @override
+  void initState() {
+    super.initState();
+    _loadLocalState();
+  }
+
+  Future<void> _loadLocalState() async {
+    final preferences = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _checkedIn = preferences.getBool(_shiftKey) ?? false;
+      _done
+        ..clear()
+        ..addAll((preferences.getStringList(_tasksKey) ?? <String>[])
+            .map(int.tryParse)
+            .whereType<int>()
+            .where((index) => index >= 0 && index < _tasks.length));
+      _loading = false;
+    });
+  }
+
+  Future<void> _saveLocalState() async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_shiftKey, _checkedIn);
+    await preferences.setStringList(
+      _tasksKey,
+      _done.map((index) => index.toString()).toList(),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const MaterialApp(
+        home: Scaffold(body: Center(child: CircularProgressIndicator())),
+      );
+    }
     final pages = [_home(), _shift(), _taskList(), _profile()];
     return Scaffold(
       appBar: AppBar(
@@ -168,13 +207,16 @@ class _StaffShellState extends State<StaffShell> {
         const SizedBox(height: 14),
         ...List.generate(_tasks.length, (index) => Card(child: CheckboxListTile(
           value: _done.contains(index),
-          onChanged: (value) => setState(() {
-            if (value ?? false) {
-              _done.add(index);
-            } else {
-              _done.remove(index);
-            }
-          }),
+          onChanged: (value) {
+            setState(() {
+              if (value ?? false) {
+                _done.add(index);
+              } else {
+                _done.remove(index);
+              }
+            });
+            _saveLocalState();
+          },
           controlAffinity: ListTileControlAffinity.leading,
           secondary: const CircleAvatar(backgroundColor: Color(0xFFE0F2F1), child: Icon(Icons.task_alt_rounded, color: Color(0xFF008F83))),
           title: Text(_tasks[index], style: const TextStyle(fontWeight: FontWeight.w700)),
@@ -230,6 +272,7 @@ class _StaffShellState extends State<StaffShell> {
 
   void _toggleShift() {
     setState(() => _checkedIn = !_checkedIn);
+    _saveLocalState();
     _message(_checkedIn ? 'Check-in demo berhasil.' : 'Check-out demo berhasil.');
   }
 
