@@ -79,7 +79,7 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
     if (serverOutletId == null || !_isUuid(serverOutletId)) {
       return FirefaSyncReceipt(
         eventId: event.eventId,
-        outcome: FirefaSyncOutcome.permanentFailure,
+        outcome: FirefaSyncOutcome.retryableFailure,
         message: 'Pemetaan outlet lokal ke UUID server belum dikonfigurasi.',
       );
     }
@@ -122,7 +122,7 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
     if (!isCreate && event.eventType != 'order.recovered' && expectedVersion == null) {
       return FirefaSyncReceipt(
         eventId: event.eventId,
-        outcome: FirefaSyncOutcome.permanentFailure,
+        outcome: FirefaSyncOutcome.retryableFailure,
         message: 'Versi server pesanan belum tersedia; event ditahan untuk rekonsiliasi.',
       );
     }
@@ -191,7 +191,7 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
       if (token == null) {
         return FirefaSyncReceipt(
           eventId: event.eventId,
-          outcome: FirefaSyncOutcome.permanentFailure,
+          outcome: FirefaSyncOutcome.retryableFailure,
           message: 'Login backend diperlukan sebelum sinkronisasi.',
         );
       }
@@ -201,7 +201,7 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
         if (token == null) {
           return FirefaSyncReceipt(
             eventId: event.eventId,
-            outcome: FirefaSyncOutcome.permanentFailure,
+            outcome: FirefaSyncOutcome.retryableFailure,
             message: 'Sesi backend berakhir; login kembali.',
           );
         }
