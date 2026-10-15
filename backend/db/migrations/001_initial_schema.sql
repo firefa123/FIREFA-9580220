@@ -85,7 +85,8 @@ CREATE TABLE orders (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   FOREIGN KEY (outlet_id, tenant_id) REFERENCES outlets(id, tenant_id) ON DELETE RESTRICT,
-  UNIQUE (tenant_id, device_id, client_order_id)
+  UNIQUE (tenant_id, device_id, client_order_id),
+  UNIQUE (id, tenant_id, outlet_id)
 );
 
 CREATE INDEX orders_outlet_created_idx ON orders (outlet_id, created_at DESC);
@@ -106,13 +107,14 @@ CREATE TABLE order_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   outlet_id uuid NOT NULL,
-  order_id uuid NOT NULL REFERENCES orders(id) ON DELETE RESTRICT,
+  order_id uuid NOT NULL,
   event_id text NOT NULL,
   event_type text NOT NULL,
   actor_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
   payload jsonb NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   FOREIGN KEY (outlet_id, tenant_id) REFERENCES outlets(id, tenant_id) ON DELETE RESTRICT,
+  FOREIGN KEY (order_id, tenant_id, outlet_id) REFERENCES orders(id, tenant_id, outlet_id) ON DELETE RESTRICT,
   UNIQUE (tenant_id, event_id)
 );
 
