@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/auth/role_permissions.dart';
 import '../../dashboard/dashboard_page.dart';
+import '../../modules/backend_client.dart';
 
 class LoginForm extends StatefulWidget {
   const LoginForm({super.key});
@@ -16,6 +17,7 @@ class _LoginFormState extends State<LoginForm> {
 
   bool obscurePassword = true;
   bool rememberMe = false;
+  bool isLoading = false;
 
   FirefaRole selectedRole = FirefaRole.owner;
 
@@ -26,12 +28,47 @@ class _LoginFormState extends State<LoginForm> {
     super.dispose();
   }
 
-  void _login() {
+  Future<void> _login() async {
+    if (isLoading) return;
+    if (FirefaBackendConfig.isConfigured) {
+      setState(() => isLoading = true);
+      try {
+        final session = await FirefaBackendClient.instance.login(
+          email: emailController.text,
+          password: passwordController.text,
+        );
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DashboardPage(role: session.role),
+          ),
+        );
+      } on FirefaBackendException catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message)),
+        );
+      } on FormatException catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message)),
+        );
+      } catch (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Backend tidak dapat dihubungi. Periksa koneksi dan konfigurasi server.')),
+        );
+      } finally {
+        if (mounted) setState(() => isLoading = false);
+      }
+      return;
+    }
+
+    // Existing local demo remains available unless backend mode is explicitly enabled.
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(
-        builder: (_) => DashboardPage(role: selectedRole),
-      ),
+      MaterialPageRoute(builder: (_) => DashboardPage(role: selectedRole)),
     );
   }
 
@@ -65,6 +102,7 @@ class _LoginFormState extends State<LoginForm> {
           ),
         ),
         const SizedBox(height: 20),
+        if (!FirefaBackendConfig.isConfigured)
         DropdownButtonFormField<FirefaRole>(
           initialValue: selectedRole,
           decoration: const InputDecoration(
@@ -105,8 +143,14 @@ class _LoginFormState extends State<LoginForm> {
           width: double.infinity,
           height: 52,
           child: FilledButton(
-            onPressed: _login,
-            child: const Text('LOGIN (DEMO)'),
+            onPressed: isLoading ? null : _login,
+            child: isLoading
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(FirefaBackendConfig.isConfigured ? 'LOGIN' : 'LOGIN (DEMO)'),
           ),
         ),
       ],
