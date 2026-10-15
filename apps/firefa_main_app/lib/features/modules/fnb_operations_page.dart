@@ -191,7 +191,7 @@ class _FnbOperationsPageState extends State<FnbOperationsPage> with SingleTicker
             Tab(text:'Reservasi'),Tab(text:'Antrean'),Tab(text:'KOT Dapur'),
             Tab(text:'Paket Menu'),Tab(text:'Harga Pesanan'),Tab(text:'Promo'),
           ]),
-          SizedBox(height:560,child:TabBarView(controller:tabs,children:[
+          Expanded(child:TabBarView(controller:tabs,children:[
             _panel('Reservasi',store.reservations(id).length,canManage?addReservation:null,[
               for(final r in store.reservations(id)) _reservationTile(r,id),
             ]),
@@ -211,6 +211,7 @@ class _FnbOperationsPageState extends State<FnbOperationsPage> with SingleTicker
               for(final p in store.promos(id)) _promoTile(p,id),
             ]),
           ])),
+          ),
         ]);
       },
     );
