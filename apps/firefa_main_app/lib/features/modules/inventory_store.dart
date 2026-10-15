@@ -222,6 +222,7 @@ class FirefaInventoryStore extends ChangeNotifier {
 
   bool setPreparedIngredient({required String outletId, required String id, required bool prepared}) {
     if (!_initialized) return false;
+    if (!prepared && _prepRecipes.any((line) => line.outletId == outletId && line.preparedItemId == id)) return false;
     final index = _index(outletId, id);
     if (index < 0) return false;
     final old = _items[index];
@@ -306,7 +307,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       }
       final refreshed = _items[_index(outletId, preparedItemId)], afterTarget = refreshed.stock + output;
       _items[_index(outletId, preparedItemId)] = FirefaInventoryItem(id: refreshed.id, outletId: refreshed.outletId, name: refreshed.name, unit: refreshed.unit,
-        stock: afterTarget, minimumStock: refreshed.minimumStock, unitCost: totalCost / output, isPreparedIngredient: true);
+        stock: afterTarget, minimumStock: refreshed.minimumStock, unitCost: (refreshed.stock * refreshed.unitCost + totalCost) / afterTarget, isPreparedIngredient: true);
       _movements.add(FirefaStockMovement(id: 'movement-' + (_nextMovementId++).toString(), outletId: outletId, itemId: refreshed.id,
         itemName: refreshed.name, type: 'in', before: refreshed.stock, after: afterTarget, note: 'Hasil produksi (' + batches.toString() + ' batch)', timestamp: now));
       notifyListeners(); _save(); await waitForPendingSave(); return true;

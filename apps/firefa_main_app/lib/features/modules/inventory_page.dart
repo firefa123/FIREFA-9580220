@@ -623,7 +623,7 @@ class _InventoryPageState extends State<InventoryPage> {
                   _metric('Stok Rendah', low, Colors.orange),
                   _metric('Stok Habis', empty, Colors.red),
                 ]),
-                if (low > 0)
+                if (low + empty > 0)
                   Card(color: const Color(0xFFFFF7ED), child: Padding(
                     padding: const EdgeInsets.all(12),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
