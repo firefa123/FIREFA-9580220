@@ -238,9 +238,10 @@ class _PrinterPageState extends State<PrinterPage> {
 
         final configs = store.configsForOutlet(outlet.selectedOutletId);
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        return SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             const Text(
               'Konfigurasi Printer',
               style: TextStyle(
@@ -270,7 +271,8 @@ class _PrinterPageState extends State<PrinterPage> {
                   ),
                 ),
               ),
-          ],
+            ],
+          ),
         );
       },
     );
