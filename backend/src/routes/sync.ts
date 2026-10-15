@@ -43,6 +43,19 @@ const snapshotSchema = z.object({
   paymentMethod: z.string().trim().max(64).nullable().optional(),
   cashPaidAmount: money.default(0),
   paidAt: z.string().datetime({ offset: true }).nullable().optional(),
+  customerId: z.string().trim().max(128).nullable().optional(),
+  customerName: z.string().trim().max(180).nullable().optional(),
+  refundAmount: money.default(0),
+  cashRefundAmount: money.default(0),
+  refundedAt: z.string().datetime({ offset: true }).nullable().optional(),
+  refundMethod: z.string().trim().max(64).nullable().optional(),
+  refundReason: z.string().trim().max(500).nullable().optional(),
+  refundRecords: z.array(z.object({
+    amount: z.number().finite().positive().max(999999999999),
+    method: z.string().trim().min(1).max(64),
+    reason: z.string().trim().min(1).max(500),
+    createdAt: z.string().datetime({ offset: true }),
+  })).max(100).default([]),
 }).superRefine((snapshot, context) => {
   const calculatedSubtotal = snapshot.items.reduce(
     (sum, item) => sum + item.quantity * item.unitPrice,
@@ -75,6 +88,21 @@ const snapshotSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["cashPaidAmount"],
       message: "cashPaidAmount cannot exceed total",
+    });
+  }
+  const refundTotal = snapshot.refundRecords.reduce((sum, record) => sum + record.amount, 0);
+  if (Math.abs(refundTotal - snapshot.refundAmount) > 0.01) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["refundAmount"],
+      message: "refundAmount must equal the sum of refund records",
+    });
+  }
+  if (snapshot.refundAmount > snapshot.total) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["refundAmount"],
+      message: "refundAmount cannot exceed order total",
     });
   }
 });
@@ -155,6 +183,15 @@ function safeSnapshot(
     paymentMethod: snapshot.paymentMethod ?? null,
     cashPaidAmount: snapshot.cashPaidAmount,
     paidAt: snapshot.paidAt ?? null,
+    refundAmount: snapshot.refundAmount,
+    cashRefundAmount: snapshot.cashRefundAmount,
+    refundedAt: snapshot.refundedAt ?? null,
+    refundMethod: snapshot.refundMethod ?? null,
+    refundReason: snapshot.refundReason ?? null,
+    refundRecords: snapshot.refundRecords,
+    ...(snapshot.paymentMethod?.toUpperCase() === "BON"
+      ? { customerId: snapshot.customerId ?? null, customerName: snapshot.customerName ?? null }
+      : {}),
   };
 }
 
@@ -163,6 +200,56 @@ function hasReportedCashPayment(snapshot: z.infer<typeof snapshotSchema>): boole
     snapshot.cashPaidAmount >= snapshot.total &&
     snapshot.total > 0 &&
     snapshot.paymentStatus === "paid";
+}
+
+function isBonSale(snapshot: z.infer<typeof snapshotSchema>): boolean {
+  return snapshot.status === "completed" &&
+    snapshot.paymentMethod?.toUpperCase() === "BON" &&
+    Boolean(snapshot.customerId?.trim() || snapshot.customerName?.trim());
+}
+
+function refundIdentity(deviceId: string, orderId: string, refund: {
+  amount: number; method: string; reason: string; createdAt: string;
+}): string {
+  return "refund:" + createHash("sha256").update(JSON.stringify([
+    deviceId, orderId, refund.amount, refund.method, refund.reason, refund.createdAt,
+  ])).digest("hex");
+}
+
+async function persistReportedRefunds(
+  client: PoolClient,
+  tenantId: string,
+  outletId: string,
+  orderId: string,
+  deviceId: string,
+  actorUserId: string,
+  refunds: z.infer<typeof snapshotSchema>["refundRecords"],
+): Promise<void> {
+  for (const refund of refunds) {
+    if (refund.method.toLowerCase() !== "cash") {
+      throw new Error("REFUND_PROVIDER_VERIFICATION_REQUIRED");
+    }
+    await client.query(
+      "INSERT INTO refunds (tenant_id, outlet_id, order_id, amount, method, reason, status, idempotency_key, actor_user_id, created_at) " +
+        "VALUES ($1, $2, $3, $4, $5, $6, 'reported', $7, $8, $9) ON CONFLICT (tenant_id, idempotency_key) DO NOTHING",
+      [tenantId, outletId, orderId, refund.amount, refund.method, refund.reason,
+       refundIdentity(deviceId, orderId, refund), actorUserId, refund.createdAt],
+    );
+  }
+}
+
+async function persistBonReceivable(
+  client: PoolClient,
+  tenantId: string,
+  outletId: string,
+  orderId: string,
+  snapshot: z.infer<typeof snapshotSchema>,
+): Promise<void> {
+  await client.query(
+    "INSERT INTO accounts_receivable (tenant_id, outlet_id, order_id, customer_id, customer_name, original_amount, outstanding_amount) " +
+      "VALUES ($1, $2, $3, $4, $5, $6, $6) ON CONFLICT (tenant_id, order_id) DO NOTHING",
+    [tenantId, outletId, orderId, snapshot.customerId ?? null, snapshot.customerName ?? null, snapshot.total],
+  );
 }
 
 async function insertOrderItems(
