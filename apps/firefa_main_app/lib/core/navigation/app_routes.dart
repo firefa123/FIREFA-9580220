@@ -120,6 +120,20 @@ class FirefaNavigation {
       icon: Icons.room_service_outlined,
       permission: FirefaPermission.ordersView,
     ),
+    FirefaModule(
+      id: 'finance',
+      title: 'Pembelian & Keuangan',
+      description: 'Utang pemasok, konsinyasi, pengeluaran, dan laporan keuangan.',
+      icon: Icons.account_balance_wallet_outlined,
+      permission: FirefaPermission.inventoryManage,
+    ),
+    FirefaModule(
+      id: 'customers',
+      title: 'Pelanggan & Loyalitas',
+      description: 'Piutang BON, limit kredit, loyalty, RFM, dan backup.',
+      icon: Icons.people_alt_outlined,
+      permission: FirefaPermission.ordersView,
+    ),
   ];
 
   static List<FirefaModule> accessibleModules(FirefaRole role) =>

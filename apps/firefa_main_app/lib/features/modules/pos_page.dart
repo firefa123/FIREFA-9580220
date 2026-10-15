@@ -13,6 +13,7 @@ import 'table_store.dart';
 import 'receipt_formatter.dart';
 import 'settings_store.dart';
 import 'fnb_operations_store.dart';
+import 'customer_store.dart';
 
 class PosPage extends StatefulWidget {
   const PosPage({super.key});
@@ -221,7 +222,7 @@ class _PosPageState extends State<PosPage> {
   @override
   void initState() {
     super.initState();
-    menuReady = Future.wait([menuStore.initialize(), tableStore.initialize(), FirefaFnbOperationsStore.instance.initialize()]).then((_) {});
+    menuReady = Future.wait([menuStore.initialize(), tableStore.initialize(), FirefaFnbOperationsStore.instance.initialize(), FirefaCustomerStore.instance.initialize()]).then((_) {});
     tableStore.addListener(_onOutletChanged);
     menuStore.addListener(_onOutletChanged);
     outletStore.addListener(_onOutletChanged);
@@ -885,6 +886,38 @@ class _PosPageState extends State<PosPage> {
       if (!mounted || payment == null || sourceOutlet != outletId) return;
     }
 
+    String? bonCustomerId;
+    if (payment?.method == 'BON') {
+      final customerStore = FirefaCustomerStore.instance;
+      final customers = customerStore.forOutlet(sourceOutlet).where((c) => c.active).toList();
+      if (customers.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Buat pelanggan terlebih dahulu sebelum memberikan BON/kredit.')));
+        return;
+      }
+      final selected = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Pilih pelanggan kredit'),
+          content: SizedBox(width: 380, child: ListView(shrinkWrap: true, children: [
+            for (final c in customers)
+              ListTile(
+                title: Text(c.name),
+                subtitle: Text('Sisa limit: ${rupiah(customerStore.availableCredit(sourceOutlet, c.id))}'),
+                enabled: customerStore.availableCredit(sourceOutlet, c.id) >= grandTotal,
+                onTap: customerStore.availableCredit(sourceOutlet, c.id) >= grandTotal ? () => Navigator.pop(ctx, c.id) : null,
+              ),
+          ])),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal'))],
+        ),
+      );
+      if (!mounted || selected == null || sourceOutlet != outletId) return;
+      if (customerStore.availableCredit(sourceOutlet, selected) < grandTotal) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Limit kredit tidak mencukupi.')));
+        return;
+      }
+      bonCustomerId = selected;
+    }
+
     if (_checkoutBusy || cart.isEmpty || !outletStore.canAccessOutlet(sourceOutlet)) {
       return;
     }
@@ -1052,6 +1085,10 @@ class _PosPageState extends State<PosPage> {
               );
         if (!paymentSaved) {
           throw StateError('Status pembayaran tidak dapat diperbarui.');
+        }
+        if (payment.method == 'BON') {
+          final linked = await FirefaCustomerStore.instance.assignOrder(outletId: sourceOutlet, orderId: order.id, customerId: bonCustomerId!);
+          if (!linked) throw StateError('BON ditolak: limit kredit pelanggan tidak mencukupi atau pelanggan tidak valid.');
         }
       }
       await store.waitForPendingSave();

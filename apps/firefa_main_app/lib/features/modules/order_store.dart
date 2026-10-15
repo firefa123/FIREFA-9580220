@@ -340,6 +340,12 @@ class FirefaOrderStore extends ChangeNotifier {
     return null;
   }
 
+  Future<bool> assignCustomerAndPersist(String outletId, String orderId, {required String customerId, required String customerName}) async {
+    final id = customerId.trim(); final name = customerName.trim();
+    if (id.isEmpty || name.isEmpty) return false;
+    return _mutateOrderAndPersist(outletId, orderId, mutation: (order) { order.customerId = id; order.customerName = name; return true; });
+  }
+
   /// Apply an explicit conflict decision to the real local order and outbox.
   /// Server snapshots are accepted only after full model parsing and identity checks.
   Future<void> reconcileConflict({

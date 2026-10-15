@@ -103,6 +103,8 @@ class FirefaOrder {
   final String outletId;
   final String orderType;
   final String? tableId;
+  String? customerId;
+  String? customerName;
   final DateTime createdAt;
   DateTime? completedAt;
   DateTime? paidAt;
@@ -129,6 +131,8 @@ class FirefaOrder {
     required this.outletId,
     required this.orderType,
     required this.tableId,
+    this.customerId,
+    this.customerName,
     required this.createdAt,
     this.completedAt,
     this.paidAt,
@@ -234,6 +238,8 @@ class FirefaOrder {
         'outletId': outletId,
         'orderType': orderType,
         'tableId': tableId,
+        'customerId': customerId,
+        'customerName': customerName,
         'createdAt': createdAt.toIso8601String(),
         'completedAt': completedAt?.toIso8601String(),
         'paidAt': paidAt?.toIso8601String(),
@@ -261,6 +267,8 @@ class FirefaOrder {
       outletId: json['outletId'] as String,
       orderType: json['orderType'] as String,
       tableId: json['tableId'] as String?,
+      customerId: json['customerId'] as String?,
+      customerName: json['customerName'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
       completedAt: json['completedAt'] == null
           ? null

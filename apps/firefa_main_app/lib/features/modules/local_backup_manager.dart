@@ -8,6 +8,7 @@ import 'menu_store.dart';
 import 'order_store.dart';
 import 'table_store.dart';
 import 'fnb_operations_store.dart';
+import 'customer_store.dart';
 
 class FirefaLocalBackupInfo {
   final DateTime createdAt;
@@ -38,6 +39,7 @@ class FirefaLocalBackupManager extends ChangeNotifier {
       FirefaMenuStore.instance.initialize(),
       FirefaTableStore.instance.initialize(),
       FirefaFnbOperationsStore.instance.initialize(),
+      FirefaCustomerStore.instance.initialize(),
     ]);
   }
 
@@ -79,6 +81,7 @@ class FirefaLocalBackupManager extends ChangeNotifier {
       'menu': menu.exportLocalSnapshot(),
       'tables': tables.exportLocalSnapshot(),
       'fnbOperations': FirefaFnbOperationsStore.instance.exportLocalSnapshot(),
+      'customers': FirefaCustomerStore.instance.exportLocalSnapshot(),
     };
     final orderSnapshot = snapshot['orders'] as Map<String, dynamic>;
     final orderList = orderSnapshot['orders'] as List;
@@ -154,6 +157,11 @@ class FirefaLocalBackupManager extends ChangeNotifier {
       FirefaInventoryStore.instance.validateLocalSnapshot(inventorySnapshot);
       FirefaMenuStore.instance.validateLocalSnapshot(menuSnapshot);
       FirefaTableStore.instance.validateLocalSnapshot(tableSnapshot);
+      final rawCustomers = snapshot['customers'];
+      if (rawCustomers != null) {
+        if (rawCustomers is! Map) throw const FormatException('Snapshot pelanggan tidak valid.');
+        FirefaCustomerStore.instance.validateLocalSnapshot(Map<String, dynamic>.from(rawCustomers));
+      }
       final rawFnb = snapshot['fnbOperations'];
       if (rawFnb != null) {
         if (rawFnb is! Map) throw const FormatException('Snapshot operasional F&B tidak valid.');
@@ -190,6 +198,10 @@ class FirefaLocalBackupManager extends ChangeNotifier {
       await FirefaTableStore.instance.restoreLocalSnapshot(
         List<dynamic>.from(snapshot['tables'] as List),
       );
+      final rawCustomers = snapshot['customers'];
+      if (rawCustomers is Map) {
+        await FirefaCustomerStore.instance.restoreLocalSnapshot(Map<String, dynamic>.from(rawCustomers));
+      }
       final rawFnb = snapshot['fnbOperations'];
       if (rawFnb is Map) {
         await FirefaFnbOperationsStore.instance.restoreLocalSnapshot(
