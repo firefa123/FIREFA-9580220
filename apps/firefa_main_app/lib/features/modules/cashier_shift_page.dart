@@ -400,9 +400,10 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
       builder: (context, _) {
         final current = _store.activeForOutlet(outletId);
         final records = _store.historyForOutlet(outletId);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        return SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(20),
@@ -494,7 +495,8 @@ class _CashierShiftPageState extends State<CashierShiftPage> {
               'Mode lokal: data tersimpan di perangkat ini. Pembayaran QRIS/transfer tidak menambah estimasi uang fisik. Transaksi lama tanpa waktu/metode pembayaran tidak dihitung otomatis.',
               style: TextStyle(color: Colors.black54, fontSize: 12),
             ),
-          ],
+            ],
+          ),
         );
       },
     );
