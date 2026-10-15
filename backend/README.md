@@ -59,6 +59,8 @@ Set `POSTGRES_PASSWORD` in the shell or a root `.env` file before starting:
 
 ```powershell
 $env:POSTGRES_PASSWORD="replace-with-a-long-local-secret"
+$env:JWT_SECRET="replace-with-at-least-32-random-characters"
+$env:BOOTSTRAP_TOKEN="replace-with-another-32-character-random-secret"
 docker compose -f docker-compose.backend.yml up --build
 ```
 
