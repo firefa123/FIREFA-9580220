@@ -8,7 +8,8 @@ CREATE TABLE menu_categories (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   FOREIGN KEY (outlet_id, tenant_id) REFERENCES outlets(id, tenant_id) ON DELETE RESTRICT,
-  UNIQUE (id, tenant_id, outlet_id)
+  UNIQUE (id, tenant_id, outlet_id),
+  UNIQUE (id, tenant_id)
 );
 
 CREATE TABLE products (
@@ -25,8 +26,8 @@ CREATE TABLE products (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   FOREIGN KEY (outlet_id, tenant_id) REFERENCES outlets(id, tenant_id) ON DELETE RESTRICT,
-  FOREIGN KEY (category_id, tenant_id, outlet_id)
-    REFERENCES menu_categories(id, tenant_id, outlet_id) ON DELETE RESTRICT,
+  FOREIGN KEY (category_id, tenant_id)
+    REFERENCES menu_categories(id, tenant_id) ON DELETE RESTRICT,
   UNIQUE (id, tenant_id, outlet_id)
 );
 
