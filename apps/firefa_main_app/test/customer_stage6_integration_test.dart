@@ -33,6 +33,9 @@ void main() {
   expect(points,15);
   expect(await customers.syncLoyalty(outlet),0);
   expect(customers.find(outlet,customer.id)!.points,points);
+  expect(customers.redeemPoints(outletId:outlet,customerId:customer.id,pointsRequired:10),isTrue);
+  expect(customers.find(outlet,customer.id)!.points,5);
+  expect(customers.find(outlet,customer.id)!.rewardCount,1);
   final csv=customers.exportCsv(outlet);
   expect(csv,contains('credit_limit'));
   expect(await customers.importCsv(outlet,'name,phone,email,credit_limit,notes\r\nSecond Customer,0812222,second@example.com,50000,New'),1);

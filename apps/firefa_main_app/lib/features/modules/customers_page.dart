@@ -102,7 +102,7 @@ class _CustomersPageState extends State<CustomersPage> with SingleTickerProvider
                Card(child: ListTile(
                  title: Text(customer.name),
                  subtitle: Text('${customer.points} poin • ${customer.rewardCount} reward • ${customer.earnedOrderIds.length} transaksi sudah diberi poin'),
-                 trailing: const Icon(Icons.loyalty_outlined),
+                 trailing: customer.points >= 100 ? TextButton(onPressed: () { final ok = store.redeemPoints(outletId: outletId, customerId: customer.id); msg(ok ? '100 poin ditukar menjadi 1 reward.' : 'Penukaran poin gagal.'); }, child: const Text('Tukar 100 poin')) : const Icon(Icons.loyalty_outlined),
                )),
            ]),
          ])),
