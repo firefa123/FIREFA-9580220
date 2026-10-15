@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import argon2 from "argon2";
+import "@fastify/jwt";
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
