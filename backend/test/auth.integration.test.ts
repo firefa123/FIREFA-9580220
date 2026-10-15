@@ -379,4 +379,77 @@ authSuite("authentication endpoints", () => {
     expect(conflict.json().serverSnapshot.id).toBe("ORD-1001");
   });
 
+  it("restricts product writes to the owner and scopes reads to the outlet", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const created = await ownerApp.inject({
+      method: "POST",
+      url: "/api/v1/products",
+      headers: { authorization: "Bearer " + owner.accessToken },
+      payload: { outletId: owner.outletIds[0], sku: "COFFEE-001", name: "Coffee", unitPrice: 12000, taxRate: 0 },
+    });
+    expect(created.statusCode).toBe(201);
+    const list = await ownerApp.inject({
+      method: "GET",
+      url: "/api/v1/products?outletId=" + owner.outletIds[0],
+      headers: { authorization: "Bearer " + owner.accessToken },
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().products).toHaveLength(1);
+    expect(list.json().products[0].name).toBe("Coffee");
+    const forbidden = await ownerApp.inject({
+      method: "GET",
+      url: "/api/v1/products?outletId=33333333-3333-4333-8333-333333333333",
+      headers: { authorization: "Bearer " + owner.accessToken },
+    });
+    expect(forbidden.statusCode).toBe(403);
+  });
+
+  it("keeps inventory movement idempotent and prevents negative stock", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const created = await ownerApp.inject({
+      method: "POST",
+      url: "/api/v1/inventory/items",
+      headers: { authorization: "Bearer " + owner.accessToken },
+      payload: {
+        outletId: owner.outletIds[0], sku: "BEAN-001", name: "Coffee Beans",
+        unit: "kg", initialQuantity: 5, reorderLevel: 1, averageUnitCost: 50000,
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const itemId = created.json().id;
+    const payload = {
+      outletId: owner.outletIds[0], inventoryItemId: itemId,
+      movementType: "sale", quantityDelta: -2, unitCost: 50000,
+      sourceType: "test", sourceId: "SALE-1",
+    };
+    const headers = {
+      authorization: "Bearer " + owner.accessToken,
+      "idempotency-key": "inventory-sale-0001",
+    };
+    const movement = await ownerApp.inject({
+      method: "POST", url: "/api/v1/inventory/movements", headers, payload,
+    });
+    expect(movement.statusCode).toBe(201);
+    expect(movement.json().quantityOnHand).toBe(3);
+    const replay = await ownerApp.inject({
+      method: "POST", url: "/api/v1/inventory/movements", headers, payload,
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().replayed).toBe(true);
+    const mismatch = await ownerApp.inject({
+      method: "POST", url: "/api/v1/inventory/movements", headers,
+      payload: { ...payload, quantityDelta: -1 },
+    });
+    expect(mismatch.statusCode).toBe(409);
+    const oversell = await ownerApp.inject({
+      method: "POST", url: "/api/v1/inventory/movements",
+      headers: { ...headers, "idempotency-key": "inventory-sale-0002" },
+      payload: { ...payload, quantityDelta: -10 },
+    });
+    expect(oversell.statusCode).toBe(409);
+    expect(oversell.json().error).toBe("insufficient_stock");
+  });
+
 });
