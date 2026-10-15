@@ -122,8 +122,8 @@ function isAllowedStatusTransition(current: OrderStatus, next: OrderStatus): boo
   const allowed: Record<OrderStatus, OrderStatus[]> = {
     draft: ["draft", "confirmed", "cancelled"],
     confirmed: ["confirmed", "preparing", "cancelled"],
-    preparing: ["preparing", "ready", "cancelled"],
-    ready: ["ready", "served", "cancelled"],
+    preparing: ["preparing", "ready"],
+    ready: ["ready", "served"],
     served: ["served", "completed"],
     completed: ["completed"],
     cancelled: ["cancelled"],
@@ -181,15 +181,6 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
         return reply.code(403).send({ error: "role_forbidden" });
       }
 
-      if (event.eventType === "order.recovered") {
-        await client.query("ROLLBACK");
-        inTransaction = false;
-        return reply.code(422).send({
-          error: "recovery_requires_reconciliation",
-          message: "Recovered orders must be reconciled before server acceptance.",
-        });
-      }
-
       await client.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
         [request.user.tenantId + ":" + event.eventId],
@@ -211,6 +202,15 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
           return reply.code(409).send({ error: "event_id_payload_mismatch" });
         }
         return reply.code(200).send(priorReceipt.rows[0].response_body);
+      }
+
+      if (event.eventType === "order.recovered") {
+        await client.query("ROLLBACK");
+        inTransaction = false;
+        return reply.code(422).send({
+          error: "recovery_requires_reconciliation",
+          message: "Recovered orders must be reconciled before server acceptance.",
+        });
       }
 
       let globalOrderId: string;
@@ -265,8 +265,9 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
           version: number;
           status: OrderStatus;
           payment_status: string;
+          snapshot: Record<string, unknown>;
         }>(
-          "SELECT id::text AS id, version, status, payment_status FROM orders " +
+          "SELECT id::text AS id, version, status, payment_status, snapshot FROM orders " +
             "WHERE tenant_id = $1 AND outlet_id = $2 AND device_id = $3 AND client_order_id = $4 FOR UPDATE",
           [request.user.tenantId, event.outletId, event.deviceId, event.orderId],
         );
@@ -305,6 +306,7 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
         globalOrderId = current.id;
         authoritativePaymentStatus = current.payment_status;
         sanitizedSnapshot = safeSnapshot(event.orderSnapshot, authoritativePaymentStatus);
+        sanitizedSnapshot.createdAt = current.snapshot.createdAt;
         const updated = await client.query<{ version: number }>(
           "UPDATE orders SET version = version + 1, order_type = $1, status = $2, " +
             "subtotal = $3, discount = $4, tax = $5, service_charge = $6, total = $7, " +
