@@ -401,7 +401,9 @@ class _DashboardPageState extends State<DashboardPage> {
                                     child: Center(
                                       child: ConstrainedBox(
                                         constraints: const BoxConstraints(maxWidth: 1440),
-                                        child: _buildModuleContent(),
+                                        child: SingleChildScrollView(
+                                          child: _buildModuleContent(),
+                                        ),
                                       ),
                                     ),
                                   ),
