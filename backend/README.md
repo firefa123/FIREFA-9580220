@@ -9,12 +9,14 @@ Implemented in this foundation slice:
 - Environment validation and graceful shutdown.
 - PostgreSQL schema migration runner.
 - One-time owner bootstrap, login, access JWT, refresh-token rotation, logout, and `/api/v1/auth/me`.
-- Authenticated `/api/v1/sync/events` for transactional order create/update, idempotency receipts, device-scoped order IDs, and stale-version conflict handling.
+- Authenticated `/api/v1/sync/events` for transactional order create/update, idempotency receipts, device-scoped order IDs, stale-version conflict handling, and owner-only recovery of missing orders.
+- Authenticated catalog endpoints: `GET/POST /api/v1/products` and `PATCH /api/v1/products/:id`.
+- Authenticated inventory endpoints: `GET/POST /api/v1/inventory/items` and idempotent `POST /api/v1/inventory/movements` with stock floor enforcement.
 - Passwords hashed with Argon2id; refresh tokens stored as SHA-256 hashes and revocable.
-- Initial tenant, outlet, user, membership, refresh-token, order, sync receipt, and order-event tables.
-- Automated route tests and a dedicated backend CI workflow.
+- PostgreSQL migrations for tenant/outlet/auth, orders and normalized order items, products/categories, inventory ledger, reported payments, devices, sync receipts, order events, and audit logs.
+- Main App has opt-in backend login and a REST sync adapter. Existing local-first mode stays unchanged unless explicitly enabled at build time.
 
-Not implemented yet: Owner-managed staff CRUD, menu/inventory/attendance sync, geofence check-in endpoints, payment-provider verification, and production deployment. The Flutter sync adapter is still disabled/unimplemented; do not mark local events synced from the client yet.
+Not implemented yet: staff CRUD, attendance/geofence endpoints, refunds and BON receivables, external payment-provider verification, automatic menu/inventory migration from local stores, and production deployment. Do not treat the database as deployed until the Compose stack is started on the target server.
 
 ## Requirements
 
@@ -42,6 +44,28 @@ npm start
 
 For authentication integration tests, set `TEST_DATABASE_URL` to a **disposable database whose name includes `_test`** (for example `firefa_test`) and apply migrations to that database first. The integration suite deliberately skips unless the URL identifies a test database, and it clears test tables before each case. Never point `TEST_DATABASE_URL` at production or valuable development data.
 
+### Create the database locally or on your self-managed server
+
+1. Install Docker Engine + Compose on the target machine.
+2. Copy the repository root `.env.example` to `.env` and replace every example password/secret with unique random values.
+3. Run `docker compose -f docker-compose.backend.yml up --build -d` from the repository root.
+4. Check `docker compose -f docker-compose.backend.yml ps` and `curl http://127.0.0.1:3000/health/ready`. Compose automatically creates the PostgreSQL database and applies all versioned migrations before starting the API.
+5. Keep PostgreSQL bound to loopback/private network. Put the API behind a TLS reverse proxy before connecting production Flutter clients.
+
+The database is persistent in the `firefa_postgres_data` Docker volume. To back it up from a machine with PostgreSQL client tools installed:
+
+```powershell
+$env:DATABASE_URL="postgresql://firefa:YOUR_PASSWORD@localhost:5432/firefa"
+./backend/scripts/db-backup.ps1
+```
+
+Restore only to the intended target database and only after confirming the target:
+
+```powershell
+$env:DATABASE_URL="postgresql://firefa:YOUR_PASSWORD@localhost:5432/firefa"
+./backend/scripts/db-restore.ps1 -BackupFile .\\backups\\firefa-YYYYMMDDTHHMMSSZ.dump -ConfirmRestore
+```
+
 Health checks:
 - `GET /health/live` — process liveness only.
 - `GET /health/ready` — returns 200 only when PostgreSQL responds to `SELECT 1`; otherwise 503.
@@ -54,9 +78,9 @@ Health checks:
 - `POST /api/v1/auth/logout` — revokes the supplied refresh token.
 - `GET /api/v1/auth/me` — requires `Authorization: Bearer <access-token>` and rechecks active user and membership.
 
-- `POST /api/v1/sync/events` — requires an access token and `Idempotency-Key` equal to the body `eventId`. `deviceId` and the server-issued `outletId` are UUIDs. `order.updated` requires `expectedServerVersion`; stale versions return 409. `order.recovered` returns 422 until reconciliation policy is implemented.
+- `POST /api/v1/sync/events` — requires an access token and `Idempotency-Key` equal to the body `eventId`. `deviceId` and the server-issued `outletId` are UUIDs. `order.updated` requires `expectedServerVersion`; stale versions return 409 with the current snapshot. `order.recovered` is owner-only and creates only if that device/order is missing; it never overwrites a server order.
 - Sync writes, immutable order event, and acknowledgment receipt commit in one PostgreSQL transaction. Replaying the same event ID and payload returns the same receipt; reusing the ID with a different payload returns 409.
-- The server strips unapproved snapshot fields such as customer name and does not trust client `paid`/`refunded` flags as payment-provider settlement. Completion requiring verified payment remains blocked until payment integration exists.
+- The server strips unapproved snapshot fields such as customer name. It records cash payment as a cashier-reported payment only when method is cash and the amount covers the total; non-cash payment-provider settlement is not inferred from client flags. Refund and BON receivable sync remain disabled until dedicated endpoints exist.
 
 Generate unique random secrets of at least 32 characters for `JWT_SECRET` and `BOOTSTRAP_TOKEN`. Keep the bootstrap token private and remove/rotate it after the initial owner is created. Never place production secrets in Flutter source or commit them to Git.
 
@@ -89,5 +113,6 @@ The Compose file binds API and database ports to loopback by default. For public
 2. Owner account bootstrap and staff/user management.
 3. Outlet settings and server-validated attendance/geofence.
 4. Idempotent transactional sync endpoint and order conflict handling.
-5. Flutter adapter behind disabled-by-default configuration, then cross-device tests.
-6. Production deployment, TLS, backups, monitoring, and recovery drill.
+5. Wire menu/inventory stores to catalog and inventory endpoints using the same offline outbox/idempotency rules.
+6. Implement refund and BON receivable endpoints, then staff/attendance/geofence.
+7. Production deployment, TLS, backups, monitoring, and recovery drill.
