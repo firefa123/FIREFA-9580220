@@ -576,7 +576,8 @@ class _InventoryPageState extends State<InventoryPage> {
         return LayoutBuilder(
           builder: (context, constraints) {
             final narrow = constraints.maxWidth < 520;
-            return Column(
+            return SingleChildScrollView(
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Wrap(
@@ -831,6 +832,7 @@ class _InventoryPageState extends State<InventoryPage> {
                     trailing: Text('${movement.change > 0 ? '+' : ''}${movement.change}'),
                   )),
               ],
+              ),
             );
           },
         );
