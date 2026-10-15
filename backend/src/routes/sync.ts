@@ -492,6 +492,24 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
         ],
       );
 
+      await client.query(
+        "INSERT INTO audit_logs (tenant_id, outlet_id, actor_user_id, action, resource_type, resource_id, changes) " +
+          "VALUES ($1, $2, $3, $4, 'order', $5, $6::jsonb)",
+        [
+          request.user.tenantId,
+          event.outletId,
+          request.user.sub,
+          event.eventType,
+          event.orderId,
+          JSON.stringify({
+            eventId: event.eventId,
+            serverVersion: serverVersion!,
+            status: event.orderSnapshot.status,
+            paymentStatus: authoritativePaymentStatus,
+          }),
+        ],
+      );
+
       await client.query("COMMIT");
       inTransaction = false;
       return reply.code(201).send(responseBody);
