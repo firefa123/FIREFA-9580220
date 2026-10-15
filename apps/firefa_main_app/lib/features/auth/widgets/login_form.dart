@@ -30,7 +30,7 @@ class _LoginFormState extends State<LoginForm> {
 
   Future<void> _login() async {
     if (isLoading) return;
-    if (FirefaBackendConfig.isConfigured) {
+    if (FirefaBackendConfig.enabled) {
       setState(() => isLoading = true);
       try {
         final session = await FirefaBackendClient.instance.login(
@@ -102,7 +102,7 @@ class _LoginFormState extends State<LoginForm> {
           ),
         ),
         const SizedBox(height: 20),
-        if (!FirefaBackendConfig.isConfigured)
+        if (!FirefaBackendConfig.enabled)
         DropdownButtonFormField<FirefaRole>(
           initialValue: selectedRole,
           decoration: const InputDecoration(
@@ -150,7 +150,7 @@ class _LoginFormState extends State<LoginForm> {
                     height: 22,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : Text(FirefaBackendConfig.isConfigured ? 'LOGIN' : 'LOGIN (DEMO)'),
+                : Text(FirefaBackendConfig.enabled ? 'LOGIN' : 'LOGIN (DEMO)'),
           ),
         ),
       ],
