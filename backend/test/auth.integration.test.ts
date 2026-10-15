@@ -351,7 +351,7 @@ authSuite("authentication endpoints", () => {
     expect(updateResponse.json().serverVersion).toBe(2);
   });
 
-  it("does not accept recovered snapshots without reconciliation", async () => {
+  it("allows an owner to restore a missing local order but does not overwrite a server order", async () => {
     const ownerApp = createTestApp();
     const owner = (await bootstrap(ownerApp)).json();
     const payload = makeSyncEvent(
@@ -363,8 +363,21 @@ authSuite("authentication endpoints", () => {
     );
 
     const response = await postSyncEvent(ownerApp, owner.accessToken, payload);
-    expect(response.statusCode).toBe(422);
-    expect(response.json().error).toBe("recovery_requires_reconciliation");
+    expect(response.statusCode).toBe(201);
+    expect(response.json().outcome).toBe("acknowledged");
+    expect(response.json().serverVersion).toBe(1);
+
+    const duplicate = makeSyncEvent(
+      owner.outletIds[0],
+      "11111111-1111-4111-8111-111111111111",
+      "evt-order-recovered-02",
+      "order.recovered",
+      1,
+    );
+    const conflict = await postSyncEvent(ownerApp, owner.accessToken, duplicate);
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json().error).toBe("stale_order_version");
+    expect(conflict.json().serverSnapshot.id).toBe("ORD-1001");
   });
 
 });
