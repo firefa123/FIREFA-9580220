@@ -1,9 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firefa_staff_app/main.dart';
 
 void main() {
   testWidgets('dashboard shows the four main sections', (tester) async {
+    SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const FirefaStaffApp());
+    await tester.pumpAndSettle();
     expect(find.text('FIREFA Staff'), findsOneWidget);
     expect(find.text('Tim FIREFA'), findsOneWidget);
     expect(find.text('Beranda'), findsOneWidget);
@@ -13,7 +16,9 @@ void main() {
   });
 
   testWidgets('staff can toggle the demo shift', (tester) async {
+    SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const FirefaStaffApp());
+    await tester.pumpAndSettle();
     expect(find.text('Mulai Shift (Demo)'), findsOneWidget);
     await tester.tap(find.text('Mulai Shift (Demo)'));
     await tester.pump();
@@ -22,7 +27,9 @@ void main() {
   });
 
   testWidgets('staff can mark a task complete', (tester) async {
+    SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const FirefaStaffApp());
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Tugas'));
     await tester.pumpAndSettle();
     expect(find.text('0 dari 3 tugas selesai'), findsOneWidget);
