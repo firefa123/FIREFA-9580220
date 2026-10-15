@@ -105,7 +105,7 @@ class _StaffShellState extends State<StaffShell> {
           Row(children: [
             Expanded(child: _metric('Status Shift', _checkedIn ? 'Aktif' : 'Belum mulai', Icons.access_time_rounded)),
             const SizedBox(width: 12),
-            Expanded(child: _metric('Tugas Selesai', _done.length.toString() + '/' + _tasks.length.toString(), Icons.task_alt_rounded)),
+            Expanded(child: _metric('Tugas Selesai', '${_done.length}/${_tasks.length}', Icons.task_alt_rounded)),
           ]),
           const SizedBox(height: 24),
           const Text('Akses cepat', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
@@ -162,7 +162,7 @@ class _StaffShellState extends State<StaffShell> {
   Widget _taskList() => ListView(padding: const EdgeInsets.all(20), children: [
         Text('Daftar tugas', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 6),
-        Text(_done.length.toString() + ' dari ' + _tasks.length.toString() + ' tugas selesai', style: const TextStyle(color: Color(0xFF64748B))),
+        Text('${_done.length} dari ${_tasks.length} tugas selesai', style: const TextStyle(color: Color(0xFF64748B))),
         const SizedBox(height: 14),
         LinearProgressIndicator(value: _done.length / _tasks.length, minHeight: 7, borderRadius: BorderRadius.circular(8), color: const Color(0xFF008F83)),
         const SizedBox(height: 14),
