@@ -39,6 +39,8 @@ npm run typecheck
 npm start
 ```
 
+For authentication integration tests, set `TEST_DATABASE_URL` to a **disposable database whose name includes `_test`** (for example `firefa_test`) and apply migrations to that database first. The integration suite deliberately skips unless the URL identifies a test database, and it clears test tables before each case. Never point `TEST_DATABASE_URL` at production or valuable development data.
+
 Health checks:
 - `GET /health/live` — process liveness only.
 - `GET /health/ready` — returns 200 only when PostgreSQL responds to `SELECT 1`; otherwise 503.
