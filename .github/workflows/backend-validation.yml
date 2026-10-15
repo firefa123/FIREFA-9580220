@@ -62,7 +62,7 @@ jobs:
         run: npm run db:migrate
       - name: Verify schema tables exist
         run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DO \\$\$ BEGIN IF to_regclass('public.tenants') IS NULL OR to_regclass('public.outlets') IS NULL OR to_regclass('public.users') IS NULL OR to_regclass('public.orders') IS NULL OR to_regclass('public.sync_receipts') IS NULL OR to_regclass('public.order_events') IS NULL THEN RAISE EXCEPTION 'Required FIREFA tables are missing'; END IF; END \\$\$;"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF to_regclass('public.tenants') IS NULL OR to_regclass('public.outlets') IS NULL OR to_regclass('public.users') IS NULL OR to_regclass('public.orders') IS NULL OR to_regclass('public.sync_receipts') IS NULL OR to_regclass('public.order_events') IS NULL THEN RAISE EXCEPTION 'Required FIREFA tables are missing'; END IF; END \$\$;"
       - name: Verify API readiness against PostgreSQL
         run: |
           node dist/server.js > /tmp/firefa-backend.log 2>&1 &
