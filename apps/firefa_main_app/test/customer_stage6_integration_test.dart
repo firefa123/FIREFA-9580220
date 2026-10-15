@@ -28,6 +28,8 @@ void main() {
   expect(await customers.recordPayment(outletId:outlet,orderId:order.id,amount:10000,method:'Cash'),isTrue);
   expect(orders.findOrder(outlet,order.id)!.paymentStatus,FirefaPaymentStatus.paid);
   expect(customers.outstanding(outlet,customer.id),0);
+  expect(await customers.assignOrder(outletId:outlet,orderId:tooLarge.id,customerId:customer.id),isTrue);
+  expect(customers.outstanding(outlet,customer.id),10000);
   expect(await customers.syncLoyalty(outlet),1);
   final points=customers.find(outlet,customer.id)!.points;
   expect(points,15);
