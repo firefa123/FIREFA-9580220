@@ -453,9 +453,10 @@ class _OrdersPageState extends State<OrdersPage> {
     final completed = currentOrders.where((order) =>
         order.status == FirefaOrderStatus.completed).length;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
         Row(
           children: [
             const Icon(Icons.storefront_outlined, size: 18, color: primary),
@@ -667,7 +668,8 @@ class _OrdersPageState extends State<OrdersPage> {
             ),
           ),
         for (final order in visibleOrders) orderCard(order),
-      ],
+        ],
+      ),
     );
   }
 
