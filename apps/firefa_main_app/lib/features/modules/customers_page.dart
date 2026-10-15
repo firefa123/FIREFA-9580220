@@ -14,7 +14,7 @@ class _CustomersPageState extends State<CustomersPage> with SingleTickerProvider
  final store=FirefaCustomerStore.instance; final outlet=FirefaActiveOutletStore.instance; late final TabController tabs; late final Future<void> ready;
  String get outletId=>outlet.selectedOutletId;
  @override void initState(){super.initState();tabs=TabController(length:3,vsync:this);ready=_init();store.addListener(refresh);outlet.addListener(refresh);}
- Future<void> _init() async {await Future.wait([store.initialize(),FirefaOrderStore.instance.initialize(),LocalBackupManager.instance.initialize()]);}
+ Future<void> _init() async {await Future.wait([store.initialize(),FirefaOrderStore.instance.initialize(),FirefaLocalBackupManager.instance.initialize()]);}
  void refresh(){if(mounted)setState((){});}
  @override void dispose(){store.removeListener(refresh);outlet.removeListener(refresh);tabs.dispose();super.dispose();}
  String money(int n)=>'Rp ${n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'),(_)=>'.')}';
@@ -25,7 +25,87 @@ class _CustomersPageState extends State<CustomersPage> with SingleTickerProvider
  Future<void> assignBon(FirefaOrder order,List<FirefaCustomer> customers) async {if(customers.isEmpty){msg('Buat pelanggan terlebih dahulu.');return;}String? id;final chosen=await showDialog<String>(context:context,builder:(ctx)=>AlertDialog(title:Text('Hubungkan BON ${order.id}'),content:DropdownButtonFormField<String>(initialValue:customers.first.id,isExpanded:true,items:customers.map((c)=>DropdownMenuItem(value:c.id,child:Text('${c.name} • sisa limit ${money(store.availableCredit(outletId,c.id))}'))).toList(),onChanged:(v)=>id=v,decoration:const InputDecoration(labelText:'Pelanggan')),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Batal')),FilledButton(onPressed:()=>Navigator.pop(ctx,id??customers.first.id),child:const Text('Hubungkan'))]));if(chosen==null)return;final ok=await store.assignOrder(outletId:outletId,orderId:order.id,customerId:chosen);msg(ok?'Pesanan terhubung ke pelanggan.':'Gagal: limit kredit terlampaui atau data tidak valid.');}
  Future<void> collect(FirefaOrder order) async {final raw=await ask('Terima pembayaran BON','Nominal (sisa ${money(order.total-store.paidForOrder(outletId,order.id))})',numeric:true);if(raw==null)return;final amount=int.tryParse(raw);if(amount==null||amount<=0){msg('Nominal tidak valid.');return;}String? method;await showDialog<void>(context:context,builder:(ctx)=>AlertDialog(title:const Text('Metode pembayaran'),content:Column(mainAxisSize:MainAxisSize.min,children:[for(final m in ['Cash','Transfer','QRIS','Bank'])ListTile(title:Text(m),onTap:(){method=m;Navigator.pop(ctx);})])));if(method==null)return;final ok=await store.recordPayment(outletId:outletId,orderId:order.id,amount:amount,method:method!);msg(ok?'Pembayaran piutang dicatat.':'Gagal: nominal melebihi sisa tagihan atau pesanan tidak valid.');}
  Future<void> importCsv() async {final csv=await ask('Import pelanggan CSV','Tempel isi CSV');if(csv==null)return;try{final n=await store.importCsv(outletId,csv);msg('$n pelanggan berhasil diimpor.');}catch(e){msg('Import ditolak: $e');}}
- Future<void> backup() async {try{final info=await LocalBackupManager.instance.createBackup();msg('Backup dibuat: ${info.orderCount} pesanan.');}catch(e){msg('Backup gagal: $e');}}
- Future<void> restore() async {final yes=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(title:const Text('Pulihkan backup?'),content:const Text('Data operasional yang tercakup backup akan diganti dengan snapshot tersimpan.'),actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Batal')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Pulihkan'))]));if(yes!=true)return;try{await LocalBackupManager.instance.restoreLatestBackup();msg('Backup operasional dipulihkan.');}catch(e){msg('Restore gagal: $e');}}
- @override Widget build(BuildContext context)=>FutureBuilder<void>(future:ready,builder:(ctx,s){if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());if(s.hasError)return Center(child:Text('Gagal memuat pelanggan: ${s.error}'));final customers=store.forOutlet(outletId);final orders=FirefaOrderStore.instance.ordersForOutlet(outletId);final bons=orders.where((o)=>o.paymentMethod=='BON'&&o.paymentStatus==FirefaPaymentStatus.unpaid&&o.status!=FirefaOrderStatus.cancelled).toList();return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[const Text('Pelanggan & Loyalitas',style:TextStyle(fontSize:24,fontWeight:FontWeight.bold)),const SizedBox(height:6),const Text('Piutang, limit kredit, loyalty points, segmentasi RFM, impor-ekspor, dan backup.'),const SizedBox(height:12),Wrap(spacing:8,runSpacing:8,children:[FilledButton.icon(onPressed:addCustomer,icon:const Icon(Icons.person_add),label:const Text('Tambah pelanggan')),OutlinedButton.icon(onPressed:()=>Clipboard.setData(ClipboardData(text:store.exportCsv(outletId))).then((_)=>msg('CSV pelanggan disalin.')),icon:const Icon(Icons.copy),label:const Text('Ekspor CSV')),OutlinedButton.icon(onPressed:importCsv,icon:const Icon(Icons.upload_file),label:const Text('Import CSV')),OutlinedButton.icon(onPressed:backup,icon:const Icon(Icons.backup),label:const Text('Backup')),OutlinedButton.icon(onPressed:restore,icon:const Icon(Icons.settings_backup_restore),label:const Text('Restore'))]),const SizedBox(height:12),TabBar(controller:tabs,isScrollable:true,tabs:const[Tab(text:'Pelanggan & RFM'),Tab(text:'Piutang BON'),Tab(text:'Loyalty')]),Expanded(child:TabBarView(controller:tabs,children:[customers.isEmpty?const Center(child:Text('Belum ada pelanggan. Tambahkan pelanggan untuk mulai.')):ListView.builder(itemCount:customers.length,itemBuilder:(ctx,i){final c=customers[i];final r=store.rfm(outletId,c.id);return Card(child:ListTile(isThreeLine:true,title:Text(c.name),subtitle:Text('${c.phone.isEmpty?'Tanpa telepon':c.phone} • ${c.id}\nLimit ${money(c.creditLimit)} • Piutang ${money(store.outstanding(outletId,c.id))} • Sisa limit ${money(store.availableCredit(outletId,c.id))}\nRFM: ${r['segment']} • Recency ${r['recencyDays']??'-'} hari • Frequency ${r['frequency']} • Monetary ${money(r['monetary'] as int)}'),leading:CircleAvatar(child:Text(c.name.isEmpty?'?':c.name[0].toUpperCase())),trailing:IconButton(tooltip:'Edit',icon:const Icon(Icons.edit_outlined),onPressed:()=>editCustomer(c)));}),bons.isEmpty?const Center(child:Text('Tidak ada piutang BON terbuka.')):ListView.builder(itemCount:bons.length,itemBuilder:(ctx,i){final o=bons[i];final paid=store.paidForOrder(outletId,o.id);return Card(child:ListTile(isThreeLine:true,title:Text('${o.id} • ${o.customerName??'Belum ditautkan'}'),subtitle:Text('Tagihan ${money(o.total)} • Dibayar ${money(paid)} • Sisa ${money(o.total-paid)}\nTanggal ${o.createdAt.toLocal()}'),trailing:PopupMenuButton<String>(onSelected:(v){if(v=='assign')assignBon(o,customers);if(v=='pay'&&o.customerId!=null)collect(o);},itemBuilder:(ctx)=>[if(o.customerId==null)const PopupMenuItem(value:'assign',child:Text('Hubungkan pelanggan')),if(o.customerId!=null)const PopupMenuItem(value:'pay',child:Text('Terima pembayaran'))])));}),ListView(children:[Padding(padding:const EdgeInsets.all(12),child:FilledButton.icon(onPressed:()async{try{final n=await store.syncLoyalty(outletId);msg('$n transaksi baru diberi poin (1 poin per Rp1.000).');}catch(e){msg('Sinkronisasi loyalty gagal: $e');}},icon:const Icon(Icons.sync),label:const Text('Sinkronkan poin loyalty'))),for(final c in customers)Card(child:ListTile(title:Text(c.name),subtitle:Text('${c.points} poin • ${c.rewardCount} reward • ${c.earnedOrderIds.length} transaksi sudah diberi poin'),trailing:const Icon(Icons.loyalty_outlined)))])]))];});
+ Future<void> backup() async {try{final info=await FirefaLocalBackupManager.instance.createBackup();msg('Backup dibuat: ${info.orderCount} pesanan.');}catch(e){msg('Backup gagal: $e');}}
+ Future<void> restore() async {final yes=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(title:const Text('Pulihkan backup?'),content:const Text('Data operasional yang tercakup backup akan diganti dengan snapshot tersimpan.'),actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Batal')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Pulihkan'))]));if(yes!=true)return;try{await FirefaLocalBackupManager.instance.restoreLatestBackup();msg('Backup operasional dipulihkan.');}catch(e){msg('Restore gagal: $e');}}
+ @override
+ Widget build(BuildContext context) {
+   return FutureBuilder<void>(
+     future: ready,
+     builder: (ctx, snapshot) {
+       if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+       if (snapshot.hasError) return Center(child: Text('Gagal memuat pelanggan: ${snapshot.error}'));
+       final customers = store.forOutlet(outletId);
+       final orders = FirefaOrderStore.instance.ordersForOutlet(outletId);
+       final bons = orders.where((o) => o.paymentMethod == 'BON' && o.paymentStatus == FirefaPaymentStatus.unpaid && o.status != FirefaOrderStatus.cancelled).toList();
+       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+         const Text('Pelanggan & Loyalitas', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+         const SizedBox(height: 6),
+         const Text('Piutang, limit kredit, loyalty points, segmentasi RFM, impor-ekspor, dan backup.'),
+         const SizedBox(height: 12),
+         Wrap(spacing: 8, runSpacing: 8, children: [
+           FilledButton.icon(onPressed: addCustomer, icon: const Icon(Icons.person_add), label: const Text('Tambah pelanggan')),
+           OutlinedButton.icon(onPressed: () => Clipboard.setData(ClipboardData(text: store.exportCsv(outletId))).then((_) => msg('CSV pelanggan disalin.')), icon: const Icon(Icons.copy), label: const Text('Ekspor CSV')),
+           OutlinedButton.icon(onPressed: importCsv, icon: const Icon(Icons.upload_file), label: const Text('Import CSV')),
+           OutlinedButton.icon(onPressed: backup, icon: const Icon(Icons.backup), label: const Text('Backup')),
+           OutlinedButton.icon(onPressed: restore, icon: const Icon(Icons.settings_backup_restore), label: const Text('Restore')),
+         ]),
+         const SizedBox(height: 12),
+         TabBar(controller: tabs, isScrollable: true, tabs: const [Tab(text: 'Pelanggan & RFM'), Tab(text: 'Piutang BON'), Tab(text: 'Loyalty')]),
+         Expanded(child: TabBarView(controller: tabs, children: [
+           customers.isEmpty ? const Center(child: Text('Belum ada pelanggan. Tambahkan pelanggan untuk mulai.')) : ListView.builder(
+             itemCount: customers.length,
+             itemBuilder: (ctx, i) {
+               final customer = customers[i];
+               final rfm = store.rfm(outletId, customer.id);
+               return Card(child: ListTile(
+                 isThreeLine: true,
+                 title: Text(customer.name),
+                 subtitle: Text('${customer.phone.isEmpty ? 'Tanpa telepon' : customer.phone} • ${customer.id}\nLimit ${money(customer.creditLimit)} • Piutang ${money(store.outstanding(outletId, customer.id))} • Sisa limit ${money(store.availableCredit(outletId, customer.id))}\nRFM: ${rfm['segment']} • Recency ${rfm['recencyDays'] ?? '-'} hari • Frequency ${rfm['frequency']} • Monetary ${money(rfm['monetary'] as int)}'),
+                 leading: CircleAvatar(child: Text(customer.name.isEmpty ? '?' : customer.name[0].toUpperCase())),
+                 trailing: IconButton(tooltip: 'Edit', icon: const Icon(Icons.edit_outlined), onPressed: () => editCustomer(customer)),
+               ));
+             },
+           ),
+           bons.isEmpty ? const Center(child: Text('Tidak ada piutang BON terbuka.')) : ListView.builder(
+             itemCount: bons.length,
+             itemBuilder: (ctx, i) {
+               final order = bons[i];
+               final paid = store.paidForOrder(outletId, order.id);
+               return Card(child: ListTile(
+                 isThreeLine: true,
+                 title: Text('${order.id} • ${order.customerName ?? 'Belum ditautkan'}'),
+                 subtitle: Text('Tagihan ${money(order.total)} • Dibayar ${money(paid)} • Sisa ${money(order.total - paid)}\nTanggal ${order.createdAt.toLocal()}'),
+                 trailing: PopupMenuButton<String>(
+                   onSelected: (value) {
+                     if (value == 'assign') assignBon(order, customers);
+                     if (value == 'pay' && order.customerId != null) collect(order);
+                   },
+                   itemBuilder: (ctx) => [
+                     if (order.customerId == null) const PopupMenuItem(value: 'assign', child: Text('Hubungkan pelanggan')),
+                     if (order.customerId != null) const PopupMenuItem(value: 'pay', child: Text('Terima pembayaran')),
+                   ],
+                 ),
+               ));
+             },
+           ),
+           ListView(children: [
+             Padding(padding: const EdgeInsets.all(12), child: FilledButton.icon(
+               onPressed: () async {
+                 try { final count = await store.syncLoyalty(outletId); msg('$count transaksi baru diberi poin (1 poin per Rp1.000).'); }
+                 catch (error) { msg('Sinkronisasi loyalty gagal: $error'); }
+               },
+               icon: const Icon(Icons.sync), label: const Text('Sinkronkan poin loyalty'),
+             )),
+             for (final customer in customers)
+               Card(child: ListTile(
+                 title: Text(customer.name),
+                 subtitle: Text('${customer.points} poin • ${customer.rewardCount} reward • ${customer.earnedOrderIds.length} transaksi sudah diberi poin'),
+                 trailing: const Icon(Icons.loyalty_outlined),
+               )),
+           ]),
+         ])),
+       ]);
+     },
+   );
+ }
 }
