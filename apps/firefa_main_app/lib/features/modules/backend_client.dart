@@ -98,7 +98,7 @@ class FirefaBackendClient {
   }) async {
     _requireConfigured();
     final response = await _http.post(
-      Uri.parse(baseUrl + '/api/v1/auth/login'),
+      Uri.parse('$baseUrl/api/v1/auth/login'),
       headers: const {'content-type': 'application/json'},
       body: jsonEncode({'email': email.trim(), 'password': password}),
     ).timeout(const Duration(seconds: 15));
@@ -129,7 +129,7 @@ class FirefaBackendClient {
     final refresh = await _secure.read(key: _refreshKey);
     if (refresh == null) return null;
     final response = await _http.post(
-      Uri.parse(baseUrl + '/api/v1/auth/refresh'),
+      Uri.parse('$baseUrl/api/v1/auth/refresh'),
       headers: const {'content-type': 'application/json'},
       body: jsonEncode({'refreshToken': refresh}),
     ).timeout(const Duration(seconds: 15));
@@ -149,7 +149,7 @@ class FirefaBackendClient {
     if (FirefaBackendConfig.isConfigured && refresh != null) {
       try {
         await _http.post(
-          Uri.parse(baseUrl + '/api/v1/auth/logout'),
+          Uri.parse('$baseUrl/api/v1/auth/logout'),
           headers: const {'content-type': 'application/json'},
           body: jsonEncode({'refreshToken': refresh}),
         ).timeout(const Duration(seconds: 8));
