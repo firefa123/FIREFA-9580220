@@ -77,8 +77,8 @@ class _StaffShellState extends State<StaffShell> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const MaterialApp(
-        home: Scaffold(body: Center(child: CircularProgressIndicator())),
+      return const Scaffold(
+        body: SafeArea(child: Center(child: CircularProgressIndicator())),
       );
     }
     final pages = [_home(), _shift(), _taskList(), _profile()];
