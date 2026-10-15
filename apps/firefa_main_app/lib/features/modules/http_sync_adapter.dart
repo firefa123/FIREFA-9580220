@@ -96,14 +96,17 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
     final source = event.orderSnapshot;
     final paymentStatus = source['paymentStatus'] as String? ?? 'unpaid';
     final paymentMethod = (source['paymentMethod'] as String?)?.toLowerCase();
-    final refundRecords = source['refundRecords'];
-    if (paymentStatus == 'refunded' ||
-        (source['refundAmount'] as num? ?? 0) > 0 ||
-        (refundRecords is List && refundRecords.isNotEmpty)) {
+    final rawRefundRecords = source['refundRecords'];
+    final refundRecords = rawRefundRecords is List ? rawRefundRecords : const [];
+    final hasNonCashRefund = refundRecords.any((entry) {
+      final refund = Map<String, dynamic>.from(entry as Map);
+      return (refund['method'] as String? ?? '').toLowerCase() != 'cash';
+    });
+    if (hasNonCashRefund) {
       return FirefaSyncReceipt(
         eventId: event.eventId,
         outcome: FirefaSyncOutcome.permanentFailure,
-        message: 'Sinkronisasi refund belum tersedia; data refund tetap lokal dan tidak ditandai tersinkron.',
+        message: 'Refund non-tunai memerlukan verifikasi penyedia pembayaran.',
       );
     }
     if (paymentStatus == 'paid' && paymentMethod != 'cash') {
@@ -111,15 +114,6 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
         eventId: event.eventId,
         outcome: FirefaSyncOutcome.permanentFailure,
         message: 'Pembayaran non-tunai memerlukan endpoint verifikasi pembayaran.',
-      );
-    }
-    if (source['status'] == 'completed' &&
-        paymentStatus != 'paid' &&
-        paymentMethod == 'bon') {
-      return FirefaSyncReceipt(
-        eventId: event.eventId,
-        outcome: FirefaSyncOutcome.permanentFailure,
-        message: 'Sinkronisasi piutang BON belum tersedia.',
       );
     }
     final deviceId = await _deviceId();
@@ -171,6 +165,14 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
       'paymentMethod': source['paymentMethod'],
       'cashPaidAmount': source['cashPaidAmount'] ?? 0,
       'paidAt': source['paidAt'],
+      'customerId': source['customerId'],
+      'customerName': source['customerName'],
+      'refundAmount': source['refundAmount'] ?? 0,
+      'cashRefundAmount': source['cashRefundAmount'] ?? 0,
+      'refundedAt': source['refundedAt'],
+      'refundMethod': source['refundMethod'],
+      'refundReason': source['refundReason'],
+      'refundRecords': refundRecords.map((entry) => Map<String, dynamic>.from(entry as Map)).toList(),
     };
     final payload = <String, dynamic>{
       'schemaVersion': 1,
