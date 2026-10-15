@@ -54,6 +54,110 @@ class _InventoryPageState extends State<InventoryPage> {
       outlet.canAccessOutlet(outlet.selectedOutletId);
 
 
+  Future<void> setItemCost(FirefaInventoryItem item) async {
+    if (!allowed || item.outletId != outlet.selectedOutletId) return;
+    final controller = TextEditingController(text: item.unitCost.toStringAsFixed(0));
+    final value = await showDialog<double>(context: context, builder: (ctx) => AlertDialog(
+      title: Text('Atur HPP ' + item.name),
+      content: TextField(controller: controller, autofocus: true, keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')), LengthLimitingTextInputFormatter(14)],
+        decoration: InputDecoration(labelText: 'Harga beli per ' + item.unit + ' (Rp)', helperText: 'Bahan olahan dihitung dari resep produksinya.')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, double.tryParse(controller.text.replaceAll(',', '.'))), child: const Text('Simpan')),
+      ],
+    ));
+    controller.dispose();
+    if (!mounted || value == null || !allowed || item.outletId != outlet.selectedOutletId) return;
+    if (!store.setUnitCost(outletId: item.outletId, id: item.id, unitCost: value)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('HPP tidak valid.')));
+    }
+  }
+
+  Future<void> managePreparedRecipe() async {
+    if (!allowed) return;
+    final sourceOutlet = outlet.selectedOutletId;
+    final items = store.forOutlet(sourceOutlet);
+    final prepared = items.where((item) => item.isPreparedIngredient).toList();
+    if (prepared.isEmpty || items.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tandai minimal satu barang sebagai bahan olahan dan siapkan bahan bakunya terlebih dahulu.')));
+      return;
+    }
+    var targetId = prepared.first.id;
+    var ingredientId = items.firstWhere((item) => item.id != targetId).id;
+    final quantity = TextEditingController(text: '1');
+    final yieldQty = TextEditingController(text: '1');
+    final result = await showDialog<({String target, String ingredient, int quantity, int yieldQty})>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, refresh) => AlertDialog(
+        title: const Text('Resep Bahan Olahan'),
+        content: SizedBox(width: 420, child: Column(mainAxisSize: MainAxisSize.min, children: [
+          DropdownButtonFormField<String>(initialValue: targetId, isExpanded: true, decoration: const InputDecoration(labelText: 'Hasil olahan'),
+            items: prepared.map((item) => DropdownMenuItem(value: item.id, child: Text(item.name + ' (' + item.unit + ')'))).toList(),
+            onChanged: (value) { if (value != null) refresh(() { targetId = value; if (ingredientId == targetId) ingredientId = items.firstWhere((item) => item.id != targetId).id; }); }),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(initialValue: ingredientId, isExpanded: true, decoration: const InputDecoration(labelText: 'Bahan yang dikonsumsi'),
+            items: items.where((item) => item.id != targetId).map((item) => DropdownMenuItem(value: item.id, child: Text(item.name + ' (' + item.unit + ')'))).toList(),
+            onChanged: (value) { if (value != null) refresh(() => ingredientId = value); }),
+          const SizedBox(height: 10),
+          TextField(controller: quantity, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(9)],
+            decoration: const InputDecoration(labelText: 'Kebutuhan bahan per batch (satuan stok)')),
+          const SizedBox(height: 10),
+          TextField(controller: yieldQty, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(9)],
+            decoration: const InputDecoration(labelText: 'Hasil olahan per batch (satuan stok)')),
+        ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, (target: targetId, ingredient: ingredientId,
+            quantity: int.tryParse(quantity.text) ?? 0, yieldQty: int.tryParse(yieldQty.text) ?? 0)), child: const Text('Simpan Resep')),
+        ],
+      )),
+    );
+    quantity.dispose(); yieldQty.dispose();
+    if (!mounted || result == null || !allowed || sourceOutlet != outlet.selectedOutletId) return;
+    if (!store.addPreparedRecipeLine(outletId: sourceOutlet, preparedItemId: result.target, ingredientId: result.ingredient,
+      quantity: result.quantity, outputQuantity: result.yieldQty)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Resep olahan tidak valid. Pastikan jumlah bahan dan hasil lebih dari nol.')));
+    }
+  }
+
+  Future<void> producePrepared() async {
+    if (!allowed) return;
+    final sourceOutlet = outlet.selectedOutletId;
+    final recipes = store.preparedRecipesForOutlet(sourceOutlet);
+    final prepared = store.forOutlet(sourceOutlet).where((item) => item.isPreparedIngredient &&
+      recipes.any((line) => line.preparedItemId == item.id)).toList();
+    if (prepared.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Atur resep bahan olahan terlebih dahulu.')));
+      return;
+    }
+    var selectedId = prepared.first.id;
+    final batches = TextEditingController(text: '1');
+    final result = await showDialog<({String id, int batches})>(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, refresh) => AlertDialog(
+      title: const Text('Produksi Bahan Olahan'),
+      content: SizedBox(width: 380, child: Column(mainAxisSize: MainAxisSize.min, children: [
+        DropdownButtonFormField<String>(initialValue: selectedId, isExpanded: true, decoration: const InputDecoration(labelText: 'Bahan olahan'),
+          items: prepared.map((item) => DropdownMenuItem(value: item.id, child: Text(item.name + ' (' + item.unit + ')'))).toList(),
+          onChanged: (value) { if (value != null) refresh(() => selectedId = value); }),
+        const SizedBox(height: 12),
+        TextField(controller: batches, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+          decoration: const InputDecoration(labelText: 'Jumlah batch')),
+      ])),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, (id: selectedId, batches: int.tryParse(batches.text) ?? 0)), child: const Text('Produksi')),
+      ],
+    )));
+    batches.dispose();
+    if (!mounted || result == null || !allowed || sourceOutlet != outlet.selectedOutletId) return;
+    try {
+      await store.producePreparedIngredient(outletId: sourceOutlet, preparedItemId: result.id, batches: result.batches);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Produksi tersimpan. Stok bahan berkurang, hasil olahan bertambah, dan HPP diperbarui.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Produksi gagal: ' + error.toString())));
+    }
+  }
+
   Future<void> manageRecipe() async {
     if (!allowed) return;
     final sourceOutlet = outlet.selectedOutletId;
@@ -229,6 +333,12 @@ class _InventoryPageState extends State<InventoryPage> {
   Future<void> manage(FirefaInventoryItem item, String action) async {
     if (!allowed || item.outletId != outlet.selectedOutletId) return;
     final sourceOutlet = item.outletId;
+    if (action == 'cost') { await setItemCost(item); return; }
+    if (action == 'prepared') {
+      final ok = store.setPreparedIngredient(outletId: sourceOutlet, id: item.id, prepared: !item.isPreparedIngredient);
+      if (ok && mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(item.isPreparedIngredient ? 'Status bahan olahan dinonaktifkan.' : 'Barang ditandai sebagai bahan olahan.')));
+      return;
+    }
     if (action == 'delete') {
       final yes = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
         title: const Text('Hapus Barang?'),
@@ -257,8 +367,9 @@ class _InventoryPageState extends State<InventoryPage> {
     final amount = TextEditingController(text: action == 'edit' ? item.minimumStock.toString() : '');
     final note = TextEditingController();
     var unit = item.unit;
+    var inputUnit = item.unit;
     var type = 'in';
-    final result = await showDialog<({String name, String unit, String type, int amount, String note})>(
+    final result = await showDialog<({String name, String unit, String type, int amount, String note, String inputUnit})>(
       context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, refresh) => AlertDialog(
         title: Text(action == 'edit' ? 'Edit Barang' : 'Penyesuaian Stok'),
@@ -275,6 +386,12 @@ class _InventoryPageState extends State<InventoryPage> {
               ),
             ] else ...[
               Text('Stok saat ini: ${item.stock} ${item.unit}'),
+              DropdownButtonFormField<String>(
+                initialValue: inputUnit, isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Satuan input (akan dikonversi)'),
+                items: FirefaInventoryStore.units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                onChanged: (v) { if (v != null) refresh(() => inputUnit = v); },
+              ),
               DropdownButtonFormField<String>(
                 initialValue: type, isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Jenis perubahan'),
@@ -297,7 +414,7 @@ class _InventoryPageState extends State<InventoryPage> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
           FilledButton(onPressed: () => Navigator.pop(ctx, (
             name: name.text, unit: unit, type: type,
-            amount: int.tryParse(amount.text) ?? -1, note: note.text,
+            amount: int.tryParse(amount.text) ?? -1, note: note.text, inputUnit: inputUnit,
           )), child: const Text('Simpan')),
         ],
       )),
@@ -306,11 +423,14 @@ class _InventoryPageState extends State<InventoryPage> {
     amount.dispose();
     note.dispose();
     if (!mounted || result == null || !allowed || sourceOutlet != outlet.selectedOutletId) { return; }
-    final success = action == 'edit'
-      ? store.update(outletId: sourceOutlet, id: item.id, name: result.name, unit: result.unit, minimumStock: result.amount)
-      : store.adjust(outletId: sourceOutlet, id: item.id, type: result.type, amount: result.amount, note: result.note);
-    if (!success) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Perubahan ditolak. Periksa nilai, stok, dan nama unik.')));
+    try {
+      final success = action == 'edit'
+        ? store.update(outletId: sourceOutlet, id: item.id, name: result.name, unit: result.unit, minimumStock: result.amount)
+        : store.adjustConverted(outletId: sourceOutlet, id: item.id, type: result.type,
+            amount: result.amount.toDouble(), inputUnit: result.inputUnit, note: result.note);
+      if (!success) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Perubahan ditolak. Periksa nilai, stok, dan nama unik.')));
+    } catch (error) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Konversi stok gagal: ' + error.toString())));
     }
   }
 
@@ -468,6 +588,8 @@ class _InventoryPageState extends State<InventoryPage> {
                       fontSize: narrow ? 20 : 23,
                     )),
                     OutlinedButton.icon(onPressed: allowed ? manageRecipe : null, icon: const Icon(Icons.menu_book_outlined), label: const Text('Atur Resep POS')),
+                    OutlinedButton.icon(onPressed: allowed ? managePreparedRecipe : null, icon: const Icon(Icons.restaurant_menu), label: const Text('Resep Olahan')),
+                    OutlinedButton.icon(onPressed: allowed ? producePrepared : null, icon: const Icon(Icons.inventory_2_outlined), label: const Text('Produksi Olahan')),
                     FilledButton.icon(
                       onPressed: allowed ? addItem : null,
                       style: FilledButton.styleFrom(backgroundColor: primary),
@@ -501,6 +623,25 @@ class _InventoryPageState extends State<InventoryPage> {
                   _metric('Stok Rendah', low, Colors.orange),
                   _metric('Stok Habis', empty, Colors.red),
                 ]),
+                if (low > 0)
+                  Card(color: const Color(0xFFFFF7ED), child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Text('Peringatan stok rendah', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF9A3412))),
+                      const SizedBox(height: 6),
+                      for (final item in items.where((item) => item.isLowStock || item.isOutOfStock).take(8))
+                        Text((item.isOutOfStock ? 'HABIS • ' : 'RENDAH • ') + item.name + ': ' + item.stock.toString() + ' ' + item.unit + ' (minimum ' + item.minimumStock.toString() + ')',
+                          style: const TextStyle(fontSize: 12)),
+                    ]),
+                  )),
+                const SizedBox(height: 14),
+                const Text('HPP Resep Menu', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text('HPP dihitung dari kuantitas resep × harga beli per satuan stok.', style: TextStyle(color: muted, fontSize: 12)),
+                for (final menuId in store.recipesForOutlet(outlet.selectedOutletId).map((line) => line.menuId).toSet())
+                  Card(child: ListTile(
+                    title: Text(menuStore.forOutlet(outlet.selectedOutletId).where((menu) => menu.id == menuId).map((menu) => menu.name).firstOrNull ?? menuId),
+                    subtitle: Text('HPP per porsi: Rp ' + store.hppForMenu(outletId: outlet.selectedOutletId, menuId: menuId).toStringAsFixed(0)),
+                  )),
                 const SizedBox(height: 14),
                 Wrap(spacing: 12, runSpacing: 8, children: [
                   SizedBox(width: narrow ? constraints.maxWidth : 230,
@@ -614,6 +755,8 @@ class _InventoryPageState extends State<InventoryPage> {
                                 itemBuilder: (_) => const [
                                   PopupMenuItem(value: 'edit', child: Text('Edit Barang')),
                                   PopupMenuItem(value: 'adjust', child: Text('Penyesuaian Stok')),
+                                  PopupMenuItem(value: 'cost', child: Text('Atur HPP / Harga Beli')),
+                                  PopupMenuItem(value: 'prepared', child: Text(item.isPreparedIngredient ? 'Jadikan Bahan Baku' : 'Tandai Bahan Olahan')),
                                   PopupMenuItem(value: 'delete', child: Text('Hapus Barang')),
                                   PopupMenuItem(value: 'opname', child: Text('Stock Opname')),
                                 ],
