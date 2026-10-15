@@ -132,6 +132,9 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
       'total': source['total'],
       'status': source['status'],
       'paymentStatus': source['paymentStatus'] ?? 'unpaid',
+      'paymentMethod': source['paymentMethod'],
+      'cashPaidAmount': source['cashPaidAmount'] ?? 0,
+      'paidAt': source['paidAt'],
     };
     final payload = <String, dynamic>{
       'schemaVersion': 1,
