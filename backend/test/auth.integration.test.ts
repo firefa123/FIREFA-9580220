@@ -334,10 +334,9 @@ authSuite("authentication endpoints", () => {
     );
     const staleResponse = await postSyncEvent(ownerApp, owner.accessToken, stale);
     expect(staleResponse.statusCode).toBe(409);
-    expect(staleResponse.json()).toEqual({
-      error: "stale_order_version",
-      serverVersion: 1,
-    });
+    expect(staleResponse.json().error).toBe("stale_order_version");
+    expect(staleResponse.json().serverVersion).toBe(1);
+    expect(staleResponse.json().serverSnapshot.id).toBe("ORD-1001");
 
     const validUpdate = makeSyncEvent(
       owner.outletIds[0],
