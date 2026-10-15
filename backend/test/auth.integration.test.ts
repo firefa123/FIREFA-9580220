@@ -269,6 +269,8 @@ authSuite("authentication endpoints", () => {
       "11111111-1111-4111-8111-111111111111",
       "evt-fedcba9876543210",
     );
+    altered.orderSnapshot.items[0]!.unitPrice = 99999;
+    altered.orderSnapshot.subtotal = 99999;
     altered.orderSnapshot.total = 99999;
     const response = await postSyncEvent(ownerApp, owner.accessToken, altered);
     expect(response.statusCode).toBe(409);
