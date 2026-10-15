@@ -43,6 +43,40 @@ const snapshotSchema = z.object({
   paymentMethod: z.string().trim().max(64).nullable().optional(),
   cashPaidAmount: money.default(0),
   paidAt: z.string().datetime({ offset: true }).nullable().optional(),
+}).superRefine((snapshot, context) => {
+  const calculatedSubtotal = snapshot.items.reduce(
+    (sum, item) => sum + item.quantity * item.unitPrice,
+    0,
+  );
+  if (Math.abs(calculatedSubtotal - snapshot.subtotal) > 0.01) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["subtotal"],
+      message: "subtotal must equal the sum of order items",
+    });
+  }
+  if (snapshot.discount > snapshot.subtotal) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["discount"],
+      message: "discount cannot exceed subtotal",
+    });
+  }
+  const expectedTotal = snapshot.subtotal - snapshot.discount + snapshot.tax + snapshot.service;
+  if (Math.abs(expectedTotal - snapshot.total) > 0.01) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["total"],
+      message: "total must equal subtotal minus discount plus tax and service",
+    });
+  }
+  if (snapshot.cashPaidAmount > snapshot.total) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["cashPaidAmount"],
+      message: "cashPaidAmount cannot exceed total",
+    });
+  }
 });
 
 const syncEventSchema = z.object({
