@@ -4,6 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:firefa_main_app/core/outlet/active_outlet_store.dart';
 import 'package:firefa_main_app/features/modules/customers_page.dart';
+import 'package:firefa_main_app/features/modules/customer_store.dart';
+import 'package:firefa_main_app/features/modules/local_backup_manager.dart';
+import 'package:firefa_main_app/features/modules/order_store.dart';
 import 'package:firefa_main_app/features/modules/finance_page.dart';
 
 void main() {
@@ -32,6 +35,11 @@ void main() {
   });
 
   testWidgets('customers page renders its tabs and empty state', (tester) async {
+    await tester.runAsync(() async {
+      await FirefaCustomerStore.instance.initialize();
+      await FirefaOrderStore.instance.initialize();
+      await FirefaLocalBackupManager.instance.initialize();
+    });
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -39,9 +47,7 @@ void main() {
         ),
       ),
     );
-    for (var i = 0; i < 10; i++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
+    await tester.pumpAndSettle();
 
     expect(find.text('Pelanggan & Loyalitas'), findsOneWidget);
     expect(find.text('Pelanggan & RFM'), findsOneWidget);
