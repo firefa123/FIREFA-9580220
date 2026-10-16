@@ -278,7 +278,7 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (app
           "COALESCE(SUM(m.quantity_delta), 0)::float8 AS \"movementTotal\", " +
           "COUNT(m.id)::int AS \"movementCount\", MAX(m.created_at) AS \"lastMovementAt\", " +
           "(i.quantity_on_hand = COALESCE(SUM(m.quantity_delta), 0)) AS \"ledgerMatches\", " +
-          "i.quantity_on_hand - COALESCE(SUM(m.quantity_delta), 0) AS \"unexplainedDelta\" " +
+          "(i.quantity_on_hand - COALESCE(SUM(m.quantity_delta), 0))::float8 AS \"unexplainedDelta\" " +
           "FROM inventory_items i LEFT JOIN inventory_movements m " +
           "ON m.inventory_item_id = i.id AND m.tenant_id = i.tenant_id AND m.outlet_id = i.outlet_id " +
           "WHERE i.tenant_id = $1 AND i.outlet_id = $2 GROUP BY i.id ORDER BY i.name",
