@@ -259,26 +259,50 @@ class FirefaInventoryBackendSync {
       );
     }
     final serverById = <String, double>{};
+    final serverNameById = <String, String>{};
     for (final raw in body['items'] as List) {
       if (raw is Map && raw['id'] is String && raw['quantityOnHand'] is num) {
-        serverById[raw['id'] as String] = (raw['quantityOnHand'] as num).toDouble();
+        final id = raw['id'] as String;
+        serverById[id] = (raw['quantityOnHand'] as num).toDouble();
+        if (raw['name'] is String) serverNameById[id] = raw['name'] as String;
       }
     }
     final store = FirefaInventoryStore.instance;
     await store.initialize();
     final differences = <FirefaInventoryStockDifference>[];
+    final matchedServerIds = <String>{};
     for (final item in store.forOutlet(localOutletId)) {
-      final serverId = FirefaBackendConfig.resolveServerInventoryItemId(
-        localItemId: item.id,
-        mapping: itemMap,
-      );
-      final serverStock = serverById[serverId];
+      final serverId = itemMap[item.id];
+      if (serverId == null || !FirefaBackendConfig.isUuid(serverId)) {
+        differences.add(FirefaInventoryStockDifference(
+          localItemId: item.id,
+          itemName: item.name,
+          localStock: item.stock,
+          serverStock: double.nan,
+        ));
+        continue;
+      }
+      final normalizedServerId = serverId.toLowerCase();
+      matchedServerIds.add(normalizedServerId);
+      final serverStock = serverById[normalizedServerId];
       if (serverStock == null || serverStock != item.stock.toDouble()) {
         differences.add(FirefaInventoryStockDifference(
           localItemId: item.id,
           itemName: item.name,
           localStock: item.stock,
           serverStock: serverStock ?? double.nan,
+        ));
+      }
+    }
+    // Report server-side inventory rows that have no local counterpart rather
+    // than silently declaring the outlet reconciled.
+    for (final entry in serverById.entries) {
+      if (!matchedServerIds.contains(entry.key)) {
+        differences.add(FirefaInventoryStockDifference(
+          localItemId: 'server:${entry.key}',
+          itemName: serverNameById[entry.key] ?? 'Item server tidak terpetakan',
+          localStock: 0,
+          serverStock: entry.value,
         ));
       }
     }
