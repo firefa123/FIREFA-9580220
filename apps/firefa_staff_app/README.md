@@ -16,6 +16,9 @@ This is a local UI prototype. Demo attendance and task completion are stored loc
 
 ## Run
 
+The web platform scaffold is included so the app can be launched in Chrome and built for web. Android/iOS platform scaffolding is not included in this Staff App yet.
+
+
 From this directory:
 
 ```powershell
