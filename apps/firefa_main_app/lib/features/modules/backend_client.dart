@@ -25,6 +25,27 @@ class FirefaBackendConfig {
     }
   }
 
+  /// Resolve a local demo/storage outlet ID to a real backend outlet ID.
+  /// The target must also be present in the authenticated session's outlet IDs.
+  /// This intentionally fails closed: local IDs must never be sent to the API.
+  static String resolveServerOutletId({
+    required String localOutletId,
+    required Map<String, String> mapping,
+    required Iterable<String> authorizedServerOutletIds,
+  }) {
+    if (localOutletId.trim().isEmpty) {
+      throw ArgumentError.value(localOutletId, 'localOutletId', 'Outlet lokal wajib diisi.');
+    }
+    final serverOutletId = mapping[localOutletId]?.trim();
+    if (serverOutletId == null || serverOutletId.isEmpty) {
+      throw const FormatException('Pemetaan outlet lokal ke server belum dikonfigurasi.');
+    }
+    if (!authorizedServerOutletIds.contains(serverOutletId)) {
+      throw const FormatException('Outlet server tidak termasuk akses akun yang sedang login.');
+    }
+    return serverOutletId;
+  }
+
   static bool get isConfigured =>
       enabled && baseUrl.trim().isNotEmpty && Uri.tryParse(baseUrl)?.hasAuthority == true;
 }
