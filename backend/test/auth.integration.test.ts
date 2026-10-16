@@ -393,6 +393,22 @@ authSuite("authentication endpoints", () => {
     expect(updateResponse.json().serverVersion).toBe(2);
   });
 
+  it("blocks Cashier from using owner-only order recovery through the API", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const cashier = await createCashierSession(ownerApp, owner);
+    const payload = makeSyncEvent(
+      owner.outletIds[0],
+      "11111111-1111-4111-8111-111111111111",
+      "evt-cashier-recover-001",
+      "order.recovered",
+      1,
+    );
+    const response = await postSyncEvent(ownerApp, cashier.accessToken, payload);
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ error: "owner_required_for_recovery" });
+  });
+
   it("allows an owner to restore a missing local order but does not overwrite a server order", async () => {
     const ownerApp = createTestApp();
     const owner = (await bootstrap(ownerApp)).json();
