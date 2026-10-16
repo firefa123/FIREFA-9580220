@@ -273,12 +273,12 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (app
       if (!role) return reply.code(403).send({ error: "outlet_forbidden" });
       if (role !== "owner") return reply.code(403).send({ error: "owner_required" });
       const result = await client.query(
-        "SELECT i.id::text AS id, i.product_id::text AS \\"productId\\", i.name, i.unit, " +
-          "i.quantity_on_hand::float8 AS \\"quantityOnHand\\", i.updated_at AS \\"updatedAt\\", " +
-          "COALESCE(SUM(m.quantity_delta), 0)::float8 AS \\"movementTotal\\", " +
-          "COUNT(m.id)::int AS \\"movementCount\\", MAX(m.created_at) AS \\"lastMovementAt\\", " +
-          "(i.quantity_on_hand = COALESCE(SUM(m.quantity_delta), 0)) AS \\"ledgerMatches\\", " +
-          "i.quantity_on_hand - COALESCE(SUM(m.quantity_delta), 0) AS \\"unexplainedDelta\\" " +
+        "SELECT i.id::text AS id, i.product_id::text AS \"productId\", i.name, i.unit, " +
+          "i.quantity_on_hand::float8 AS \"quantityOnHand\", i.updated_at AS \"updatedAt\", " +
+          "COALESCE(SUM(m.quantity_delta), 0)::float8 AS \"movementTotal\", " +
+          "COUNT(m.id)::int AS \"movementCount\", MAX(m.created_at) AS \"lastMovementAt\", " +
+          "(i.quantity_on_hand = COALESCE(SUM(m.quantity_delta), 0)) AS \"ledgerMatches\", " +
+          "i.quantity_on_hand - COALESCE(SUM(m.quantity_delta), 0) AS \"unexplainedDelta\" " +
           "FROM inventory_items i LEFT JOIN inventory_movements m " +
           "ON m.inventory_item_id = i.id AND m.tenant_id = i.tenant_id AND m.outlet_id = i.outlet_id " +
           "WHERE i.tenant_id = $1 AND i.outlet_id = $2 GROUP BY i.id ORDER BY i.name",
