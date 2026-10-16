@@ -86,8 +86,8 @@ authSuite("authentication endpoints", () => {
       [owner.tenantId, userId],
     );
     await adminPool.query(
-      "INSERT INTO outlet_memberships (tenant_id, outlet_id, user_id) VALUES ($1, $2, $3)",
-      [owner.outletIds[0], owner.tenantId, userId],
+      "INSERT INTO outlet_memberships (outlet_id, user_id) VALUES ($1, $2)",
+      [owner.outletIds[0], userId],
     );
     const accessToken = ownerApp.jwt.sign({
       sub: userId,
@@ -460,8 +460,8 @@ authSuite("authentication endpoints", () => {
       [owner.tenantId, userResult.rows[0]!.id],
     );
     await adminPool.query(
-      "INSERT INTO outlet_memberships (tenant_id, outlet_id, user_id) VALUES ($1, $2, $3)",
-      [owner.outletIds[0], owner.tenantId, userResult.rows[0]!.id],
+      "INSERT INTO outlet_memberships (outlet_id, user_id) VALUES ($1, $2)",
+      [owner.outletIds[0], userResult.rows[0]!.id],
     );
     const response = await ownerApp.inject({
       method: "POST",
