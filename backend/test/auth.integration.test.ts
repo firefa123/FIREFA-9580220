@@ -16,6 +16,13 @@ const safeTestDatabase = (() => {
 const testJwtSecret = "integration-test-jwt-secret-at-least-thirty-two-characters";
 const testBootstrapToken = "integration-test-bootstrap-token-at-least-thirty-two-characters";
 
+if (process.env.NODE_ENV === "test" && !safeTestDatabase) {
+  throw new Error(
+    "TEST_DATABASE_URL must point to a database whose name contains 'test'; " +
+      "refusing to silently skip PostgreSQL integration tests in test mode.",
+  );
+}
+
 const authSuite = describe.skipIf(!safeTestDatabase);
 
 authSuite("authentication endpoints", () => {
