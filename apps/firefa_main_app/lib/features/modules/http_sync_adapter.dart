@@ -89,12 +89,43 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
       );
     }
 
-    final serverOutletId = FirefaBackendConfig.outletMap[event.outletId];
-    if (serverOutletId == null || !_isUuid(serverOutletId)) {
+    final client = FirefaBackendClient.instance;
+    final FirefaBackendSession? session;
+    try {
+      session = await client.restoreSession();
+    } on FormatException catch (error) {
+      return FirefaSyncReceipt(
+        eventId: event.eventId,
+        outcome: FirefaSyncOutcome.permanentFailure,
+        message: error.message,
+      );
+    }
+    if (session == null) {
       return FirefaSyncReceipt(
         eventId: event.eventId,
         outcome: FirefaSyncOutcome.retryableFailure,
-        message: 'Pemetaan outlet lokal ke UUID server belum dikonfigurasi.',
+        message: 'Login backend diperlukan sebelum sinkronisasi.',
+      );
+    }
+
+    final String serverOutletId;
+    try {
+      serverOutletId = FirefaBackendConfig.resolveServerOutletId(
+        localOutletId: event.outletId,
+        mapping: FirefaBackendConfig.validatedOutletMap,
+        authorizedServerOutletIds: session.outletIds,
+      );
+    } on FormatException catch (error) {
+      return FirefaSyncReceipt(
+        eventId: event.eventId,
+        outcome: FirefaSyncOutcome.permanentFailure,
+        message: error.message,
+      );
+    } on ArgumentError catch (error) {
+      return FirefaSyncReceipt(
+        eventId: event.eventId,
+        outcome: FirefaSyncOutcome.permanentFailure,
+        message: error.message?.toString() ?? 'Outlet lokal tidak valid.',
       );
     }
 
@@ -199,7 +230,6 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
       'orderSnapshot': snapshot,
     };
 
-    final client = FirefaBackendClient.instance;
     Future<http.Response> post(String token) => http.post(
       Uri.parse('${client.baseUrl}/api/v1/sync/events'),
       headers: {
