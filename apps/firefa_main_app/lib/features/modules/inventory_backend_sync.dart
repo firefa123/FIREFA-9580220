@@ -48,6 +48,7 @@ class FirefaInventoryBackendSync {
 
   static const _deviceKey = 'firefa_inventory_sync_device_v1';
   static const _sentPrefix = 'firefa_inventory_synced_movements_v1';
+  static const _blockedPrefix = 'firefa_inventory_blocked_movements_v1';
 
   Future<String> _deviceId() async {
     final prefs = await SharedPreferences.getInstance();
@@ -65,6 +66,26 @@ class FirefaInventoryBackendSync {
 
   String _sentKey(String tenantId, String outletId, String deviceId) =>
       '$_sentPrefix:${tenantId.toLowerCase()}:${outletId.toLowerCase()}:${deviceId.toLowerCase()}';
+
+  Future<void> retryBlockedMovement({
+    required String localOutletId,
+    required String movementId,
+  }) async {
+    final client = FirefaBackendClient.instance;
+    final session = await client.restoreSession();
+    if (session == null) throw const FirefaBackendException('Login backend diperlukan.');
+    final serverOutletId = FirefaBackendConfig.resolveServerOutletId(
+      localOutletId: localOutletId,
+      mapping: FirefaBackendConfig.validatedOutletMap,
+      authorizedServerOutletIds: session.outletIds,
+    );
+    final deviceId = await _deviceId();
+    final prefs = await SharedPreferences.getInstance();
+    final key = '$_blockedPrefix:${session.tenantId.toLowerCase()}:${serverOutletId.toLowerCase()}:${deviceId.toLowerCase()}';
+    final blocked = (prefs.getStringList(key) ?? <String>[]).toSet();
+    blocked.remove(movementId);
+    await prefs.setStringList(key, blocked.toList());
+  }
 
   Future<FirefaInventorySyncResult> syncOutlet(String localOutletId) async {
     if (!FirefaBackendConfig.isConfigured) {
@@ -100,7 +121,9 @@ class FirefaInventoryBackendSync {
     final deviceId = await _deviceId();
     final prefs = await SharedPreferences.getInstance();
     final sentKey = _sentKey(session.tenantId, serverOutletId, deviceId);
-    final sent = (prefs.getStringList(sentKey) ?? <String>{}.toList()).toSet();
+    final sent = (prefs.getStringList(sentKey) ?? <String>[]).toSet();
+    final blockedKey = '$_blockedPrefix:${session.tenantId.toLowerCase()}:${serverOutletId.toLowerCase()}:${deviceId.toLowerCase()}';
+    final blocked = (prefs.getStringList(blockedKey) ?? <String>[]).toSet();
     final movements = store.historyForOutlet(localOutletId).reversed.toList();
     var attempted = 0;
     var acknowledged = 0;
@@ -108,7 +131,7 @@ class FirefaInventoryBackendSync {
     final errors = <String>[];
 
     for (final movement in movements) {
-      if (sent.contains(movement.id)) continue;
+      if (sent.contains(movement.id) || blocked.contains(movement.id)) continue;
       attempted++;
       try {
         final serverItemId = FirefaBackendConfig.resolveServerInventoryItemId(
@@ -167,7 +190,16 @@ class FirefaInventoryBackendSync {
           acknowledged++;
         } else {
           failed++;
-          errors.add('${movement.id}: ${body?['error'] ?? 'HTTP ${response.statusCode}'}');
+          final permanent = response.statusCode >= 400 &&
+              response.statusCode < 500 &&
+              response.statusCode != 408 &&
+              response.statusCode != 429;
+          if (permanent) {
+            blocked.add(movement.id);
+            await prefs.setStringList(blockedKey, blocked.toList());
+          }
+          errors.add('${movement.id}: ${body?['error'] ?? 'HTTP ${response.statusCode}'}'
+              '${permanent ? ' (dihentikan sampai ditinjau; panggil retryBlockedMovement setelah koreksi)' : ''}');
         }
       } on TimeoutException {
         failed++;
