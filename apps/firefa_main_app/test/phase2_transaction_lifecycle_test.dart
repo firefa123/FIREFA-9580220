@@ -55,6 +55,8 @@ void main() {
       expect(order.paymentStatus, FirefaPaymentStatus.paid);
       expect(order.refundRecords.single.verificationStatus, FirefaRefundVerificationStatus.reported);
       expect(order.refundAmount, 10000);
+      expect(order.markRefundVerified(0), isTrue);
+      expect(order.paymentStatus, FirefaPaymentStatus.paid);
       expect(order.cashRefundAmount, 10000);
       expect(order.refundableAmount, 40000);
       expect(order.refundRecords, hasLength(1));
@@ -64,7 +66,6 @@ void main() {
       expect(order.refundableAmount, 25000);
       expect(order.refundRecords, hasLength(2));
       expect(order.paymentStatus, FirefaPaymentStatus.paid);
-      expect(order.markRefundVerified(0), isTrue);
       expect(order.markRefundVerified(1), isTrue);
       expect(order.paymentStatus, FirefaPaymentStatus.paid);
       expect(order.markRefunded(method: 'Cash', reason: 'Melebihi sisa', amount: 25001), isFalse);
@@ -74,11 +75,10 @@ void main() {
       final order = sampleOrder()..markPaid(method: 'Transfer', cashAmount: 0);
       expect(order.markPaymentVerified(), isTrue);
       expect(order.markRefunded(method: 'Cash', reason: 'Pertama', amount: 20000), isTrue);
+      expect(order.markRefundVerified(0), isTrue);
       expect(order.markRefunded(method: 'Non-tunai', reason: 'Sisa', amount: 30000), isTrue);
       expect(order.paymentStatus, FirefaPaymentStatus.paid);
-      expect(order.refundRecords.every((record) => record.verificationStatus == FirefaRefundVerificationStatus.reported), isTrue);
-      expect(order.markRefundVerified(0), isTrue);
-      expect(order.paymentStatus, FirefaPaymentStatus.paid);
+      expect(order.refundRecords[1].verificationStatus, FirefaRefundVerificationStatus.reported);
       expect(order.markRefundVerified(1), isTrue);
       expect(order.paymentStatus, FirefaPaymentStatus.refunded);
       expect(FirefaOrder.fromJson(order.toJson()).paymentStatus, FirefaPaymentStatus.refunded);

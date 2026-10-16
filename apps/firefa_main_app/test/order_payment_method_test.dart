@@ -109,10 +109,12 @@ void main() {
       subtotal: 25000, discount: 0, tax: 0, service: 0, total: 25000,
     );
     expect(await store.markPaidAndPersist('REFUND-TEST', order.id, paymentMethod: 'Cash', cashPaidAmount: 25000), isTrue);
+    expect(await store.applyServerPaymentVerification('REFUND-TEST', order.id, verifiedBy: 'owner-test'), isTrue);
     expect(await store.refundPaidAndPersist('REFUND-TEST', order.id, refundMethod: 'Cash', reason: 'Pesanan salah'), isTrue);
+    expect(await store.applyServerRefundVerification('REFUND-TEST', order.id, 0, verifiedBy: 'owner-test'), isTrue);
     await store.waitForPendingSave();
-    expect(order.paymentStatus, FirefaPaymentStatus.paid);
-    expect(order.refundRecords.single.verificationStatus, FirefaRefundVerificationStatus.reported);
+    expect(order.paymentStatus, FirefaPaymentStatus.refunded);
+    expect(order.refundRecords.single.verificationStatus, FirefaRefundVerificationStatus.verified);
     expect(order.cashRefundAmount, 25000);
     expect(calculateCashRefundsForShift(
       orders: [order],
