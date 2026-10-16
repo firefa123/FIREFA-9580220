@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() => runApp(const FirefaStaffApp());
@@ -40,6 +44,15 @@ class _StaffShellState extends State<StaffShell> {
   bool _checkedIn = false;
   bool _loading = true;
   final Set<int> _done = <int>{};
+  final _staffCodeController = TextEditingController();
+  final _pinController = TextEditingController();
+  bool _apiBusy = false;
+  static const _backendEnabled = bool.fromEnvironment('FIREFA_BACKEND_ENABLED');
+  static const _apiBaseUrl = String.fromEnvironment('FIREFA_API_BASE_URL');
+  static const _configuredOutletId = String.fromEnvironment('FIREFA_STAFF_OUTLET_ID');
+  String? _accessToken;
+  String? _staffId;
+  String? _staffName;
   static const _shiftKey = 'staff_demo_checked_in';
   static const _tasksKey = 'staff_demo_completed_tasks';
   static const _tasks = ['Persiapan area kerja', 'Periksa perlengkapan', 'Briefing tim'];
@@ -51,6 +64,10 @@ class _StaffShellState extends State<StaffShell> {
   }
 
   Future<void> _loadLocalState() async {
+    if (_backendEnabled) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
     final preferences = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
@@ -65,7 +82,15 @@ class _StaffShellState extends State<StaffShell> {
     });
   }
 
+  @override
+  void dispose() {
+    _staffCodeController.dispose();
+    _pinController.dispose();
+    super.dispose();
+  }
+
   Future<void> _saveLocalState() async {
+    if (_backendEnabled) return;
     final preferences = await SharedPreferences.getInstance();
     await preferences.setBool(_shiftKey, _checkedIn);
     await preferences.setStringList(
@@ -81,6 +106,7 @@ class _StaffShellState extends State<StaffShell> {
         body: SafeArea(child: Center(child: CircularProgressIndicator())),
       );
     }
+    if (_backendEnabled && _accessToken == null) return _loginScreen();
     final pages = [_home(), _shift(), _taskList(), _profile()];
     return Scaffold(
       appBar: AppBar(
@@ -114,7 +140,7 @@ class _StaffShellState extends State<StaffShell> {
         children: [
           const Text('Selamat datang,', style: TextStyle(color: Color(0xFF64748B))),
           const SizedBox(height: 4),
-          Text('Tim FIREFA', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+          Text(_staffName ?? 'Tim FIREFA', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
           const SizedBox(height: 18),
           Container(
             padding: const EdgeInsets.all(20),
@@ -136,7 +162,7 @@ class _StaffShellState extends State<StaffShell> {
               SizedBox(width: double.infinity, child: FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF007A70)),
                 onPressed: _toggleShift,
-                child: Text(_checkedIn ? 'Akhiri Shift (Demo)' : 'Mulai Shift (Demo)'),
+                child: Text(_checkedIn ? (_backendEnabled ? 'Check-out' : 'Akhiri Shift (Demo)') : (_backendEnabled ? 'Check-in' : 'Mulai Shift (Demo)')),
               )),
             ]),
           ),
@@ -181,12 +207,12 @@ class _StaffShellState extends State<StaffShell> {
             const SizedBox(height: 14),
             Text(_checkedIn ? 'Shift sedang aktif' : 'Kamu belum check-in', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
-            Text(_checkedIn ? 'Status demo tercatat selama sesi aplikasi.' : 'Mulai shift ketika kamu siap bertugas.', style: const TextStyle(color: Color(0xFF64748B))),
+            Text(_backendEnabled ? (_checkedIn ? 'Waktu check-in tersimpan di server.' : 'Kamu bebas check-in saat siap bertugas; waktu dicatat server.') : (_checkedIn ? 'Status demo tercatat selama sesi aplikasi.' : 'Mulai shift ketika kamu siap bertugas.'), style: const TextStyle(color: Color(0xFF64748B))),
             const SizedBox(height: 18),
             SizedBox(width: double.infinity, child: FilledButton.icon(
               onPressed: _toggleShift,
               icon: Icon(_checkedIn ? Icons.logout_rounded : Icons.login_rounded),
-              label: Text(_checkedIn ? 'Check-out (Demo)' : 'Check-in (Demo)'),
+              label: Text(_checkedIn ? (_backendEnabled ? 'Check-out' : 'Check-out (Demo)') : (_backendEnabled ? 'Check-in' : 'Check-in (Demo)')),
             )),
           ]),
         )),
@@ -228,22 +254,22 @@ class _StaffShellState extends State<StaffShell> {
   Widget _profile() => ListView(padding: const EdgeInsets.all(20), children: [
         Text('Profil saya', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 18),
-        const Card(child: Padding(
-          padding: EdgeInsets.all(20),
+        Card(child: Padding(
+          padding: const EdgeInsets.all(20),
           child: Column(children: [
-            CircleAvatar(radius: 38, backgroundColor: Color(0xFFE0F2F1), child: Icon(Icons.person_rounded, size: 42, color: Color(0xFF008F83))),
-            SizedBox(height: 12),
-            Text('Anggota Tim', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-            SizedBox(height: 4),
-            Text('Akun demo • Belum terhubung', style: TextStyle(color: Color(0xFF64748B))),
-            Divider(height: 28),
-            ListTile(leading: Icon(Icons.badge_outlined), title: Text('ID staf'), subtitle: Text('Belum ditetapkan')),
-            ListTile(leading: Icon(Icons.store_outlined), title: Text('Outlet'), subtitle: Text('Outlet Utama (demo)')),
-            ListTile(leading: Icon(Icons.security_outlined), title: Text('Akses'), subtitle: Text('Menunggu autentikasi server')),
+            const CircleAvatar(radius: 38, backgroundColor: Color(0xFFE0F2F1), child: Icon(Icons.person_rounded, size: 42, color: Color(0xFF008F83))),
+            const SizedBox(height: 12),
+            Text(_staffName == null ? 'Anggota Tim' : _staffName!, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Text(_backendEnabled ? 'Akun staff terautentikasi' : 'Akun demo • Belum terhubung', style: const TextStyle(color: Color(0xFF64748B))),
+            const Divider(height: 28),
+            ListTile(leading: const Icon(Icons.badge_outlined), title: const Text('ID staf'), subtitle: Text(_staffId ?? 'Belum ditetapkan')),
+            ListTile(leading: const Icon(Icons.store_outlined), title: const Text('Outlet'), subtitle: Text(_backendEnabled ? _configuredOutletId : 'Outlet Utama (demo)')),
+            ListTile(leading: const Icon(Icons.security_outlined), title: const Text('Akses'), subtitle: Text(_backendEnabled ? 'Token server aktif' : 'Menunggu autentikasi server')),
           ]),
         )),
         const SizedBox(height: 12),
-        OutlinedButton.icon(onPressed: () => _message('Autentikasi belum diaktifkan.'), icon: const Icon(Icons.logout_rounded), label: const Text('Keluar')),
+        OutlinedButton.icon(onPressed: _backendEnabled ? _logout : () => _message('Autentikasi belum diaktifkan.'), icon: const Icon(Icons.logout_rounded), label: const Text('Keluar')),
       ]);
 
   Widget _metric(String label, String value, IconData icon) => Card(child: Padding(
@@ -270,10 +296,155 @@ class _StaffShellState extends State<StaffShell> {
         )),
       );
 
-  void _toggleShift() {
-    setState(() => _checkedIn = !_checkedIn);
-    _saveLocalState();
-    _message(_checkedIn ? 'Check-in demo berhasil.' : 'Check-out demo berhasil.');
+  Widget _loginScreen() => Scaffold(
+        appBar: AppBar(title: const Text('Login Staff FIREFA')),
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Icon(Icons.badge_outlined, size: 44, color: Color(0xFF008F83)),
+                        const SizedBox(height: 12),
+                        const Text('Masuk sebagai Staff', textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 8),
+                        Text(_apiBaseUrl.isEmpty || _configuredOutletId.isEmpty
+                            ? 'Konfigurasi FIREFA_API_BASE_URL dan FIREFA_STAFF_OUTLET_ID belum lengkap.'
+                            : 'Masukkan kode staff dan PIN 6 digit dari Owner.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Color(0xFF64748B))),
+                        const SizedBox(height: 20),
+                        TextField(controller: _staffCodeController, textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(labelText: 'Kode staff', prefixIcon: Icon(Icons.badge_outlined))),
+                        const SizedBox(height: 12),
+                        TextField(controller: _pinController, keyboardType: TextInputType.number,
+                          obscureText: true, maxLength: 6,
+                          decoration: const InputDecoration(labelText: 'PIN 6 digit', prefixIcon: Icon(Icons.lock_outline))),
+                        const SizedBox(height: 12),
+                        FilledButton(
+                          onPressed: _apiBusy || _apiBaseUrl.isEmpty || _configuredOutletId.isEmpty ? null : _login,
+                          child: _apiBusy ? const CircularProgressIndicator() : const Text('Masuk'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+  Future<void> _login() async {
+    setState(() => _apiBusy = true);
+    try {
+      final baseUrl = _apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
+      final response = await http.post(
+        Uri.parse(baseUrl + '/api/v1/staff/login'),
+        headers: const {'content-type': 'application/json'},
+        body: jsonEncode({
+          'outletId': _configuredOutletId,
+          'staffCode': _staffCodeController.text.trim(),
+          'pin': _pinController.text,
+        }),
+      );
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode != 200) {
+        throw Exception(response.statusCode == 401 ? 'Kode staff atau PIN salah.' : 'Login gagal (' + response.statusCode.toString() + ').');
+      }
+      final staff = body['staff'] as Map<String, dynamic>;
+      _accessToken = body['accessToken'] as String;
+      _staffId = staff['id'] as String;
+      _staffName = staff['displayName'] as String;
+      await _refreshServerAttendance();
+      if (mounted) setState(() {});
+    } catch (error) {
+      _message('Tidak dapat login: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _apiBusy = false);
+    }
+  }
+
+  Future<void> _refreshServerAttendance() async {
+    final token = _accessToken;
+    if (token == null) return;
+    final baseUrl = _apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
+    final response = await http.get(
+      Uri.parse(baseUrl + '/api/v1/attendance/me'),
+      headers: {'authorization': 'Bearer ' + token},
+    );
+    if (response.statusCode != 200) throw Exception('Riwayat absensi gagal dimuat.');
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final rows = body['attendance'] as List<dynamic>;
+    final latest = rows.isEmpty ? null : rows.first as Map<String, dynamic>;
+    _checkedIn = latest != null && latest['checkOutAt'] == null;
+  }
+
+  Future<void> _toggleShift() async {
+    if (!_backendEnabled) {
+      setState(() => _checkedIn = !_checkedIn);
+      await _saveLocalState();
+      _message(_checkedIn ? 'Check-in demo berhasil.' : 'Check-out demo berhasil.');
+      return;
+    }
+    final token = _accessToken;
+    if (token == null || _apiBusy) return;
+    setState(() => _apiBusy = true);
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        throw Exception('Izin lokasi diperlukan untuk absensi geofence.');
+      }
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      final action = _checkedIn ? 'check-out' : 'check-in';
+      final baseUrl = _apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
+      final response = await http.post(
+        Uri.parse(baseUrl + '/api/v1/attendance/' + action),
+        headers: {'content-type': 'application/json', 'authorization': 'Bearer ' + token},
+        body: jsonEncode({
+          'outletId': _configuredOutletId,
+          'latitude': position.latitude,
+          'longitude': position.longitude,
+        }),
+      );
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final code = body['error'];
+        if (code == 'outside_geofence') throw Exception('Kamu berada di luar radius absensi outlet.');
+        if (code == 'already_checked_in_today') throw Exception('Absensi hari ini sudah tercatat.');
+        if (code == 'outlet_geofence_not_configured') throw Exception('Lokasi dan radius outlet belum diatur Owner.');
+        throw Exception('Absensi gagal: ' + (code?.toString() ?? response.statusCode.toString()) + '.');
+      }
+      setState(() => _checkedIn = !_checkedIn);
+      _message(_checkedIn ? 'Check-in tercatat oleh server.' : 'Check-out tercatat oleh server.');
+    } catch (error) {
+      _message('Absensi gagal: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _apiBusy = false);
+    }
+  }
+
+  void _logout() {
+    setState(() {
+      _accessToken = null;
+      _staffId = null;
+      _staffName = null;
+      _checkedIn = false;
+      _pinController.clear();
+    });
   }
 
   void _message(String message) {
