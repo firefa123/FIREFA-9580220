@@ -18,6 +18,21 @@ Implemented in this foundation slice:
 
 Not implemented yet: staff CRUD, attendance/geofence endpoints, collection/settlement endpoints for BON receivables, external payment-provider verification for non-cash payments/refunds, automatic menu/inventory migration from local stores, and production deployment. Cash refunds are recorded as cashier-reported entries; they are not provider-verified. Do not treat the database as deployed until the Compose stack is started on the target server.
 
+## Final handover and deployment checklist
+
+See [Stage 8 final handover](../docs/operations/stage-8-final-handover.md) for the repository audit, CI evidence, release boundaries, and full runbook.
+
+Before deploying to a server:
+- Use a supported Node.js 22+ runtime or Docker Engine + Compose and PostgreSQL 16.
+- Create the root `.env` from `.env.example`; replace all example values with strong, unique secrets. Use URL-safe characters for `POSTGRES_PASSWORD` because Compose interpolates it into `DATABASE_URL`.
+- Keep database and API ports bound to loopback/private interfaces as configured by `docker-compose.backend.yml`. Do not expose PostgreSQL publicly.
+- Put the API behind a TLS reverse proxy before sending credentials or production traffic.
+- Verify `/health/live` and `/health/ready`, check container logs, and confirm migrations have completed before use.
+- Back up the target database and rehearse restore against a disposable database before production migration. Never test restore against the production database.
+- Never commit `.env`, database dumps, JWT secrets, bootstrap tokens, or real customer data.
+
+Deployment is **not yet production-verified** by this repository's CI. CI builds the container and validates PostgreSQL using an ephemeral database; it does not deploy this stack to a real server or test a public TLS endpoint.
+
 ## Requirements
 
 - Node.js 22+
