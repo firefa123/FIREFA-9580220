@@ -254,6 +254,27 @@ class FirefaInventoryStore extends ChangeNotifier {
       note: note + ' (input ' + amount.toString() + ' ' + inputUnit + ' -> ' + rounded.toString() + ' ' + _items[index].unit + ')');
   }
 
+  /// Awaits local persistence before the UI reports a stock change as saved.
+  Future<bool> adjustConvertedAndPersist({
+    required String outletId,
+    required String id,
+    required String type,
+    required double amount,
+    required String inputUnit,
+    required String note,
+  }) async {
+    final changed = adjustConverted(
+      outletId: outletId,
+      id: id,
+      type: type,
+      amount: amount,
+      inputUnit: inputUnit,
+      note: note,
+    );
+    if (changed) await waitForPendingSave();
+    return changed;
+  }
+
   List<FirefaPrepRecipeLine> preparedRecipesForOutlet(String outletId) {
     if (!_initialized) throw StateError('Inventory belum diinisialisasi');
     return List.unmodifiable(_prepRecipes.where((line) => line.outletId == outletId));

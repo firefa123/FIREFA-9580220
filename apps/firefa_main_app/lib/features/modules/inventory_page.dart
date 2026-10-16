@@ -483,10 +483,26 @@ class _InventoryPageState extends State<InventoryPage> {
     note.dispose();
     if (!mounted || result == null || !allowed || sourceOutlet != outlet.selectedOutletId) { return; }
     try {
-      final success = action == 'edit'
-        ? store.update(outletId: sourceOutlet, id: item.id, name: result.name, unit: result.unit, minimumStock: result.amount)
-        : store.adjustConverted(outletId: sourceOutlet, id: item.id, type: result.type,
-            amount: result.amount.toDouble(), inputUnit: result.inputUnit, note: result.note);
+      final bool success;
+      if (action == 'edit') {
+        success = store.update(
+          outletId: sourceOutlet,
+          id: item.id,
+          name: result.name,
+          unit: result.unit,
+          minimumStock: result.amount,
+        );
+        if (success) await store.waitForPendingSave();
+      } else {
+        success = await store.adjustConvertedAndPersist(
+          outletId: sourceOutlet,
+          id: item.id,
+          type: result.type,
+          amount: result.amount.toDouble(),
+          inputUnit: result.inputUnit,
+          note: result.note,
+        );
+      }
       if (!success) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Perubahan ditolak. Periksa nilai, stok, dan nama unik.')));
     } catch (error) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Konversi stok gagal: ' + error.toString())));
