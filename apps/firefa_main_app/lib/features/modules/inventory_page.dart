@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import '../../core/auth/role_permissions.dart';
 import '../../core/outlet/active_outlet_store.dart';
 import 'inventory_store.dart';
+import 'inventory_backend_sync.dart';
+import 'backend_client.dart';
 import 'menu_store.dart';
 
 class InventoryPage extends StatefulWidget {
@@ -55,6 +57,61 @@ class _InventoryPageState extends State<InventoryPage> {
       FirefaAccess.can(outlet.role, FirefaPermission.inventoryManage) &&
       outlet.canAccessOutlet(outlet.selectedOutletId);
 
+
+  Future<void> syncAndReconcileInventory() async {
+    if (!allowed || !FirefaBackendConfig.isConfigured) return;
+    final localOutletId = outlet.selectedOutletId;
+    try {
+      final result = await FirefaInventoryBackendSync.instance.syncOutlet(localOutletId);
+      if (!mounted) return;
+      final differences = await FirefaInventoryBackendSync.instance.reconcileOutlet(localOutletId);
+      if (!mounted) return;
+      final summary = 'Sinkronisasi inventori: ${result.acknowledged}/${result.attempted} pergerakan diterima; ${result.failed} gagal. ';
+      if (differences.isEmpty && result.failed == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(summary + 'Stok lokal dan server cocok.'),
+        ));
+        return;
+      }
+      final details = <String>[
+        ...result.errors,
+        ...differences.map((difference) =>
+          '${difference.itemName}: lokal ${difference.localStock}, server ${difference.serverStock.isNaN ? 'belum terpetakan' : difference.serverStock.toString()}'),
+      ];
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Rekonsiliasi stok'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(summary),
+                  const SizedBox(height: 8),
+                  if (details.isEmpty) const Text('Tidak ada selisih stok.'),
+                  for (final detail in details) Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text('• ' + detail),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('Tidak ada saldo yang ditimpa otomatis. Periksa pemetaan item atau buat pergerakan koreksi setelah selisih ditinjau.'),
+                ],
+              ),
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Tutup'))],
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Rekonsiliasi gagal; data lokal tetap aman. $error'),
+      ));
+    }
+  }
 
   Future<void> setItemCost(FirefaInventoryItem item) async {
     if (!allowed || item.outletId != outlet.selectedOutletId) return;
@@ -592,6 +649,12 @@ class _InventoryPageState extends State<InventoryPage> {
                     )),
                     OutlinedButton.icon(onPressed: allowed ? manageRecipe : null, icon: const Icon(Icons.menu_book_outlined), label: const Text('Atur Resep POS')),
                     OutlinedButton.icon(onPressed: allowed ? managePreparedRecipe : null, icon: const Icon(Icons.restaurant_menu), label: const Text('Resep Olahan')),
+                    if (FirefaBackendConfig.isConfigured && outlet.role == FirefaRole.owner)
+                      OutlinedButton.icon(
+                        onPressed: allowed ? syncAndReconcileInventory : null,
+                        icon: const Icon(Icons.sync),
+                        label: const Text('Sinkron & Rekonsiliasi'),
+                      ),
                     OutlinedButton.icon(onPressed: allowed ? producePrepared : null, icon: const Icon(Icons.inventory_2_outlined), label: const Text('Produksi Olahan')),
                     FilledButton.icon(
                       onPressed: allowed ? addItem : null,
@@ -605,7 +668,7 @@ class _InventoryPageState extends State<InventoryPage> {
                 Text('${outlet.selectedOutletName} • ${items.length} barang • $low stok rendah • $empty habis',
                     style: const TextStyle(color: muted, fontSize: 12)),
                 const SizedBox(height: 8),
-                const Text('Inventory lokal • Resep POS aktif lokal • Cloud belum terhubung',
+                const Text('Stok lokal tetap aktif offline • Sinkronisasi server memerlukan pemetaan outlet dan item',
                     style: TextStyle(color: muted, fontSize: 12)),
                 const SizedBox(height: 14),
                 const Text('Resep Menu POS', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.bold)),
