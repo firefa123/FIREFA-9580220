@@ -228,9 +228,11 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
       'orderId': event.orderId,
       'eventType': event.eventType,
       'createdAt': event.createdAt.toUtc().toIso8601String(),
-      'expectedServerVersion': ?expectedVersion,
       'orderSnapshot': snapshot,
     };
+    if (expectedVersion != null) {
+      payload['expectedServerVersion'] = expectedVersion;
+    }
 
     Future<http.Response> post(String token) => http.post(
       Uri.parse('${client.baseUrl}/api/v1/sync/events'),
