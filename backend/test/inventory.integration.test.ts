@@ -127,6 +127,10 @@ inventorySuite("inventory movement endpoint", () => {
     const response = await postMovement("inventory-test-event-001");
     expect(response.statusCode).toBe(201);
     expect(response.json().quantityOnHand).toBe(90);
+    expect(response.json().eventId).toBe("inventory-test-event-001");
+    expect(response.json().outletId).toBe(outletId);
+    expect(response.json().inventoryItemId).toBe(inventoryItemId);
+    expect(response.json().replayed).toBe(false);
     expect(await currentStock()).toBe(90);
     const ledger = await adminPool.query(
       "SELECT id FROM inventory_movements WHERE tenant_id = $1 AND outlet_id = $2 AND idempotency_key = $3",
@@ -142,6 +146,9 @@ inventorySuite("inventory movement endpoint", () => {
     expect(first.statusCode).toBe(201);
     expect(replay.statusCode).toBe(200);
     expect(replay.json().replayed).toBe(true);
+    expect(replay.json().eventId).toBe(key);
+    expect(replay.json().outletId).toBe(outletId);
+    expect(replay.json().inventoryItemId).toBe(inventoryItemId);
     expect(replay.json().id).toBe(first.json().id);
     expect(await currentStock()).toBe(90);
     const ledger = await adminPool.query(
