@@ -1,0 +1,9 @@
+{
+  "name": "FIREFA Staff App",
+  "short_name": "FIREFA Staff",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#008577",
+  "description": "FIREFA Staff App for day-to-day outlet workflows."
+}
