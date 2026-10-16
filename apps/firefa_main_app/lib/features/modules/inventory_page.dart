@@ -503,8 +503,10 @@ class _InventoryPageState extends State<InventoryPage> {
           note: result.note,
         );
       }
+      if (!mounted) return;
       if (!success) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Perubahan ditolak. Periksa nilai, stok, dan nama unik.')));
     } catch (error) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Konversi stok gagal: ' + error.toString())));
     }
   }
