@@ -158,6 +158,47 @@ class FirefaBackendConfig {
     return payload;
   }
 
+  static const String inventoryItemMapJson = String.fromEnvironment(
+    'FIREFA_INVENTORY_ITEM_MAP',
+    defaultValue: '{}',
+  );
+
+  static Map<String, String> get validatedInventoryItemMap {
+    final decoded = jsonDecode(inventoryItemMapJson);
+    if (decoded is! Map) {
+      throw const FormatException('FIREFA_INVENTORY_ITEM_MAP harus berupa object JSON.');
+    }
+    final result = <String, String>{};
+    for (final entry in decoded.entries) {
+      if (entry.key is! String ||
+          (entry.key as String).trim().isEmpty ||
+          entry.value is! String ||
+          !isUuid((entry.value as String).trim())) {
+        throw const FormatException(
+          'Pemetaan inventori harus berisi ID lokal dan UUID server yang valid.',
+        );
+      }
+      result[(entry.key as String).trim()] = (entry.value as String).trim().toLowerCase();
+    }
+    if (result.values.toSet().length != result.length) {
+      throw const FormatException('UUID item server tidak boleh dipakai oleh beberapa item lokal.');
+    }
+    return Map.unmodifiable(result);
+  }
+
+  static String resolveServerInventoryItemId({
+    required String localItemId,
+    required Map<String, String> mapping,
+  }) {
+    final id = mapping[localItemId]?.trim();
+    if (id == null || !isUuid(id)) {
+      throw const FormatException(
+        'Pemetaan item inventori lokal ke UUID server belum dikonfigurasi.',
+      );
+    }
+    return id.toLowerCase();
+  }
+
   static bool get isConfigured =>
       enabled && baseUrl.trim().isNotEmpty && Uri.tryParse(baseUrl)?.hasAuthority == true;
 }
