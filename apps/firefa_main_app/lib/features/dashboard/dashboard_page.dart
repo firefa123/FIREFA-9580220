@@ -55,6 +55,7 @@ class _DashboardPageState extends State<DashboardPage> {
   late int selectedIndex;
   bool sidebarCollapsed = true;
   bool _syncInProgress = false;
+  Timer? _syncRetryTimer;
 
   static const pageTitles = [
     'Dashboard',
@@ -126,6 +127,10 @@ class _DashboardPageState extends State<DashboardPage> {
     outletStore.addListener(_onOutletChanged);
     orderStore.addListener(_onOutletChanged);
     unawaited(_syncPendingEvents());
+    // A persisted retry time must not depend on another order/outlet change.
+    _syncRetryTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      unawaited(_syncPendingEvents());
+    });
   }
 
   @override
@@ -143,6 +148,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   void dispose() {
+    _syncRetryTimer?.cancel();
     outletStore.removeListener(_onOutletChanged);
     orderStore.removeListener(_onOutletChanged);
     super.dispose();
