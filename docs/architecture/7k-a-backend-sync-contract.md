@@ -1,6 +1,6 @@
 # FIREFA 7K-A — Backend Sync Contract (Draft v1)
 
-Status: **PROPOSED / NOT IMPLEMENTED**. This is an architecture contract, not a running server, deployed API, or enabled cloud synchronization.
+Status: **PARTIALLY IMPLEMENTED — Stage 4 client/server path exists; deployment and crash-durability guarantees remain environment-dependent.** The authenticated API, PostgreSQL transaction/idempotency receipt, local outbox, HTTP adapter, retry coordinator, and conflict inbox are implemented in the repository. A live deployment is not implied by this document.
 
 ## Scope and invariants
 
@@ -9,10 +9,10 @@ Status: **PROPOSED / NOT IMPLEMENTED**. This is an architecture contract, not a 
 - Every subscription tier has the same features; tiers differ only by outlet limits.
 - No event is marked `synced` without a verified authenticated backend acknowledgment.
 - Never treat the current local `ORD-1001`-style order ID as globally unique.
-- Current `SharedPreferences` storage is not a transactional database. Do not promise crash durability or cross-device consistency yet.
+- The local outbox is persisted through `SharedPreferences` and combined order/outbox snapshots. Interrupted `syncing` entries are restored as `pending`, and server idempotency allows safe replay after an uncertain acknowledgment. `SharedPreferences` is not a transactional database, so this is not a guarantee against storage corruption, device loss, or abrupt power loss during a write; use a transactional local database before claiming that stronger durability.
 - Do not send raw customer secrets, credentials, or unnecessary PII in event payloads.
 
-## Proposed authenticated API
+## Implemented authenticated API
 
 `POST /api/v1/sync/events`
 
@@ -53,7 +53,7 @@ Status: **PROPOSED / NOT IMPLEMENTED**. This is an architecture contract, not a 
 }
 ```
 
-`order.updated` requires `expectedServerVersion` and is rejected when the client version is stale. `order.recovered` remains rejected with HTTP 422 until a reconciliation policy is defined. Treat the snapshot as an asserted client state, **not** automatically authoritative server state. The `deviceId` is a stable UUID per installation, and `outletId` is the server-issued outlet UUID; a future client adapter must map local outlet IDs to this UUID.
+`order.updated` requires `expectedServerVersion` and is rejected when the client version is stale. `order.recovered` is owner-only and is subject to existing-order identity checks; it must not be used as an automatic way to overwrite a server order. Treat the snapshot as an asserted client state, **not** automatically authoritative server state. The `deviceId` is a stable UUID per installation, and `outletId` is the server-issued outlet UUID; a future client adapter must map local outlet IDs to this UUID.
 
 ### Acknowledged response (illustrative)
 
@@ -70,7 +70,7 @@ HTTP 200 or 201, only after durable transaction commit:
 }
 ```
 
-The client verifies the returned event ID matches the sent ID, outcome is `acknowledged`, and `serverReference` is non-empty. Future implementation must also validate response schema, authorization context and transport authenticity. A 2xx response alone is insufficient.
+The client verifies schema version, matching event ID, `acknowledged` outcome, non-empty receipt reference, UUID global order ID, and a positive server version. The backend independently enforces authorization context. A 2xx response alone is insufficient.
 
 ### Failure policy
 
