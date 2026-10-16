@@ -29,7 +29,10 @@ describe("health routes", () => {
   });
 
   it("returns ready when the database check succeeds", async () => {
-    app = buildApp({ checkDatabase: async () => undefined });
+    app = buildApp({
+      ...testSecrets,
+      checkDatabase: async () => undefined,
+    });
     const response = await app.inject({ method: "GET", url: "/health/ready" });
 
     expect(response.statusCode).toBe(200);
