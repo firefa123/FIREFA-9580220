@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backend_client.dart';
 import 'sync_adapter.dart';
+import 'conflict_management.dart';
 
 /// REST adapter matching backend/src/routes/sync.ts.
 /// Local IDs are mapped to server outlet UUIDs; cloud sync is never inferred
@@ -317,6 +318,7 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
             serverOutletId: event.outletId,
             serverOrderId: event.orderId,
             serverSnapshot: serverSnapshot,
+            conflictKind: FirefaConflictKind.staleServerVersion,
             message: 'Pesanan berubah di server (versi $serverVersion).',
           );
         }
