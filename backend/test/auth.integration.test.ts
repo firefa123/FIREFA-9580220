@@ -72,6 +72,32 @@ authSuite("authentication endpoints", () => {
     });
   }
 
+  async function createCashierSession(
+    ownerApp: FastifyInstance,
+    owner: { tenantId: string; outletIds: string[] },
+  ) {
+    const userResult = await adminPool.query<{ id: string }>(
+      "INSERT INTO users (email, password_hash, display_name) VALUES ($1, $2, $3) RETURNING id::text AS id",
+      ["cashier@example.test", "test-only-password-hash", "Test Cashier"],
+    );
+    const userId = userResult.rows[0]!.id;
+    await adminPool.query(
+      "INSERT INTO tenant_memberships (tenant_id, user_id, role) VALUES ($1, $2, 'cashier')",
+      [owner.tenantId, userId],
+    );
+    await adminPool.query(
+      "INSERT INTO outlet_memberships (tenant_id, outlet_id, user_id) VALUES ($1, $2, $3)",
+      [owner.outletIds[0], owner.tenantId, userId],
+    );
+    const accessToken = ownerApp.jwt.sign({
+      sub: userId,
+      tenantId: owner.tenantId,
+      role: "cashier",
+      outletIds: owner.outletIds,
+    });
+    return { accessToken, userId };
+  }
+
   function makeSyncEvent(
     outletId: string,
     deviceId: string,
@@ -420,6 +446,62 @@ authSuite("authentication endpoints", () => {
       headers: { authorization: "Bearer " + owner.accessToken },
     });
     expect(forbidden.statusCode).toBe(403);
+  });
+
+  it("rejects unsupported operational roles during login", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const userResult = await adminPool.query<{ id: string }>(
+      "INSERT INTO users (email, password_hash, display_name) VALUES ($1, $2, $3) RETURNING id::text AS id",
+      ["legacy-staff@example.test", "test-only-password-hash", "Legacy Staff"],
+    );
+    await adminPool.query(
+      "INSERT INTO tenant_memberships (tenant_id, user_id, role) VALUES ($1, $2, 'staff')",
+      [owner.tenantId, userResult.rows[0]!.id],
+    );
+    await adminPool.query(
+      "INSERT INTO outlet_memberships (tenant_id, outlet_id, user_id) VALUES ($1, $2, $3)",
+      [owner.outletIds[0], owner.tenantId, userResult.rows[0]!.id],
+    );
+    const response = await ownerApp.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      payload: { email: "legacy-staff@example.test", password: "anything-long-enough" },
+    });
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({ error: "invalid_credentials" });
+  });
+
+  it("enforces Owner-only product and inventory creation at the API boundary", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const cashier = await createCashierSession(ownerApp, owner);
+    const product = await ownerApp.inject({
+      method: "POST",
+      url: "/api/v1/products",
+      headers: { authorization: "Bearer " + cashier.accessToken },
+      payload: { outletId: owner.outletIds[0], sku: "CASHIER-001", name: "Forbidden Product", unitPrice: 1000, taxRate: 0 },
+    });
+    expect(product.statusCode).toBe(403);
+    expect(product.json().error).toBe("owner_required");
+
+    const productUpdate = await ownerApp.inject({
+      method: "PATCH",
+      url: "/api/v1/products/11111111-1111-4111-8111-111111111111",
+      headers: { authorization: "Bearer " + cashier.accessToken },
+      payload: { outletId: owner.outletIds[0], name: "Forbidden Update" },
+    });
+    expect(productUpdate.statusCode).toBe(403);
+    expect(productUpdate.json().error).toBe("owner_required");
+
+    const inventory = await ownerApp.inject({
+      method: "POST",
+      url: "/api/v1/inventory/items",
+      headers: { authorization: "Bearer " + cashier.accessToken },
+      payload: { outletId: owner.outletIds[0], sku: "CASHIER-STOCK", name: "Forbidden Stock", initialQuantity: 0 },
+    });
+    expect(inventory.statusCode).toBe(403);
+    expect(inventory.json().error).toBe("owner_required");
   });
 
   it("keeps inventory movement idempotent and prevents negative stock", async () => {
