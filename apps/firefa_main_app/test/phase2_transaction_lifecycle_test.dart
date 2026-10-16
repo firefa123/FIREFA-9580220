@@ -50,6 +50,7 @@ void main() {
     test('partial refunds accumulate with reasons and remaining refundable amount', () {
       final order = sampleOrder();
       expect(order.markPaid(method: 'QRIS', cashAmount: 0), isTrue);
+      expect(order.markPaymentVerified(), isTrue);
       expect(order.markRefunded(method: 'Cash', reason: 'Item rusak', amount: 10000), isTrue);
       expect(order.paymentStatus, FirefaPaymentStatus.paid);
       expect(order.refundRecords.single.verificationStatus, FirefaRefundVerificationStatus.reported);
@@ -80,6 +81,7 @@ void main() {
       expect(order.paymentStatus, FirefaPaymentStatus.paid);
       expect(order.markRefundVerified(1), isTrue);
       expect(order.paymentStatus, FirefaPaymentStatus.refunded);
+      expect(FirefaOrder.fromJson(order.toJson()).paymentStatus, FirefaPaymentStatus.refunded);
       expect(order.refundAmount, order.total);
       expect(order.refundableAmount, 0);
       expect(order.markRefunded(method: 'Cash', reason: 'Duplikat', amount: 1), isFalse);

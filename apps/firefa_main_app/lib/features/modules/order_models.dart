@@ -402,13 +402,14 @@ class FirefaOrder {
         .fold<int>(0, (sum, record) => sum + record.amount);
     final hasVerifiedFullRefund = (json['total'] as int? ?? 0) > 0 &&
         verifiedRefundTotal >= (json['total'] as int? ?? 0);
-    final effectivePaymentStatus = savedPaymentStatus == FirefaPaymentStatus.refunded && !hasVerifiedFullRefund
-        ? FirefaPaymentStatus.paid
-        : savedPaymentStatus;
     final savedVerification = json['paymentVerificationStatus'] as String?;
     final effectiveVerification = savedVerification == null
         ? (savedPaymentStatus == FirefaPaymentStatus.paid || savedPaymentStatus == FirefaPaymentStatus.refunded ? FirefaPaymentVerificationStatus.reported : FirefaPaymentVerificationStatus.notReported)
         : FirefaPaymentVerificationStatus.values.byName(savedVerification);
+    final effectivePaymentStatus = savedPaymentStatus == FirefaPaymentStatus.refunded &&
+        (!hasVerifiedFullRefund || effectiveVerification != FirefaPaymentVerificationStatus.verified)
+        ? FirefaPaymentStatus.paid
+        : savedPaymentStatus;
     final order = FirefaOrder(
       id: json['id'] as String,
       outletId: json['outletId'] as String,

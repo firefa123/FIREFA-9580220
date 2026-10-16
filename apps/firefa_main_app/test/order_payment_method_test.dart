@@ -128,7 +128,7 @@ void main() {
     expect(raw, isNotNull);
     final saved = (jsonDecode(raw!) as Map<String, dynamic>)['orders'] as List;
     final savedRefund = Map<String, dynamic>.from(saved.singleWhere((entry) => (entry as Map)['id'] == order.id) as Map);
-    expect(savedRefund['paymentStatus'], FirefaPaymentStatus.refunded.name);
+    expect(savedRefund['paymentStatus'], FirefaPaymentStatus.paid.name);
     expect(savedRefund['refundReason'], 'Pesanan salah');
     expect(savedRefund['cashRefundAmount'], 25000);
     expect(await store.refundPaidAndPersist('REFUND-TEST', order.id, refundMethod: 'Cash', reason: 'Duplikat'), isFalse);
