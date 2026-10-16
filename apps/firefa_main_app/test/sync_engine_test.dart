@@ -65,6 +65,29 @@ class _CountingAckAdapter extends FirefaSyncAdapter {
   }
 }
 
+class _RetryThenAckAdapter extends FirefaSyncAdapter {
+  int sends = 0;
+  final List<String> eventIds = [];
+
+  @override
+  Future<FirefaSyncReceipt> send(FirefaSyncEnvelope event) async {
+    sends++;
+    eventIds.add(event.eventId);
+    if (sends == 1) {
+      return FirefaSyncReceipt(
+        eventId: event.eventId,
+        outcome: FirefaSyncOutcome.retryableFailure,
+        message: 'simulated timeout after request',
+      );
+    }
+    return FirefaSyncReceipt(
+      eventId: event.eventId,
+      outcome: FirefaSyncOutcome.acknowledged,
+      serverReference: 'receipt-${event.eventId}',
+    );
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final queue = FirefaOfflineSyncQueue.instance;
@@ -88,6 +111,40 @@ void main() {
     expect(allA.map((e) => e.eventId), [first.eventId, third.eventId]);
     expect(allA.every((e) => e.outletId == 'test-outlet-A'), isTrue);
     expect(engine.pendingBatch(queue: queue, outletId: 'test-outlet-B').single.eventId, second.eventId);
+    await queue.waitForPendingSave();
+  });
+
+
+  test('retry reuses the same event id and only one outbox event', () async {
+    final order = makeOrder('IDEMPOTENCY-RETRY-ONCE', 'idempotency-test-outlet');
+    final entry = queue.enqueueOrder(order, 'order.created');
+    await queue.waitForPendingSave();
+    final adapter = _RetryThenAckAdapter();
+    final coordinator = FirefaSyncCoordinator(
+      queue: queue,
+      adapter: adapter,
+      conflictBridge: FirefaHybridSyncConflictBridge(
+        store: FirefaConflictStore.instance,
+      ),
+    );
+
+    final firstRun = await coordinator.syncOutlet(order.outletId);
+    expect(firstRun.retryableFailures, 1);
+    expect(queue.findEvent(entry.eventId)!.status, FirefaSyncStatus.pending);
+
+    // Model the next eligible retry without waiting for the exponential timer.
+    await queue.markPending(entry.eventId);
+    final secondRun = await coordinator.syncOutlet(order.outletId);
+    expect(secondRun.acknowledged, 1);
+    expect(adapter.sends, 2);
+    expect(adapter.eventIds, [entry.eventId, entry.eventId]);
+    expect(
+      queue.entriesForOutlet(order.outletId)
+          .where((event) => event.orderId == order.id),
+      hasLength(1),
+    );
+    expect(queue.findEvent(entry.eventId)!.status, FirefaSyncStatus.synced);
+    await queue.removeEvent(entry.eventId);
     await queue.waitForPendingSave();
   });
 
