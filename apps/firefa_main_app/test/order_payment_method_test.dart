@@ -116,6 +116,7 @@ void main() {
     expect(order.paymentStatus, FirefaPaymentStatus.refunded);
     expect(order.refundRecords.single.verificationStatus, FirefaRefundVerificationStatus.verified);
     expect(order.cashRefundAmount, 25000);
+    // Only verified cash refunds are included in shift reconciliation.
     expect(calculateCashRefundsForShift(
       orders: [order],
       openedAt: DateTime(2026, 10, 16, 0),
