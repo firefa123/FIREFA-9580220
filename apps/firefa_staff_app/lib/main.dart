@@ -261,7 +261,7 @@ class _StaffShellState extends State<StaffShell> {
             SizedBox(height: 12),
             Text(_staffName ?? 'Anggota Tim', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
             SizedBox(height: 4),
-            Text('Akun demo • Belum terhubung', style: TextStyle(color: Color(0xFF64748B))),
+            Text(_backendEnabled ? 'Akun staff terautentikasi' : 'Akun demo • Belum terhubung', style: TextStyle(color: Color(0xFF64748B))),
             Divider(height: 28),
             ListTile(leading: Icon(Icons.badge_outlined), title: Text('ID staf'), subtitle: Text('Belum ditetapkan')),
             ListTile(leading: Icon(Icons.store_outlined), title: Text('Outlet'), subtitle: Text('Outlet Utama (demo)')),
@@ -298,62 +298,68 @@ class _StaffShellState extends State<StaffShell> {
 
   Widget _loginScreen() => Scaffold(
         appBar: AppBar(title: const Text('Login Staff FIREFA')),
-        body: SafeArea(child: Center(child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 420),
-            child: Card(child: Padding(padding: const EdgeInsets.all(24),
-              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                const Icon(Icons.badge_outlined, size: 44, color: Color(0xFF008F83)),
-                const SizedBox(height: 12),
-                const Text('Masuk sebagai Staff', textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 8),
-                Text(_apiBaseUrl.isEmpty || _configuredOutletId.isEmpty
-                    ? 'Konfigurasi FIREFA_API_BASE_URL dan FIREFA_STAFF_OUTLET_ID belum lengkap.'
-                    : 'Masukkan kode staff dan PIN 6 digit dari Owner.',
-                  textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF64748B))),
-                const SizedBox(height: 20),
-                TextField(controller: _staffCodeController, textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(labelText: 'Kode staff', prefixIcon: Icon(Icons.badge_outlined))),
-                const SizedBox(height: 12),
-                TextField(controller: _pinController, keyboardType: TextInputType.number, obscureText: true, maxLength: 6,
-                  decoration: const InputDecoration(labelText: 'PIN 6 digit', prefixIcon: Icon(Icons.lock_outline))),
-                const SizedBox(height: 12),
-                FilledButton(onPressed: _apiBusy || _apiBaseUrl.isEmpty || _configuredOutletId.isEmpty ? null : _login,
-                  child: _apiBusy ? const CircularProgressIndicator() : const Text('Masuk')),
-              ]),
-            )),
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Icon(Icons.badge_outlined, size: 44, color: Color(0xFF008F83)),
+                        const SizedBox(height: 12),
+                        const Text('Masuk sebagai Staff', textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 8),
+                        Text(_apiBaseUrl.isEmpty || _configuredOutletId.isEmpty
+                            ? 'Konfigurasi FIREFA_API_BASE_URL dan FIREFA_STAFF_OUTLET_ID belum lengkap.'
+                            : 'Masukkan kode staff dan PIN 6 digit dari Owner.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Color(0xFF64748B))),
+                        const SizedBox(height: 20),
+                        TextField(controller: _staffCodeController, textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(labelText: 'Kode staff', prefixIcon: Icon(Icons.badge_outlined))),
+                        const SizedBox(height: 12),
+                        TextField(controller: _pinController, keyboardType: TextInputType.number,
+                          obscureText: true, maxLength: 6,
+                          decoration: const InputDecoration(labelText: 'PIN 6 digit', prefixIcon: Icon(Icons.lock_outline))),
+                        const SizedBox(height: 12),
+                        FilledButton(
+                          onPressed: _apiBusy || _apiBaseUrl.isEmpty || _configuredOutletId.isEmpty ? null : _login,
+                          child: _apiBusy ? const CircularProgressIndicator() : const Text('Masuk'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
-        ))),
+        ),
       );
 
   Future<void> _login() async {
     setState(() => _apiBusy = true);
     try {
+      final baseUrl = _apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
       final response = await http.post(
-        Uri.parse('${_apiBaseUrl.replaceAll(RegExp(r'/+
-
-  void _logout() {
-    setState(() {
-      _accessToken = null;
-      _staffId = null;
-      _staffName = null;
-      _checkedIn = false;
-      _pinController.clear();
-    });
-  }
-
-  void _message(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
-  }
-}
-), '')}/api/v1/staff/login'),
+        Uri.parse(baseUrl + '/api/v1/staff/login'),
         headers: const {'content-type': 'application/json'},
-        body: jsonEncode({'outletId': _configuredOutletId, 'staffCode': _staffCodeController.text.trim(), 'pin': _pinController.text}),
+        body: jsonEncode({
+          'outletId': _configuredOutletId,
+          'staffCode': _staffCodeController.text.trim(),
+          'pin': _pinController.text,
+        }),
       );
       final body = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200) throw Exception(response.statusCode == 401 ? 'Kode staff atau PIN salah.' : 'Login gagal (${response.statusCode}).');
+      if (response.statusCode != 200) {
+        throw Exception(response.statusCode == 401 ? 'Kode staff atau PIN salah.' : 'Login gagal (' + response.statusCode.toString() + ').');
+      }
       final staff = body['staff'] as Map<String, dynamic>;
       _accessToken = body['accessToken'] as String;
       _staffId = staff['id'] as String;
@@ -361,7 +367,7 @@ class _StaffShellState extends State<StaffShell> {
       await _refreshServerAttendance();
       if (mounted) setState(() {});
     } catch (error) {
-      _message('Tidak dapat login: ${error.toString().replaceFirst('Exception: ', '')}');
+      _message('Tidak dapat login: ' + error.toString());
     } finally {
       if (mounted) setState(() => _apiBusy = false);
     }
@@ -370,17 +376,10 @@ class _StaffShellState extends State<StaffShell> {
   Future<void> _refreshServerAttendance() async {
     final token = _accessToken;
     if (token == null) return;
+    final baseUrl = _apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
     final response = await http.get(
-      Uri.parse('${_apiBaseUrl.replaceAll(RegExp(r'/+
-
-  void _message(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
-  }
-}
-), '')}/api/v1/attendance/me'),
-      headers: {'authorization': 'Bearer $token'},
+      Uri.parse(baseUrl + '/api/v1/attendance/me'),
+      headers: {'authorization': 'Bearer ' + token},
     );
     if (response.statusCode != 200) throw Exception('Riwayat absensi gagal dimuat.');
     final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -401,7 +400,9 @@ class _StaffShellState extends State<StaffShell> {
     setState(() => _apiBusy = true);
     try {
       var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
       if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
         throw Exception('Izin lokasi diperlukan untuk absensi geofence.');
       }
@@ -409,18 +410,15 @@ class _StaffShellState extends State<StaffShell> {
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
       );
       final action = _checkedIn ? 'check-out' : 'check-in';
+      final baseUrl = _apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
       final response = await http.post(
-        Uri.parse('${_apiBaseUrl.replaceAll(RegExp(r'/+
-
-  void _message(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
-  }
-}
-), '')}/api/v1/attendance/$action'),
-        headers: {'content-type': 'application/json', 'authorization': 'Bearer $token'},
-        body: jsonEncode({'outletId': _configuredOutletId, 'latitude': position.latitude, 'longitude': position.longitude}),
+        Uri.parse(baseUrl + '/api/v1/attendance/' + action),
+        headers: {'content-type': 'application/json', 'authorization': 'Bearer ' + token},
+        body: jsonEncode({
+          'outletId': _configuredOutletId,
+          'latitude': position.latitude,
+          'longitude': position.longitude,
+        }),
       );
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -428,15 +426,25 @@ class _StaffShellState extends State<StaffShell> {
         if (code == 'outside_geofence') throw Exception('Kamu berada di luar radius absensi outlet.');
         if (code == 'already_checked_in_today') throw Exception('Absensi hari ini sudah tercatat.');
         if (code == 'outlet_geofence_not_configured') throw Exception('Lokasi dan radius outlet belum diatur Owner.');
-        throw Exception('Absensi gagal: ${code ?? response.statusCode}.');
+        throw Exception('Absensi gagal: ' + (code?.toString() ?? response.statusCode.toString()) + '.');
       }
       setState(() => _checkedIn = !_checkedIn);
       _message(_checkedIn ? 'Check-in tercatat oleh server.' : 'Check-out tercatat oleh server.');
     } catch (error) {
-      _message('Absensi gagal: ${error.toString().replaceFirst('Exception: ', '')}');
+      _message('Absensi gagal: ' + error.toString());
     } finally {
       if (mounted) setState(() => _apiBusy = false);
     }
+  }
+
+  void _logout() {
+    setState(() {
+      _accessToken = null;
+      _staffId = null;
+      _staffName = null;
+      _checkedIn = false;
+      _pinController.clear();
+    });
   }
 
   void _message(String message) {
