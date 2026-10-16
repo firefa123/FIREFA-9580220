@@ -1,7 +1,7 @@
 import 'offline_sync_queue.dart';
 import 'conflict_management.dart';
 
-/// Immutable payload sent to the future FIREFA backend.
+/// Immutable event envelope used by the authenticated FIREFA HTTP adapter.
 /// eventId is the idempotency key; orderId is only unique within the local
 /// installation today and must not be treated as a global database key.
 class FirefaSyncEnvelope {
@@ -80,9 +80,8 @@ class FirefaSyncReceipt {
       serverReference!.isNotEmpty;
 }
 
-/// Transport contract only. This interface performs no network I/O itself.
-/// Authentication, tenant/outlet authorization, TLS, idempotency and server
-/// reconciliation must be implemented before enabling cloud synchronization.
+/// Transport contract. Implementations perform the network I/O; the coordinator
+/// independently verifies acknowledgements before mutating durable outbox state.
 abstract class FirefaSyncAdapter {
   const FirefaSyncAdapter();
 
