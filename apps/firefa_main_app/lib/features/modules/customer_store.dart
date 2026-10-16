@@ -18,7 +18,6 @@ class FirefaCustomer {
   factory FirefaCustomer.fromJson(Map<String,dynamic> j)=>FirefaCustomer(id:j['id'] as String,outletId:j['outletId'] as String,name:j['name'] as String,phone:j['phone'] as String? ?? '',email:j['email'] as String? ?? '',creditLimit:j['creditLimit'] as int? ?? 0,points:j['points'] as int? ?? 0,rewardCount:j['rewardCount'] as int? ?? 0,createdAt:j['createdAt'] as String,active:j['active'] as bool? ?? true,earnedOrderIds:(j['earnedOrderIds'] as List? ?? []).cast<String>(),notes:j['notes'] as String? ?? '');
 }
 class FirefaReceivablePayment {
- const FirefaReceivablePayment({required this.id,required this.outletId,required this.orderId,required this.customerId,required this.amount,required this.method,required this.createdAt,this.note=''});
  final String id,outletId,orderId,customerId,method,createdAt,note;
  final int amount;
  final FirefaPaymentVerificationStatus verificationStatus;

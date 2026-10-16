@@ -208,6 +208,10 @@ function isBonSale(snapshot: z.infer<typeof snapshotSchema>): boolean {
     Boolean(snapshot.customerId?.trim() || snapshot.customerName?.trim());
 }
 
+function refundIdentity(record: { amount: number; method: string; reason: string; createdAt: string }): string {
+  return [record.amount, record.method, record.reason, record.createdAt].join("|");
+}
+
 async function persistBonReceivable(
   client: PoolClient,
   tenantId: string,
@@ -365,7 +369,7 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
         }
         const reportedCashPayment = hasReportedCashPayment(event.orderSnapshot);
         const bonSale = isBonSale(event.orderSnapshot);
-        if (event.orderSnapshot.status === "completed" && !bonSale) {
+        if (event.orderSnapshot.status === "completed" && !bonSale && !reportedCashPayment) {
           await client.query("ROLLBACK");
           inTransaction = false;
           return reply.code(422).send({ error: "payment_verification_required" });
@@ -518,7 +522,8 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
           event.orderSnapshot.status === "completed" &&
           nextPaymentStatus !== "paid" &&
           nextPaymentStatus !== "refunded" &&
-          !bonSale
+          !bonSale &&
+          !reportedCashPayment
         ) {
           await client.query("ROLLBACK");
           inTransaction = false;

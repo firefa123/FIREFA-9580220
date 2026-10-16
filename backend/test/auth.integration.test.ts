@@ -595,7 +595,7 @@ authSuite("authentication endpoints", () => {
       "11111111-1111-4111-8111-111111111111",
       "evt-cash-payment-0001",
     );
-    payload.orderSnapshot.status = "confirmed";
+    payload.orderSnapshot.status = "completed";
     payload.orderSnapshot.paymentMethod = "Cash";
     payload.orderSnapshot.cashPaidAmount = 10000;
     payload.orderSnapshot.paidAt = new Date().toISOString();
@@ -608,7 +608,7 @@ authSuite("authentication endpoints", () => {
       [orderId],
     );
     expect(stored.rows[0].payment_status).toBe("unpaid");
-    expect(stored.rows[0].status).toBe("confirmed");
+    expect(stored.rows[0].status).toBe("completed");
     const items = await adminPool.query(
       "SELECT count(*)::int AS count FROM order_items WHERE order_id = $1",
       [orderId],

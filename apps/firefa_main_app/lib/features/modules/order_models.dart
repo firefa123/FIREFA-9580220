@@ -309,7 +309,9 @@ class FirefaOrder {
 
   bool markPaymentFailed() {
     if (paymentVerificationStatus != FirefaPaymentVerificationStatus.reported ||
-        refundRecords.isNotEmpty) return false;
+        refundRecords.isNotEmpty) {
+      return false;
+    }
     paymentVerificationStatus = FirefaPaymentVerificationStatus.failed;
     paymentStatus = FirefaPaymentStatus.unpaid;
     paymentMethod = null;
@@ -320,10 +322,16 @@ class FirefaOrder {
 
   bool markRefundVerified(int index, {String? verifiedBy, DateTime? verifiedAt}) {
     if (paymentVerificationStatus != FirefaPaymentVerificationStatus.verified ||
-        index < 0 || index >= refundRecords.length) return false;
+        index < 0 || index >= refundRecords.length) {
+      return false;
+    }
     final record = refundRecords[index];
-    if (record.verificationStatus == FirefaRefundVerificationStatus.verified) return true;
-    if (record.verificationStatus != FirefaRefundVerificationStatus.reported) return false;
+    if (record.verificationStatus == FirefaRefundVerificationStatus.verified) {
+      return true;
+    }
+    if (record.verificationStatus != FirefaRefundVerificationStatus.reported) {
+      return false;
+    }
     refundRecords[index] = record.copyWith(
       verificationStatus: FirefaRefundVerificationStatus.verified,
       verifiedAt: verifiedAt ?? DateTime.now(),

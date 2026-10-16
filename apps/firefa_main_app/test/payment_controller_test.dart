@@ -60,7 +60,7 @@ void main() {
     });
 
     test('rejects invalid amounts', () {
-      for (final amount in <double>[-1, double.nan, double.infinity]) {
+      for (final amount in <double>[-1, 0, double.nan, double.infinity]) {
         expect(
           () => PaymentController().createPayment(
             transaction: transaction(totalAmount: amount),

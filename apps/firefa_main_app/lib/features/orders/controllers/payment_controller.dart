@@ -18,11 +18,11 @@ class PaymentController {
         'Transaction ID cannot be empty.',
       );
     }
-    if (!transaction.totalAmount.isFinite || transaction.totalAmount < 0) {
+    if (!transaction.totalAmount.isFinite || transaction.totalAmount <= 0) {
       throw ArgumentError.value(
         transaction.totalAmount,
         'transaction.totalAmount',
-        'Payment amount must be finite and non-negative.',
+        'Payment amount must be finite and positive.',
       );
     }
     if (transaction.status == TransactionStatus.cancelled) {
