@@ -1,5 +1,8 @@
 -- Stage 5: connect sellable catalog products to outlet stock and retain
 -- a stable payload fingerprint for safe retries after network interruptions.
+ALTER TABLE products
+  ADD CONSTRAINT products_id_tenant_unique UNIQUE (id, tenant_id);
+
 ALTER TABLE inventory_items
   ADD COLUMN product_id uuid;
 
