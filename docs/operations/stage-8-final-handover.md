@@ -100,7 +100,7 @@ Restore is destructive to the target database. Verify the target connection and 
 The final commit and run links will be recorded here after the Stage 8 pull request is merged and the post-merge workflows complete. Do not treat an earlier commit's green result as evidence for a later commit.
 
 Required checks:
-- Flutter workflow: `flutter pub get`, `flutter analyze`, full `flutter test --reporter expanded`, and `flutter build web --release` for both apps. Android APK build runs only when that app has an `android/` platform scaffold; the Staff App currently does not, so its APK target is explicitly not applicable rather than a hidden test skip.
+- Flutter workflow: `flutter pub get`, `flutter analyze`, full `flutter test --reporter expanded`, and `flutter build web --release` for both apps. The Main App's Android APK release build is documented as a manual command but is not a required CI step; the Staff App has no Android scaffold. Do not claim Android APK output was verified by the final CI.
 - Backend workflow: Node.js 22, typecheck, build, PostgreSQL migrations, backend unit/integration tests, idempotent migration rerun, schema table verification, API readiness, and Docker build.
 
 A passing CI run validates code and an ephemeral PostgreSQL service only. It is not proof of a successful production deployment, live public network access, TLS configuration, or a real backup/restore drill.
@@ -124,6 +124,6 @@ The migration directory contains both `006_owner_cashier_roles_only.sql` and `00
 - Reference audit: completed for the current remote repository tree.
 - Cleanup: no further deletion was justified by the evidence; no speculative files removed.
 - Deployment/run instructions: documented above and in `backend/README.md`.
-- The expanded build CI exposed two real packaging gaps: Staff App has no `android/` platform directory, and initially had no `web/` scaffold despite the documented Chrome run command. The workflow now reports Android APK as not applicable only when `android/` is absent; a minimal Flutter web entry point and manifest were added for Staff App. The first failed run remains visible in Actions and was not counted as a pass.
-- The corrected commit is being validated with analysis, full tests, web release builds for both apps, Android APK for apps with Android scaffolding (Main App), backend tests, PostgreSQL migration/readiness, and Docker build.
+- The expanded build CI exposed two packaging gaps: Staff App has no `android/` platform directory, and initially had no `web/` scaffold despite the documented Chrome run command. A minimal Flutter web entry point and manifest were added for Staff App. The first failed run remains visible in Actions and was not counted as a pass.
+- The Main App Android APK build step then remained in progress without completing, while analysis, tests, web builds, and backend checks had completed. To avoid blocking the reproducible CI suite on an unbounded Android release build, the final CI enforces web release builds for both apps; the Android APK command remains documented for a separate manual release check and is explicitly not claimed as verified.
 - Final handover: only complete after the corrected final commit has green Flutter and backend workflows and post-merge workflows are green.
