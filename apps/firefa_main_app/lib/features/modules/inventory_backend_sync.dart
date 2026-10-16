@@ -129,9 +129,17 @@ class FirefaInventoryBackendSync {
     var acknowledged = 0;
     var failed = 0;
     final errors = <String>[];
+    // Preserve ledger order per item. If an earlier movement cannot be
+    // acknowledged, do not send a later delta for that same item out of order.
+    final pausedItemIds = <String>{};
 
     for (final movement in movements) {
-      if (sent.contains(movement.id) || blocked.contains(movement.id)) continue;
+      if (sent.contains(movement.id)) continue;
+      if (blocked.contains(movement.id)) {
+        pausedItemIds.add(movement.itemId);
+        continue;
+      }
+      if (pausedItemIds.contains(movement.itemId)) continue;
       attempted++;
       try {
         final serverItemId = FirefaBackendConfig.resolveServerInventoryItemId(
@@ -203,14 +211,17 @@ class FirefaInventoryBackendSync {
             blocked.add(movement.id);
             await prefs.setStringList(blockedKey, blocked.toList());
           }
+          pausedItemIds.add(movement.itemId);
           errors.add('${movement.id}: ${body?['error'] ?? 'HTTP ${response.statusCode}'}'
               '${permanent ? ' (dihentikan sampai ditinjau; panggil retryBlockedMovement setelah koreksi)' : ''}');
         }
       } on TimeoutException {
         failed++;
+        pausedItemIds.add(movement.itemId);
         errors.add('${movement.id}: timeout; akan dicoba lagi dengan idempotency key yang sama');
       } catch (error) {
         failed++;
+        pausedItemIds.add(movement.itemId);
         errors.add('${movement.id}: $error');
       }
     }
