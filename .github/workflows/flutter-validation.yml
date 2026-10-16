@@ -36,3 +36,7 @@ jobs:
         run: flutter analyze
       - name: Test
         run: flutter test --reporter expanded
+      - name: Build Android APK
+        run: flutter build apk --release
+      - name: Build Web
+        run: flutter build web --release
