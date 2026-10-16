@@ -100,7 +100,7 @@ Restore is destructive to the target database. Verify the target connection and 
 The final commit and run links will be recorded here after the Stage 8 pull request is merged and the post-merge workflows complete. Do not treat an earlier commit's green result as evidence for a later commit.
 
 Required checks:
-- Flutter workflow: `flutter pub get`, `flutter analyze`, full `flutter test --reporter expanded` for both apps.
+- Flutter workflow: `flutter pub get`, `flutter analyze`, full `flutter test --reporter expanded`, and `flutter build web --release` for both apps. Android APK build runs only when that app has an `android/` platform scaffold; the Staff App currently does not, so its APK target is explicitly not applicable rather than a hidden test skip.
 - Backend workflow: Node.js 22, typecheck, build, PostgreSQL migrations, backend unit/integration tests, idempotent migration rerun, schema table verification, API readiness, and Docker build.
 
 A passing CI run validates code and an ephemeral PostgreSQL service only. It is not proof of a successful production deployment, live public network access, TLS configuration, or a real backup/restore drill.
@@ -124,5 +124,6 @@ The migration directory contains both `006_owner_cashier_roles_only.sql` and `00
 - Reference audit: completed for the current remote repository tree.
 - Cleanup: no further deletion was justified by the evidence; no speculative files removed.
 - Deployment/run instructions: documented above and in `backend/README.md`.
-- Analyze, tests, build, and CI: pending final Stage 8 CI result at the time this document was authored.
-- Final handover: only complete after the final merged commit has green post-merge Flutter and backend workflows.
+- The first expanded build CI exposed a real packaging mismatch: the Staff App has no `android/` platform directory, so `flutter build apk` cannot run there. The workflow now reports this as not applicable only for apps without that platform, while building web for both apps and APK for apps that contain Android scaffolding. The failing run is retained as evidence and was not counted as a pass.
+- Analyze, tests, web builds, applicable Android APK build, backend tests, PostgreSQL migration/readiness, and Docker build: pending final rerun after the workflow correction.
+- Final handover: only complete after the corrected final commit has green Flutter and backend workflows and post-merge workflows are green.
