@@ -721,4 +721,85 @@ authSuite("authentication endpoints", () => {
     }]);
   });
 
+
+  it("replays inventory movements idempotently and reconciles the stock ledger", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const headers = { authorization: "Bearer " + owner.accessToken };
+    const outletId = owner.outletIds[0];
+
+    const productResponse = await ownerApp.inject({
+      method: "POST",
+      url: "/api/v1/products",
+      headers,
+      payload: { outletId, sku: "BEANS-001", name: "Coffee Beans", unitPrice: 25000, taxRate: 0 },
+    });
+    expect(productResponse.statusCode).toBe(201);
+
+    const itemResponse = await ownerApp.inject({
+      method: "POST",
+      url: "/api/v1/inventory/items",
+      headers,
+      payload: {
+        outletId, productId: productResponse.json().id, sku: "BEANS-001",
+        name: "Coffee Beans", unit: "gram", initialQuantity: 10,
+        reorderLevel: 2, averageUnitCost: 10,
+      },
+    });
+    expect(itemResponse.statusCode).toBe(201);
+    const inventoryItemId = itemResponse.json().id;
+
+    const movement = {
+      outletId, inventoryItemId, movementType: "sale", quantityDelta: -3,
+      unitCost: 10, sourceType: "offline_movement",
+      sourceId: "movement-deviceA-0001", note: "POS consumption",
+    };
+    const movementHeaders = { ...headers, "idempotency-key": "deviceA-movement-0001" };
+    const first = await ownerApp.inject({
+      method: "POST", url: "/api/v1/inventory/movements",
+      headers: movementHeaders, payload: movement,
+    });
+    expect(first.statusCode).toBe(201);
+    expect(first.json().quantityOnHand).toBe(7);
+
+    // Simulate a retry after the client lost the response when the connection dropped.
+    const replay = await ownerApp.inject({
+      method: "POST", url: "/api/v1/inventory/movements",
+      headers: movementHeaders, payload: movement,
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().replayed).toBe(true);
+    expect(replay.json().quantityOnHand).toBe(7);
+
+    const changedPayload = await ownerApp.inject({
+      method: "POST", url: "/api/v1/inventory/movements",
+      headers: movementHeaders, payload: { ...movement, quantityDelta: -4 },
+    });
+    expect(changedPayload.statusCode).toBe(409);
+    expect(changedPayload.json().error).toBe("idempotency_key_payload_mismatch");
+
+    const oversell = await ownerApp.inject({
+      method: "POST", url: "/api/v1/inventory/movements",
+      headers: { ...headers, "idempotency-key": "deviceA-movement-oversell" },
+      payload: { ...movement, quantityDelta: -99, sourceId: "oversell" },
+    });
+    expect(oversell.statusCode).toBe(409);
+    expect(oversell.json().error).toBe("insufficient_stock");
+
+    const reconciliation = await ownerApp.inject({
+      method: "GET", url: "/api/v1/inventory/reconcile?outletId=" + outletId,
+      headers,
+    });
+    expect(reconciliation.statusCode).toBe(200);
+    expect(reconciliation.json().items).toHaveLength(1);
+    expect(reconciliation.json().items[0]).toMatchObject({
+      id: inventoryItemId, productId: productResponse.json().id,
+      quantityOnHand: 7, movementTotal: 7, ledgerMatches: true, unexplainedDelta: 0,
+    });
+    const movements = await adminPool.query(
+      "SELECT count(*)::int AS count FROM inventory_movements WHERE tenant_id = $1 AND outlet_id = $2 AND inventory_item_id = $3",
+      [owner.tenantId, outletId, inventoryItemId],
+    );
+    expect(movements.rows[0].count).toBe(2);
+  });
 });
