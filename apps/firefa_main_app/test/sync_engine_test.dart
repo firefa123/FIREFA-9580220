@@ -132,8 +132,14 @@ void main() {
     expect(firstRun.retryableFailures, 1);
     expect(queue.findEvent(entry.eventId)!.status, FirefaSyncStatus.pending);
 
-    // Model the next eligible retry without waiting for the exponential timer.
-    await queue.markPending(entry.eventId);
+    // Wait until the persisted exponential-backoff deadline has elapsed.
+    final retryAt = queue.findEvent(entry.eventId)!.nextAttemptAt!;
+    final delay = retryAt.difference(DateTime.now().toUtc());
+    if (delay.isNegative) {
+      // The retry is already eligible.
+    } else {
+      await Future<void>.delayed(delay + const Duration(milliseconds: 50));
+    }
     final secondRun = await coordinator.syncOutlet(order.outletId);
     expect(secondRun.acknowledged, 1);
     expect(adapter.sends, 2);
