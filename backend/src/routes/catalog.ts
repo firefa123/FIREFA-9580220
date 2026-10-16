@@ -191,6 +191,7 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (app
     try {
       const role = await outletRole(client, request.user.sub, request.user.tenantId, parsedOutlet.data);
       if (!role) return reply.code(403).send({ error: "outlet_forbidden" });
+      if (role !== "owner") return reply.code(403).send({ error: "owner_required" });
       const result = await client.query(
         "SELECT id::text AS id, outlet_id::text AS \"outletId\", sku, name, unit, " +
           "quantity_on_hand::float8 AS \"quantityOnHand\", reorder_level::float8 AS \"reorderLevel\", " +
