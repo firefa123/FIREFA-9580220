@@ -448,28 +448,16 @@ authSuite("authentication endpoints", () => {
     expect(forbidden.statusCode).toBe(403);
   });
 
-  it("rejects unsupported operational roles during login", async () => {
+  it("database rejects unsupported operational membership roles", async () => {
     const ownerApp = createTestApp();
     const owner = (await bootstrap(ownerApp)).json();
-    const userResult = await adminPool.query<{ id: string }>(
-      "INSERT INTO users (email, password_hash, display_name) VALUES ($1, $2, $3) RETURNING id::text AS id",
-      ["legacy-staff@example.test", "test-only-password-hash", "Legacy Staff"],
-    );
-    await adminPool.query(
-      "INSERT INTO tenant_memberships (tenant_id, user_id, role) VALUES ($1, $2, 'staff')",
-      [owner.tenantId, userResult.rows[0]!.id],
-    );
-    await adminPool.query(
-      "INSERT INTO outlet_memberships (outlet_id, user_id) VALUES ($1, $2)",
-      [owner.outletIds[0], userResult.rows[0]!.id],
-    );
-    const response = await ownerApp.inject({
-      method: "POST",
-      url: "/api/v1/auth/login",
-      payload: { email: "legacy-staff@example.test", password: "anything-long-enough" },
-    });
-    expect(response.statusCode).toBe(401);
-    expect(response.json()).toEqual({ error: "invalid_credentials" });
+    await expect(
+      adminPool.query(
+        "INSERT INTO tenant_memberships (tenant_id, user_id, role) " +
+          "SELECT $1, user_id, 'staff' FROM tenant_memberships WHERE tenant_id = $1 AND role = 'owner' LIMIT 1",
+        [owner.tenantId],
+      ),
+    ).rejects.toThrow();
   });
 
   it("enforces Owner-only product and inventory creation at the API boundary", async () => {
