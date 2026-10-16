@@ -4,6 +4,7 @@ import { Pool } from "pg";
 import { authRoutes } from "./routes/auth";
 import { syncRoutes } from "./routes/sync";
 import { catalogRoutes } from "./routes/catalog";
+import { paymentRoutes } from "./routes/payments";
 
 export interface AppDependencies {
   checkDatabase?: () => Promise<void>;
@@ -45,6 +46,10 @@ export function buildApp(dependencies: AppDependencies = {}): FastifyInstance {
     pool,
   });
   app.register(catalogRoutes, {
+    prefix: "/api/v1",
+    pool,
+  });
+  app.register(paymentRoutes, {
     prefix: "/api/v1",
     pool,
   });

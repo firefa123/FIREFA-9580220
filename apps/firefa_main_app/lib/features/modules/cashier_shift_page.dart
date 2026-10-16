@@ -31,6 +31,7 @@ int calculateCashRefundsForShift({
     if (order.refundRecords.isNotEmpty) {
       return sum + order.refundRecords.where((refund) =>
         refund.method.toLowerCase() == 'cash' &&
+        refund.verificationStatus == FirefaRefundVerificationStatus.verified &&
         !refund.createdAt.isBefore(openedAt) &&
         !refund.createdAt.isAfter(closedAt)
       ).fold<int>(0, (refundSum, refund) => refundSum + refund.amount);

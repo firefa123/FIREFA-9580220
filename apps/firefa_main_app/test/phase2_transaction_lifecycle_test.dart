@@ -17,6 +17,24 @@ FirefaOrder sampleOrder() => FirefaOrder(
 
 void main() {
   group('Phase 2 transaction lifecycle', () {
+    test('cash payment is reported until explicitly verified', () {
+      final order = sampleOrder();
+      expect(order.markPaid(method: 'Cash', cashAmount: order.total), isTrue);
+      expect(order.paymentStatus, FirefaPaymentStatus.paid);
+      expect(order.paymentVerificationStatus, FirefaPaymentVerificationStatus.reported);
+      expect(order.markPaymentVerified(verifiedBy: 'owner-1'), isTrue);
+      expect(order.paymentVerificationStatus, FirefaPaymentVerificationStatus.verified);
+      expect(order.markPaymentVerified(verifiedBy: 'owner-1'), isTrue);
+      expect(order.markPaymentFailed(), isFalse);
+    });
+
+    test('failed reported payment cannot remain marked paid', () {
+      final order = sampleOrder()..markPaid(method: 'Transfer');
+      expect(order.markPaymentFailed(), isTrue);
+      expect(order.paymentStatus, FirefaPaymentStatus.unpaid);
+      expect(order.paymentVerificationStatus, FirefaPaymentVerificationStatus.failed);
+    });
+
     test('BON remains an outstanding unpaid receivable until collected', () {
       final order = sampleOrder();
       expect(order.markBon(), isTrue);
@@ -32,9 +50,13 @@ void main() {
     test('partial refunds accumulate with reasons and remaining refundable amount', () {
       final order = sampleOrder();
       expect(order.markPaid(method: 'QRIS', cashAmount: 0), isTrue);
+      expect(order.markPaymentVerified(), isTrue);
       expect(order.markRefunded(method: 'Cash', reason: 'Item rusak', amount: 10000), isTrue);
       expect(order.paymentStatus, FirefaPaymentStatus.paid);
+      expect(order.refundRecords.single.verificationStatus, FirefaRefundVerificationStatus.reported);
       expect(order.refundAmount, 10000);
+      expect(order.markRefundVerified(0), isTrue);
+      expect(order.paymentStatus, FirefaPaymentStatus.paid);
       expect(order.cashRefundAmount, 10000);
       expect(order.refundableAmount, 40000);
       expect(order.refundRecords, hasLength(1));
@@ -43,17 +65,37 @@ void main() {
       expect(order.cashRefundAmount, 10000);
       expect(order.refundableAmount, 25000);
       expect(order.refundRecords, hasLength(2));
+      expect(order.paymentStatus, FirefaPaymentStatus.paid);
+      expect(order.markRefundVerified(1), isTrue);
+      expect(order.paymentStatus, FirefaPaymentStatus.paid);
       expect(order.markRefunded(method: 'Cash', reason: 'Melebihi sisa', amount: 25001), isFalse);
     });
 
     test('full refund can follow partial refunds and blocks additional refunds', () {
       final order = sampleOrder()..markPaid(method: 'Transfer', cashAmount: 0);
+      expect(order.markPaymentVerified(), isTrue);
       expect(order.markRefunded(method: 'Cash', reason: 'Pertama', amount: 20000), isTrue);
+      expect(order.markRefundVerified(0), isTrue);
       expect(order.markRefunded(method: 'Non-tunai', reason: 'Sisa', amount: 30000), isTrue);
+      expect(order.paymentStatus, FirefaPaymentStatus.paid);
+      expect(order.refundRecords[1].verificationStatus, FirefaRefundVerificationStatus.reported);
+      expect(order.markRefundVerified(1), isTrue);
       expect(order.paymentStatus, FirefaPaymentStatus.refunded);
+      expect(FirefaOrder.fromJson(order.toJson()).paymentStatus, FirefaPaymentStatus.refunded);
       expect(order.refundAmount, order.total);
       expect(order.refundableAmount, 0);
       expect(order.markRefunded(method: 'Cash', reason: 'Duplikat', amount: 1), isFalse);
+    });
+
+    test('a refund report cannot be verified before the payment is verified', () {
+      final order = sampleOrder()..markPaid(method: 'Cash', cashAmount: 50000);
+      expect(order.markRefunded(method: 'Cash', reason: 'Reported only', amount: 5000), isTrue);
+      expect(order.markRefundVerified(0), isFalse);
+      expect(order.paymentStatus, FirefaPaymentStatus.paid);
+      expect(order.markPaymentVerified(), isTrue);
+      expect(order.markRefundVerified(0), isTrue);
+      expect(order.paymentStatus, FirefaPaymentStatus.paid);
+      expect(order.refundRecords.single.verificationStatus, FirefaRefundVerificationStatus.verified);
     });
 
     test('refund ledger and BON survive JSON round trip', () {

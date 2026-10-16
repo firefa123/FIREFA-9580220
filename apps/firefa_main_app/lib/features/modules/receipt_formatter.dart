@@ -25,7 +25,10 @@ class FirefaReceiptFormatter {
       'Tipe: ${order.orderType}',
       if (order.tableId != null) 'Meja: ${order.tableId}',
       'Status: ${order.status.label}',
-      'Pembayaran: ${order.paymentStatus.name.toUpperCase()} (demo)',
+      'Status pembayaran lokal: ${order.paymentStatus.name.toUpperCase()}',
+      'Verifikasi pembayaran: ${order.paymentVerificationStatus.label}',
+      if (order.paymentVerifiedAt != null) 'Diverifikasi: ${order.paymentVerifiedAt!.toLocal()}',
+      if (order.refundRecords.isNotEmpty) 'Status refund: ${order.refundRecords.map((record) => record.verificationStatus.label).join(', ')}',
       '------------------------------',
       for (final item in order.items) ...[
         '${item.productName} x${item.quantity} @ ${money(item.unitPrice)}',

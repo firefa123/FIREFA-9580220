@@ -10,14 +10,80 @@ enum FirefaOrderStatus {
 
 enum FirefaPaymentStatus { unpaid, paid, refunded }
 
+enum FirefaPaymentVerificationStatus { notReported, reported, verified, failed }
+
+enum FirefaRefundVerificationStatus { reported, verified, failed }
+
+extension FirefaPaymentVerificationStatusDetails on FirefaPaymentVerificationStatus {
+  String get label => switch (this) {
+    FirefaPaymentVerificationStatus.notReported => "Belum dilaporkan",
+    FirefaPaymentVerificationStatus.reported => "Dilaporkan • belum diverifikasi",
+    FirefaPaymentVerificationStatus.verified => "Terverifikasi",
+    FirefaPaymentVerificationStatus.failed => "Gagal diverifikasi",
+  };
+}
+
+extension FirefaRefundVerificationStatusDetails on FirefaRefundVerificationStatus {
+  String get label => switch (this) {
+    FirefaRefundVerificationStatus.reported => "Dilaporkan • belum diverifikasi",
+    FirefaRefundVerificationStatus.verified => "Terverifikasi",
+    FirefaRefundVerificationStatus.failed => "Gagal diverifikasi",
+  };
+}
+
 class FirefaRefundRecord {
   final int amount;
   final String method;
   final String reason;
   final DateTime createdAt;
-  const FirefaRefundRecord({required this.amount, required this.method, required this.reason, required this.createdAt});
-  Map<String, dynamic> toJson() => {'amount': amount, 'method': method, 'reason': reason, 'createdAt': createdAt.toIso8601String()};
-  factory FirefaRefundRecord.fromJson(Map<String, dynamic> json) => FirefaRefundRecord(amount: json['amount'] as int, method: json['method'] as String, reason: json['reason'] as String, createdAt: DateTime.parse(json['createdAt'] as String));
+  final FirefaRefundVerificationStatus verificationStatus;
+  final DateTime? verifiedAt;
+  final String? verifiedBy;
+  const FirefaRefundRecord({
+    required this.amount,
+    required this.method,
+    required this.reason,
+    required this.createdAt,
+    this.verificationStatus = FirefaRefundVerificationStatus.reported,
+    this.verifiedAt,
+    this.verifiedBy,
+  });
+
+  FirefaRefundRecord copyWith({
+    FirefaRefundVerificationStatus? verificationStatus,
+    DateTime? verifiedAt,
+    String? verifiedBy,
+  }) => FirefaRefundRecord(
+    amount: amount,
+    method: method,
+    reason: reason,
+    createdAt: createdAt,
+    verificationStatus: verificationStatus ?? this.verificationStatus,
+    verifiedAt: verifiedAt ?? this.verifiedAt,
+    verifiedBy: verifiedBy ?? this.verifiedBy,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'amount': amount,
+    'method': method,
+    'reason': reason,
+    'createdAt': createdAt.toIso8601String(),
+    'verificationStatus': verificationStatus.name,
+    'verifiedAt': verifiedAt?.toIso8601String(),
+    'verifiedBy': verifiedBy,
+  };
+
+  factory FirefaRefundRecord.fromJson(Map<String, dynamic> json) => FirefaRefundRecord(
+    amount: json['amount'] as int,
+    method: json['method'] as String,
+    reason: json['reason'] as String,
+    createdAt: DateTime.parse(json['createdAt'] as String),
+    verificationStatus: FirefaRefundVerificationStatus.values.byName(
+      json['verificationStatus'] as String? ?? FirefaRefundVerificationStatus.reported.name,
+    ),
+    verifiedAt: json['verifiedAt'] == null ? null : DateTime.parse(json['verifiedAt'] as String),
+    verifiedBy: json['verifiedBy'] as String?,
+  );
 }
 
 extension FirefaOrderStatusDetails on FirefaOrderStatus {
@@ -110,6 +176,9 @@ class FirefaOrder {
   DateTime? paidAt;
   String? paymentMethod;
   int cashPaidAmount;
+  FirefaPaymentVerificationStatus paymentVerificationStatus;
+  DateTime? paymentVerifiedAt;
+  String? paymentVerifiedBy;
   DateTime? refundedAt;
   String? refundMethod;
   String? refundReason;
@@ -138,6 +207,9 @@ class FirefaOrder {
     this.paidAt,
     this.paymentMethod,
     this.cashPaidAmount = 0,
+    this.paymentVerificationStatus = FirefaPaymentVerificationStatus.notReported,
+    this.paymentVerifiedAt,
+    this.paymentVerifiedBy,
     this.refundedAt,
     this.refundMethod,
     this.refundReason,
@@ -203,6 +275,9 @@ class FirefaOrder {
     if (cashAmount < 0 || cashAmount > total) return false;
 
     paymentStatus = FirefaPaymentStatus.paid;
+    paymentVerificationStatus = FirefaPaymentVerificationStatus.reported;
+    paymentVerifiedAt = null;
+    paymentVerifiedBy = null;
     paymentMethod = method;
     cashPaidAmount = cashAmount;
     paidAt = paymentTime ?? DateTime.now();
@@ -212,8 +287,62 @@ class FirefaOrder {
   bool markBon() {
     if (status == FirefaOrderStatus.draft || status == FirefaOrderStatus.cancelled || paymentStatus != FirefaPaymentStatus.unpaid) return false;
     paymentMethod = 'BON';
+    paymentVerificationStatus = FirefaPaymentVerificationStatus.notReported;
+    paymentVerifiedAt = null;
+    paymentVerifiedBy = null;
     paidAt = null;
     cashPaidAmount = 0;
+    return true;
+  }
+
+  bool markPaymentVerified({String? verifiedBy, DateTime? verifiedAt}) {
+    if (paymentVerificationStatus == FirefaPaymentVerificationStatus.verified) return true;
+    if (paymentStatus != FirefaPaymentStatus.paid ||
+        paymentVerificationStatus != FirefaPaymentVerificationStatus.reported) {
+      return false;
+    }
+    paymentVerificationStatus = FirefaPaymentVerificationStatus.verified;
+    paymentVerifiedAt = verifiedAt ?? DateTime.now();
+    paymentVerifiedBy = verifiedBy;
+    return true;
+  }
+
+  bool markPaymentFailed() {
+    if (paymentVerificationStatus != FirefaPaymentVerificationStatus.reported ||
+        refundRecords.isNotEmpty) {
+      return false;
+    }
+    paymentVerificationStatus = FirefaPaymentVerificationStatus.failed;
+    paymentStatus = FirefaPaymentStatus.unpaid;
+    paymentMethod = null;
+    cashPaidAmount = 0;
+    paidAt = null;
+    return true;
+  }
+
+  bool markRefundVerified(int index, {String? verifiedBy, DateTime? verifiedAt}) {
+    if (paymentVerificationStatus != FirefaPaymentVerificationStatus.verified ||
+        index < 0 || index >= refundRecords.length) {
+      return false;
+    }
+    final record = refundRecords[index];
+    if (record.verificationStatus == FirefaRefundVerificationStatus.verified) {
+      return true;
+    }
+    if (record.verificationStatus != FirefaRefundVerificationStatus.reported) {
+      return false;
+    }
+    refundRecords[index] = record.copyWith(
+      verificationStatus: FirefaRefundVerificationStatus.verified,
+      verifiedAt: verifiedAt ?? DateTime.now(),
+      verifiedBy: verifiedBy,
+    );
+    final verifiedRefundTotal = refundRecords
+      .where((entry) => entry.verificationStatus == FirefaRefundVerificationStatus.verified)
+      .fold<int>(0, (sum, entry) => sum + entry.amount);
+    if (verifiedRefundTotal >= total && total > 0) {
+      paymentStatus = FirefaPaymentStatus.refunded;
+    }
     return true;
   }
 
@@ -229,7 +358,6 @@ class FirefaOrder {
     refundedAt = timestamp;
     refundMethod = normalizedMethod;
     refundReason = normalizedReason;
-    if (refundAmount >= total) paymentStatus = FirefaPaymentStatus.refunded;
     return true;
   }
 
@@ -245,6 +373,9 @@ class FirefaOrder {
         'paidAt': paidAt?.toIso8601String(),
         'paymentMethod': paymentMethod,
         'cashPaidAmount': cashPaidAmount,
+        'paymentVerificationStatus': paymentVerificationStatus.name,
+        'paymentVerifiedAt': paymentVerifiedAt?.toIso8601String(),
+        'paymentVerifiedBy': paymentVerifiedBy,
         'refundedAt': refundedAt?.toIso8601String(),
         'refundMethod': refundMethod,
         'refundReason': refundReason,
@@ -262,6 +393,23 @@ class FirefaOrder {
       };
 
   factory FirefaOrder.fromJson(Map<String, dynamic> json) {
+    final savedPaymentStatus = FirefaPaymentStatus.values.byName(json['paymentStatus'] as String);
+    final refundRecords = json['refundRecords'] is List
+        ? (json['refundRecords'] as List).map((entry) => FirefaRefundRecord.fromJson(Map<String, dynamic>.from(entry as Map))).toList()
+        : (savedPaymentStatus == FirefaPaymentStatus.refunded ? [FirefaRefundRecord(amount: json['total'] as int? ?? 0, method: json['refundMethod'] as String? ?? 'Legacy', reason: json['refundReason'] as String? ?? 'Legacy refund', createdAt: json['refundedAt'] == null ? DateTime.parse(json['createdAt'] as String) : DateTime.parse(json['refundedAt'] as String))] : <FirefaRefundRecord>[]);
+    final verifiedRefundTotal = refundRecords
+        .where((record) => record.verificationStatus == FirefaRefundVerificationStatus.verified)
+        .fold<int>(0, (sum, record) => sum + record.amount);
+    final hasVerifiedFullRefund = (json['total'] as int? ?? 0) > 0 &&
+        verifiedRefundTotal >= (json['total'] as int? ?? 0);
+    final savedVerification = json['paymentVerificationStatus'] as String?;
+    final effectiveVerification = savedVerification == null
+        ? (savedPaymentStatus == FirefaPaymentStatus.paid || savedPaymentStatus == FirefaPaymentStatus.refunded ? FirefaPaymentVerificationStatus.reported : FirefaPaymentVerificationStatus.notReported)
+        : FirefaPaymentVerificationStatus.values.byName(savedVerification);
+    final effectivePaymentStatus = savedPaymentStatus == FirefaPaymentStatus.refunded &&
+        (!hasVerifiedFullRefund || effectiveVerification != FirefaPaymentVerificationStatus.verified)
+        ? FirefaPaymentStatus.paid
+        : savedPaymentStatus;
     final order = FirefaOrder(
       id: json['id'] as String,
       outletId: json['outletId'] as String,
@@ -278,6 +426,9 @@ class FirefaOrder {
           : DateTime.parse(json['paidAt'] as String),
       paymentMethod: json['paymentMethod'] as String?,
       cashPaidAmount: json['cashPaidAmount'] as int? ?? 0,
+      paymentVerificationStatus: effectiveVerification,
+      paymentVerifiedAt: json['paymentVerifiedAt'] == null ? null : DateTime.parse(json['paymentVerifiedAt'] as String),
+      paymentVerifiedBy: json['paymentVerifiedBy'] as String?,
       refundedAt: json['refundedAt'] == null
           ? null
           : DateTime.parse(json['refundedAt'] as String),
@@ -285,9 +436,7 @@ class FirefaOrder {
       refundReason: json['refundReason'] as String?,
       cashRefundAmount: json['cashRefundAmount'] as int? ?? 0,
       refundAmount: json['refundAmount'] as int? ?? (json['paymentStatus'] == FirefaPaymentStatus.refunded.name ? (json['total'] as int? ?? 0) : 0),
-      refundRecords: json['refundRecords'] is List
-          ? (json['refundRecords'] as List).map((entry) => FirefaRefundRecord.fromJson(Map<String, dynamic>.from(entry as Map))).toList()
-          : (json['paymentStatus'] == FirefaPaymentStatus.refunded.name ? [FirefaRefundRecord(amount: json['total'] as int? ?? 0, method: json['refundMethod'] as String? ?? 'Legacy', reason: json['refundReason'] as String? ?? 'Legacy refund', createdAt: json['refundedAt'] == null ? DateTime.parse(json['createdAt'] as String) : DateTime.parse(json['refundedAt'] as String))] : const <FirefaRefundRecord>[]),
+      refundRecords: refundRecords,
       items: List.unmodifiable(
         (json['items'] as List).map(
           (item) =>
@@ -300,9 +449,7 @@ class FirefaOrder {
       service: json['service'] as int,
       total: json['total'] as int,
       status: FirefaOrderStatus.values.byName(json['status'] as String),
-      paymentStatus: FirefaPaymentStatus.values.byName(
-        json['paymentStatus'] as String,
-      ),
+      paymentStatus: effectivePaymentStatus,
     );
     return order;
   }

@@ -24,10 +24,28 @@ void main() {
   await orders.markBonAndPersist(outlet,tooLarge.id);
   expect(await customers.assignOrder(outletId:outlet,orderId:tooLarge.id,customerId:customer.id),isFalse);
   expect(await customers.recordPayment(outletId:outlet,orderId:order.id,amount:5000,method:'Transfer'),isTrue);
-  expect(customers.outstanding(outlet,customer.id),10000);
+  expect(customers.outstanding(outlet,customer.id),15000);
   expect(await customers.recordPayment(outletId:outlet,orderId:order.id,amount:10000,method:'Cash'),isTrue);
   expect(orders.findOrder(outlet,order.id)!.paymentStatus,FirefaPaymentStatus.paid);
+  expect(customers.outstanding(outlet,customer.id),15000);
+  expect(await customers.assignOrder(outletId:outlet,orderId:tooLarge.id,customerId:customer.id),isFalse);
+  final bonPayments = customers.paymentsForOutlet(outlet).where((payment) => payment.orderId == order.id).toList();
+  expect(bonPayments, hasLength(2));
+  expect(await customers.syncLoyalty(outlet),0);
+  for (final payment in bonPayments) {
+    expect(payment.verificationStatus, FirefaPaymentVerificationStatus.reported);
+    expect(await customers.applyServerReceivablePaymentVerification(
+      outletId: outlet,
+      paymentId: payment.id,
+      verifiedBy: 'owner-test',
+    ), isTrue);
+  }
+  expect(customers.verifiedPaidForOrder(outlet, order.id),15000);
   expect(customers.outstanding(outlet,customer.id),0);
+  final fullyPaidBon = orders.findOrder(outlet, order.id)!;
+  expect(fullyPaidBon.paymentVerificationStatus, FirefaPaymentVerificationStatus.reported);
+  expect(await orders.applyServerPaymentVerification(outlet, order.id, verifiedBy: 'owner-test'), isTrue);
+  await orders.waitForPendingSave();
   expect(await customers.assignOrder(outletId:outlet,orderId:tooLarge.id,customerId:customer.id),isTrue);
   expect(customers.outstanding(outlet,customer.id),10000);
   expect(await customers.syncLoyalty(outlet),1);

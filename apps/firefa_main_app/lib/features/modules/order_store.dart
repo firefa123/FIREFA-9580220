@@ -472,6 +472,84 @@ class FirefaOrderStore extends ChangeNotifier {
     return _mutateOrderAndPersist(outletId, orderId, mutation: (order) => order.markRefunded(method: refundMethod, reason: reason, amount: amount));
   }
 
+
+  /// Applies an authenticated server verification result to local state.
+  /// Call only after the backend confirms the payment/refund verification.
+  Future<bool> applyServerPaymentVerification(
+    String outletId,
+    String orderId, {
+    String? verifiedBy,
+    DateTime? verifiedAt,
+  }) async {
+    return _applyServerVerification(
+      outletId,
+      orderId,
+      mutation: (order) => order.markPaymentVerified(
+        verifiedBy: verifiedBy,
+        verifiedAt: verifiedAt,
+      ),
+    );
+  }
+
+  /// Applies a failed payment result already committed by the backend.
+  Future<bool> applyServerPaymentFailure(String outletId, String orderId) async {
+    return _applyServerVerification(
+      outletId,
+      orderId,
+      mutation: (order) => order.markPaymentFailed(),
+    );
+  }
+
+  /// Applies a refund verification already committed by the backend.
+  Future<bool> applyServerRefundVerification(
+    String outletId,
+    String orderId,
+    int refundIndex, {
+    String? verifiedBy,
+    DateTime? verifiedAt,
+  }) async {
+    return _applyServerVerification(
+      outletId,
+      orderId,
+      mutation: (order) => order.markRefundVerified(
+        refundIndex,
+        verifiedBy: verifiedBy,
+        verifiedAt: verifiedAt,
+      ),
+    );
+  }
+
+  Future<bool> _applyServerVerification(
+    String outletId,
+    String orderId, {
+    required bool Function(FirefaOrder order) mutation,
+  }) async {
+    _ensureInitialized();
+    final order = findOrder(outletId, orderId);
+    if (order == null) return false;
+    final oldPaymentStatus = order.paymentStatus;
+    final oldPaymentVerificationStatus = order.paymentVerificationStatus;
+    final oldPaymentVerifiedAt = order.paymentVerifiedAt;
+    final oldPaymentVerifiedBy = order.paymentVerifiedBy;
+    final oldRefundRecords = List<FirefaRefundRecord>.from(order.refundRecords);
+    if (!mutation(order)) return false;
+    _scheduleSave();
+    try {
+      await waitForPendingSave();
+    } catch (_) {
+      order.paymentStatus = oldPaymentStatus;
+      order.paymentVerificationStatus = oldPaymentVerificationStatus;
+      order.paymentVerifiedAt = oldPaymentVerifiedAt;
+      order.paymentVerifiedBy = oldPaymentVerifiedBy;
+      order.refundRecords..clear()..addAll(oldRefundRecords);
+      _scheduleSave();
+      await waitForPendingSave();
+      rethrow;
+    }
+    notifyListeners();
+    return true;
+  }
+
   /// Records a BON as an outstanding receivable, never as a completed sale.
   Future<bool> markBonAndPersist(String outletId, String orderId) async => _mutateOrderAndPersist(outletId, orderId, mutation: (order) => order.markBon());
 
@@ -492,6 +570,9 @@ class FirefaOrderStore extends ChangeNotifier {
     final previousCustomerId = order.customerId;
     final previousCustomerName = order.customerName;
     final previousCashPaidAmount = order.cashPaidAmount;
+    final previousPaymentVerificationStatus = order.paymentVerificationStatus;
+    final previousPaymentVerifiedAt = order.paymentVerifiedAt;
+    final previousPaymentVerifiedBy = order.paymentVerifiedBy;
     final previousRefundedAt = order.refundedAt;
     final previousRefundMethod = order.refundMethod;
     final previousRefundReason = order.refundReason;
@@ -514,6 +595,9 @@ class FirefaOrderStore extends ChangeNotifier {
       order.customerId = previousCustomerId;
       order.customerName = previousCustomerName;
       order.cashPaidAmount = previousCashPaidAmount;
+      order.paymentVerificationStatus = previousPaymentVerificationStatus;
+      order.paymentVerifiedAt = previousPaymentVerifiedAt;
+      order.paymentVerifiedBy = previousPaymentVerifiedBy;
       order.refundedAt = previousRefundedAt;
       order.refundMethod = previousRefundMethod;
       order.refundReason = previousRefundReason;
