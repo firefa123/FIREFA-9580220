@@ -163,13 +163,19 @@ class _DashboardPageState extends State<DashboardPage> {
       await queue.initialize();
       final conflicts = FirefaConflictStore.instance;
       await conflicts.initialize();
+      final session = await FirefaBackendClient.instance.restoreSession();
+      if (session == null || !mounted) return;
+      // A sync pass may only touch local outlets explicitly mapped to this
+      // authenticated tenant/session. Never iterate every configured mapping.
+      outletStore.initializeForSession(session);
       final coordinator = FirefaSyncCoordinator(
         queue: queue,
         adapter: const FirefaHttpSyncAdapter(),
         conflictBridge: FirefaHybridSyncConflictBridge(store: conflicts),
       );
-      for (final localOutletId in FirefaBackendConfig.outletMap.keys) {
-        await coordinator.syncOutlet(localOutletId);
+      final selectedOutletId = outletStore.selectedOutletId;
+      if (outletStore.canAccessOutlet(selectedOutletId)) {
+        await coordinator.syncOutlet(selectedOutletId);
       }
     } catch (_) {
       // Outbox remains durable; the next order/outlet change retries.
