@@ -184,7 +184,12 @@ class FirefaInventoryBackendSync {
         if ((response.statusCode == 200 || response.statusCode == 201) &&
             body != null &&
             body['id'] is String &&
-            body['quantityOnHand'] is num) {
+            body['eventId'] == idempotencyKey &&
+            body['outletId'] == serverOutletId &&
+            body['inventoryItemId'] == serverItemId &&
+            body['quantityOnHand'] is num &&
+            (body['quantityOnHand'] as num).isFinite &&
+            (body['quantityOnHand'] as num) >= 0) {
           sent.add(movement.id);
           await prefs.setStringList(sentKey, sent.toList());
           acknowledged++;
