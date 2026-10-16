@@ -5,7 +5,7 @@ import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
 
-type Role = "owner" | "cashier" | "staff";
+type Role = "owner" | "cashier";
 
 interface Membership {
   tenant_id: string;
@@ -66,6 +66,7 @@ async function findMembership(
       "LEFT JOIN outlet_memberships om ON om.user_id = tm.user_id AND om.tenant_id = tm.tenant_id " +
       "LEFT JOIN outlets o ON o.id = om.outlet_id AND o.tenant_id = tm.tenant_id AND o.status = 'active' " +
       "WHERE tm.user_id = $1 AND tm.status = 'active' " +
+      "AND tm.role IN ('owner', 'cashier') " +
       "AND ($2::uuid IS NULL OR tm.tenant_id = $2::uuid) " +
       "GROUP BY tm.tenant_id, tm.role, tm.created_at ORDER BY tm.created_at LIMIT 1",
     [userId, tenantId ?? null],
