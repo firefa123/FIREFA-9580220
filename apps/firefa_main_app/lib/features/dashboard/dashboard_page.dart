@@ -19,6 +19,7 @@ import '../modules/orders_page.dart';
 import '../modules/tables_page.dart';
 import '../modules/menu_page.dart';
 import '../modules/inventory_page.dart';
+import '../modules/inventory_backend_sync.dart';
 import '../modules/supplier_page.dart';
 import '../modules/purchase_order_page.dart';
 import '../modules/reports_page.dart';
@@ -184,6 +185,11 @@ class _DashboardPageState extends State<DashboardPage> {
       final selectedOutletId = outletStore.selectedOutletId;
       if (outletStore.canAccessOutlet(selectedOutletId)) {
         await coordinator.syncOutlet(selectedOutletId);
+        // Inventory movements use their own idempotent endpoint and durable
+        // local history. They never block POS/order synchronization.
+        if (session.role == FirefaRole.owner) {
+          await FirefaInventoryBackendSync.instance.syncOutlet(selectedOutletId);
+        }
       }
     } catch (_) {
       // Outbox remains durable; the next order/outlet change retries.
