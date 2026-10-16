@@ -38,10 +38,3 @@ jobs:
         run: flutter test --reporter expanded
       - name: Build Web
         run: flutter build web --release
-      - name: Build Android APK when platform is configured
-        run: |
-          if [ -d android ]; then
-            flutter build apk --release
-          else
-            echo "::notice::Android platform directory is absent; APK build is not applicable to this app."
-          fi
