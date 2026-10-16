@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
@@ -23,6 +24,7 @@ const productUpdate = z.object({
 });
 const inventoryInput = z.object({
   outletId: uuid,
+  productId: uuid.nullable().optional(),
   sku: z.string().trim().max(80).nullable().optional(),
   name: z.string().trim().min(1).max(180),
   unit: z.string().trim().min(1).max(32).default("unit"),
@@ -219,10 +221,21 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (app
         await client.query("ROLLBACK");
         return reply.code(403).send({ error: role ? "owner_required" : "outlet_forbidden" });
       }
+      if (input.productId) {
+        const linkedProduct = await client.query(
+          "SELECT 1 FROM products WHERE id = $1 AND tenant_id = $2 AND is_active = true " +
+            "AND (outlet_id = $3 OR outlet_id IS NULL) FOR SHARE",
+          [input.productId, request.user.tenantId, input.outletId],
+        );
+        if (!linkedProduct.rowCount) {
+          await client.query("ROLLBACK");
+          return reply.code(422).send({ error: "product_not_available_for_outlet" });
+        }
+      }
       const inserted = await client.query<{ id: string }>(
-        "INSERT INTO inventory_items (tenant_id, outlet_id, sku, name, unit, quantity_on_hand, reorder_level, average_unit_cost) " +
-          "VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id::text AS id",
-        [request.user.tenantId, input.outletId, input.sku ?? null, input.name, input.unit,
+        "INSERT INTO inventory_items (tenant_id, outlet_id, product_id, sku, name, unit, quantity_on_hand, reorder_level, average_unit_cost) " +
+          "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id::text AS id",
+        [request.user.tenantId, input.outletId, input.productId ?? null, input.sku ?? null, input.name, input.unit,
          input.initialQuantity, input.reorderLevel, input.averageUnitCost],
       );
       const id = inserted.rows[0]!.id;
@@ -244,6 +257,34 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (app
       if ((error as { code?: string }).code === "23505") return reply.code(409).send({ error: "duplicate_inventory_sku" });
       app.log.error({ err: error }, "Inventory item create failed");
       return reply.code(500).send({ error: "internal_error" });
+    } finally { client.release(); }
+  });
+
+  app.get("/inventory/reconcile", {
+    preHandler: async (request, reply) => {
+      try { await request.jwtVerify(); } catch { return reply.code(401).send({ error: "unauthorized" }); }
+    },
+  }, async (request, reply) => {
+    const parsedOutlet = uuid.safeParse((request.query as { outletId?: string }).outletId);
+    if (!parsedOutlet.success) return invalid(reply);
+    const client = await options.pool.connect();
+    try {
+      const role = await outletRole(client, request.user.sub, request.user.tenantId, parsedOutlet.data);
+      if (!role) return reply.code(403).send({ error: "outlet_forbidden" });
+      if (role !== "owner") return reply.code(403).send({ error: "owner_required" });
+      const result = await client.query(
+        "SELECT i.id::text AS id, i.product_id::text AS \\"productId\\", i.name, i.unit, " +
+          "i.quantity_on_hand::float8 AS \\"quantityOnHand\\", i.updated_at AS \\"updatedAt\\", " +
+          "COALESCE(SUM(m.quantity_delta), 0)::float8 AS \\"movementTotal\\", " +
+          "COUNT(m.id)::int AS \\"movementCount\\", MAX(m.created_at) AS \\"lastMovementAt\\", " +
+          "(i.quantity_on_hand = COALESCE(SUM(m.quantity_delta), 0)) AS \\"ledgerMatches\\", " +
+          "i.quantity_on_hand - COALESCE(SUM(m.quantity_delta), 0) AS \\"unexplainedDelta\\" " +
+          "FROM inventory_items i LEFT JOIN inventory_movements m " +
+          "ON m.inventory_item_id = i.id AND m.tenant_id = i.tenant_id AND m.outlet_id = i.outlet_id " +
+          "WHERE i.tenant_id = $1 AND i.outlet_id = $2 GROUP BY i.id ORDER BY i.name",
+        [request.user.tenantId, parsedOutlet.data],
+      );
+      return { outletId: parsedOutlet.data, items: result.rows };
     } finally { client.release(); }
   });
 
@@ -273,22 +314,47 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (app
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
         request.user.tenantId + ":" + input.outletId + ":" + idempotencyKey,
       ]);
+      const payloadHash = createHash("sha256").update(JSON.stringify({
+        outletId: input.outletId,
+        inventoryItemId: input.inventoryItemId,
+        movementType: input.movementType,
+        quantityDelta: input.quantityDelta,
+        unitCost: input.unitCost,
+        sourceType: input.sourceType ?? null,
+        sourceId: input.sourceId ?? null,
+        note: input.note ?? null,
+      })).digest("hex");
       const prior = await client.query<{
         id: string; inventory_item_id: string; quantity_delta: string; movement_type: string;
+        unit_cost: string; source_type: string | null; source_id: string | null; note: string | null;
+        payload_hash: string | null;
       }>(
-        "SELECT id::text AS id, inventory_item_id::text AS inventory_item_id, quantity_delta::text, movement_type " +
+        "SELECT id::text AS id, inventory_item_id::text AS inventory_item_id, quantity_delta::text, movement_type, " +
+          "unit_cost::text, source_type, source_id, note, payload_hash " +
           "FROM inventory_movements WHERE tenant_id = $1 AND outlet_id = $2 AND idempotency_key = $3",
         [request.user.tenantId, input.outletId, idempotencyKey],
       );
       if (prior.rows[0]) {
         const old = prior.rows[0];
         await client.query("ROLLBACK");
-        if (old.inventory_item_id !== input.inventoryItemId ||
-            Number(old.quantity_delta) !== input.quantityDelta ||
-            old.movement_type !== input.movementType) {
-          return reply.code(409).send({ error: "idempotency_key_payload_mismatch" });
-        }
-        return reply.code(200).send({ id: old.id, replayed: true });
+        const samePayload = old.payload_hash
+          ? old.payload_hash === payloadHash
+          : old.inventory_item_id === input.inventoryItemId &&
+            Number(old.quantity_delta) === input.quantityDelta &&
+            old.movement_type === input.movementType &&
+            Number(old.unit_cost) === input.unitCost &&
+            old.source_type === (input.sourceType ?? null) &&
+            old.source_id === (input.sourceId ?? null) &&
+            old.note === (input.note ?? null);
+        if (!samePayload) return reply.code(409).send({ error: "idempotency_key_payload_mismatch" });
+        const current = await options.pool.query<{ quantity_on_hand: string }>(
+          "SELECT quantity_on_hand::text FROM inventory_items WHERE id = $1 AND tenant_id = $2 AND outlet_id = $3",
+          [input.inventoryItemId, request.user.tenantId, input.outletId],
+        );
+        return reply.code(200).send({
+          id: old.id, replayed: true,
+          quantityOnHand: current.rows[0] ? Number(current.rows[0].quantity_on_hand) : null,
+        });
       }
       const updated = await client.query<{ id: string; quantity_on_hand: string }>(
         "UPDATE inventory_items SET quantity_on_hand = quantity_on_hand + $1, updated_at = now() " +
@@ -307,11 +373,11 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (app
           : reply.code(404).send({ error: "inventory_item_not_found" });
       }
       const movement = await client.query<{ id: string }>(
-        "INSERT INTO inventory_movements (tenant_id, outlet_id, inventory_item_id, movement_type, quantity_delta, unit_cost, source_type, source_id, idempotency_key, actor_user_id, note) " +
-          "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id::text AS id",
+        "INSERT INTO inventory_movements (tenant_id, outlet_id, inventory_item_id, movement_type, quantity_delta, unit_cost, source_type, source_id, idempotency_key, actor_user_id, note, payload_hash) " +
+          "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id::text AS id",
         [request.user.tenantId, input.outletId, input.inventoryItemId, input.movementType,
          input.quantityDelta, input.unitCost, input.sourceType ?? null, input.sourceId ?? null,
-         idempotencyKey, request.user.sub, input.note ?? null],
+         idempotencyKey, request.user.sub, input.note ?? null, payloadHash],
       );
       await audit(client, request.user.tenantId, input.outletId, request.user.sub, "inventory.movement", "inventory_item", input.inventoryItemId, {
         movementId: movement.rows[0]!.id, movementType: input.movementType,
