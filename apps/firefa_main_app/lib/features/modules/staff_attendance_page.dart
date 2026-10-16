@@ -214,7 +214,7 @@ class _StaffAttendancePageState extends State<StaffAttendancePage> {
               contentPadding: EdgeInsets.zero,
               leading: const CircleAvatar(child: Icon(Icons.person_outline)),
               title: Text('${row['displayName']}'),
-              subtitle: Text('Hadir ${row['attendanceDays']} hari • Terlambat ${row['lateDays']} hari dari ${row['scheduledDays']} hari terjadwal'),
+              subtitle: Text('Hadir ${row['attendanceDays']} hari • Terlambat ${row['lateDays']} hari dari ${row['evaluatedDays']} hari dinilai'),
               trailing: Text(row['punctualityPercent'] == null ? '—' : '${row['punctualityPercent']}%'),
             ),
           ]),

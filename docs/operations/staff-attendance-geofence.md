@@ -10,7 +10,7 @@ All requests except staff PIN login require a Bearer access token from the exist
 - `POST /api/v1/staff` — Owner only. Body: `{ "outletId": "<uuid>", "staffCode": "KSR-01", "displayName": "Nama Staff", "pin": "123456", "expectedStartTime": "09:00" }`. `expectedStartTime` is optional; omit it for flexible attendance without a punctuality target.
 - `PATCH /api/v1/staff/:staffId` — Owner only. Body includes `outletId` and any of `displayName`, `pin`, `expectedStartTime`, or `status`. Send `expectedStartTime: null` to remove a punctuality target.
 - `PATCH /api/v1/staff/geofence-radius` — Owner only. Body: `{ "outletId": "<uuid>", "radiusMeters": 100 }`; valid range is 25–2000 metres. The outlet must have latitude and longitude configured for attendance to work.
-- `GET /api/v1/staff/performance?outletId=<uuid>&from=YYYY-MM-DD&to=YYYY-MM-DD` — Owner/Kasir attendance-day, scheduled-day, late-day and punctuality summary.
+- `GET /api/v1/staff/performance?outletId=<uuid>&from=YYYY-MM-DD&to=YYYY-MM-DD` — Owner/Kasir attendance-day, evaluated attendance-day, late-day and punctuality summary.
 
 ## Staff app APIs
 

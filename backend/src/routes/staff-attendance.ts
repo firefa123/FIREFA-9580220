@@ -264,7 +264,7 @@ export const staffAttendanceRoutes: FastifyPluginAsync<StaffAttendanceOptions> =
       const result = await client.query(
         "SELECT sm.id::text AS \"staffId\", sm.staff_code AS \"staffCode\", sm.display_name AS \"displayName\", " +
         "COUNT(sa.id)::int AS \"attendanceDays\", COUNT(sa.late_minutes) FILTER (WHERE sa.late_minutes > 0)::int AS \"lateDays\", " +
-        "COUNT(sa.late_minutes)::int AS \"scheduledDays\", " +
+        "COUNT(sa.late_minutes)::int AS \"evaluatedDays\", " +
         "CASE WHEN COUNT(sa.late_minutes) FILTER (WHERE sa.late_minutes IS NOT NULL) = 0 THEN NULL " +
         "ELSE ROUND(100.0 * COUNT(sa.id) FILTER (WHERE sa.late_minutes = 0) / " +
         "NULLIF(COUNT(sa.late_minutes) FILTER (WHERE sa.late_minutes IS NOT NULL), 0), 1) END AS \"punctualityPercent\" " +
