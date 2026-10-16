@@ -43,7 +43,8 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
     return id;
   }
 
-  String _versionKey(String outletId, String orderId) => '$outletId|$orderId';
+  String _versionKey(String tenantId, String serverOutletId, String deviceId, String orderId) =>
+      '${tenantId.toLowerCase()}|${serverOutletId.toLowerCase()}|${deviceId.toLowerCase()}|$orderId';
 
   String? _utcIso(dynamic value) {
     if (value is! String || value.isEmpty) return null;
@@ -153,7 +154,7 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
       );
     }
     final deviceId = await _deviceId();
-    final versionKey = _versionKey(event.outletId, event.orderId);
+    final versionKey = _versionKey(session.tenantId, serverOutletId, deviceId, event.orderId);
     final isCreate = event.eventType == 'order.created';
     final expectedVersion = isCreate || event.eventType == 'order.recovered'
         ? null
@@ -264,23 +265,30 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
 
       final body = _tryJson(response.body);
       if (response.statusCode == 200 || response.statusCode == 201) {
+        final serverReference = body?['serverReference'];
+        final globalOrderId = body?['globalOrderId'];
+        final serverVersion = body?['serverVersion'];
         if (body == null ||
+            body['schemaVersion'] != 1 ||
             body['eventId'] != event.eventId ||
             body['outcome'] != 'acknowledged' ||
-            body['serverReference'] is! String ||
-            body['globalOrderId'] is! String ||
-            body['serverVersion'] is! int) {
+            serverReference is! String ||
+            serverReference.trim().isEmpty ||
+            globalOrderId is! String ||
+            !_isUuid(globalOrderId) ||
+            serverVersion is! int ||
+            serverVersion < 1) {
           return FirefaSyncReceipt(
             eventId: event.eventId,
             outcome: FirefaSyncOutcome.permanentFailure,
             message: 'Tanda terima server tidak valid; event tidak ditandai tersinkron.',
           );
         }
-        await _saveVersion(versionKey, body['serverVersion'] as int);
+        await _saveVersion(versionKey, serverVersion);
         return FirefaSyncReceipt(
           eventId: event.eventId,
           outcome: FirefaSyncOutcome.acknowledged,
-          serverReference: body['serverReference'] as String,
+          serverReference: serverReference,
           serverOutletId: event.outletId,
           serverOrderId: event.orderId,
         );
@@ -288,17 +296,28 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
 
       if (response.statusCode == 409 && body?['error'] == 'stale_order_version') {
         final rawServerSnapshot = body?['serverSnapshot'];
-        if (rawServerSnapshot is Map) {
+        final serverVersion = body?['serverVersion'];
+        if (rawServerSnapshot is Map && serverVersion is int && serverVersion > 0) {
           final serverSnapshot = Map<String, dynamic>.from(rawServerSnapshot);
+          // Never normalize a mismatched server identity into a valid conflict.
+          // Verify the response's actual server scope before translating IDs.
+          if (serverSnapshot['outletId'] != serverOutletId ||
+              serverSnapshot['id'] != event.orderId) {
+            return FirefaSyncReceipt(
+              eventId: event.eventId,
+              outcome: FirefaSyncOutcome.permanentFailure,
+              message: 'Identitas outlet/pesanan pada konflik server tidak cocok.',
+            );
+          }
+          await _saveVersion(versionKey, serverVersion);
           serverSnapshot['outletId'] = event.outletId;
-          serverSnapshot['id'] = event.orderId;
           return FirefaSyncReceipt(
             eventId: event.eventId,
             outcome: FirefaSyncOutcome.conflict,
             serverOutletId: event.outletId,
             serverOrderId: event.orderId,
             serverSnapshot: serverSnapshot,
-            message: 'Pesanan berubah di server.',
+            message: 'Pesanan berubah di server (versi $serverVersion).',
           );
         }
       }
