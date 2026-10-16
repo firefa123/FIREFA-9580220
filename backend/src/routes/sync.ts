@@ -377,7 +377,7 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
           return reply.code(409).send({
             error: "stale_order_version",
             serverVersion: existing.version,
-            serverSnapshot: existing.snapshot,
+            serverSnapshot: { ...existing.snapshot, id: event.orderId, outletId: event.outletId },
           });
         }
       }
@@ -478,7 +478,7 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
           return reply.code(409).send({
             error: "stale_order_version",
             serverVersion: current.version,
-            serverSnapshot: current.snapshot,
+            serverSnapshot: { ...current.snapshot, id: event.orderId, outletId: event.outletId },
           });
         }
         if (!isAllowedStatusTransition(current.status, event.orderSnapshot.status)) {
