@@ -120,7 +120,7 @@ void main() {
       orders: [order],
       openedAt: DateTime(2026, 10, 16, 0),
       closedAt: DateTime(2026, 10, 17, 0),
-    ), 0);
+    ), 25000);
     expect(order.refundReason, 'Pesanan salah');
     expect(order.refundedAt, isNotNull);
     expect(await store.markPaidAndPersist('REFUND-TEST', order.id, paymentMethod: 'Cash', cashPaidAmount: 25000), isFalse);
