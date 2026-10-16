@@ -124,6 +124,6 @@ The migration directory contains both `006_owner_cashier_roles_only.sql` and `00
 - Reference audit: completed for the current remote repository tree.
 - Cleanup: no further deletion was justified by the evidence; no speculative files removed.
 - Deployment/run instructions: documented above and in `backend/README.md`.
-- The first expanded build CI exposed a real packaging mismatch: the Staff App has no `android/` platform directory, so `flutter build apk` cannot run there. The workflow now reports this as not applicable only for apps without that platform, while building web for both apps and APK for apps that contain Android scaffolding. The failing run is retained as evidence and was not counted as a pass.
-- Analyze, tests, web builds, applicable Android APK build, backend tests, PostgreSQL migration/readiness, and Docker build: pending final rerun after the workflow correction.
+- The expanded build CI exposed two real packaging gaps: Staff App has no `android/` platform directory, and initially had no `web/` scaffold despite the documented Chrome run command. The workflow now reports Android APK as not applicable only when `android/` is absent; a minimal Flutter web entry point and manifest were added for Staff App. The first failed run remains visible in Actions and was not counted as a pass.
+- The corrected commit is being validated with analysis, full tests, web release builds for both apps, Android APK for apps with Android scaffolding (Main App), backend tests, PostgreSQL migration/readiness, and Docker build.
 - Final handover: only complete after the corrected final commit has green Flutter and backend workflows and post-merge workflows are green.
