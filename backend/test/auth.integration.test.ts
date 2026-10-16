@@ -490,6 +490,30 @@ authSuite("authentication endpoints", () => {
     });
     expect(inventory.statusCode).toBe(403);
     expect(inventory.json().error).toBe("owner_required");
+
+    const ownerInventory = await ownerApp.inject({
+      method: "POST",
+      url: "/api/v1/inventory/items",
+      headers: { authorization: "Bearer " + owner.accessToken },
+      payload: { outletId: owner.outletIds[0], sku: "OWNER-STOCK", name: "Owner Stock", initialQuantity: 5 },
+    });
+    expect(ownerInventory.statusCode).toBe(201);
+    const movement = await ownerApp.inject({
+      method: "POST",
+      url: "/api/v1/inventory/movements",
+      headers: {
+        authorization: "Bearer " + cashier.accessToken,
+        "idempotency-key": "cashier-stock-move-001",
+      },
+      payload: {
+        outletId: owner.outletIds[0],
+        inventoryItemId: ownerInventory.json().id,
+        movementType: "adjustment",
+        quantityDelta: 1,
+      },
+    });
+    expect(movement.statusCode).toBe(403);
+    expect(movement.json().error).toBe("owner_required");
   });
 
   it("keeps inventory movement idempotent and prevents negative stock", async () => {
