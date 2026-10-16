@@ -507,6 +507,14 @@ authSuite("authentication endpoints", () => {
     expect(inventory.statusCode).toBe(403);
     expect(inventory.json().error).toBe("owner_required");
 
+    const inventoryRead = await ownerApp.inject({
+      method: "GET",
+      url: "/api/v1/inventory/items?outletId=" + owner.outletIds[0],
+      headers: { authorization: "Bearer " + cashier.accessToken },
+    });
+    expect(inventoryRead.statusCode).toBe(403);
+    expect(inventoryRead.json().error).toBe("owner_required");
+
     const ownerInventory = await ownerApp.inject({
       method: "POST",
       url: "/api/v1/inventory/items",
