@@ -129,9 +129,17 @@ class FirefaInventoryBackendSync {
     var acknowledged = 0;
     var failed = 0;
     final errors = <String>[];
+    // Preserve ledger order per item. If an earlier movement cannot be
+    // acknowledged, do not send a later delta for that same item out of order.
+    final pausedItemIds = <String>{};
 
     for (final movement in movements) {
-      if (sent.contains(movement.id) || blocked.contains(movement.id)) continue;
+      if (sent.contains(movement.id)) continue;
+      if (blocked.contains(movement.id)) {
+        pausedItemIds.add(movement.itemId);
+        continue;
+      }
+      if (pausedItemIds.contains(movement.itemId)) continue;
       attempted++;
       try {
         final serverItemId = FirefaBackendConfig.resolveServerInventoryItemId(
@@ -184,7 +192,12 @@ class FirefaInventoryBackendSync {
         if ((response.statusCode == 200 || response.statusCode == 201) &&
             body != null &&
             body['id'] is String &&
-            body['quantityOnHand'] is num) {
+            body['eventId'] == idempotencyKey &&
+            body['outletId'] == serverOutletId &&
+            body['inventoryItemId'] == serverItemId &&
+            body['quantityOnHand'] is num &&
+            (body['quantityOnHand'] as num).isFinite &&
+            (body['quantityOnHand'] as num) >= 0) {
           sent.add(movement.id);
           await prefs.setStringList(sentKey, sent.toList());
           acknowledged++;
@@ -198,14 +211,17 @@ class FirefaInventoryBackendSync {
             blocked.add(movement.id);
             await prefs.setStringList(blockedKey, blocked.toList());
           }
+          pausedItemIds.add(movement.itemId);
           errors.add('${movement.id}: ${body?['error'] ?? 'HTTP ${response.statusCode}'}'
               '${permanent ? ' (dihentikan sampai ditinjau; panggil retryBlockedMovement setelah koreksi)' : ''}');
         }
       } on TimeoutException {
         failed++;
+        pausedItemIds.add(movement.itemId);
         errors.add('${movement.id}: timeout; akan dicoba lagi dengan idempotency key yang sama');
       } catch (error) {
         failed++;
+        pausedItemIds.add(movement.itemId);
         errors.add('${movement.id}: $error');
       }
     }
@@ -243,26 +259,50 @@ class FirefaInventoryBackendSync {
       );
     }
     final serverById = <String, double>{};
+    final serverNameById = <String, String>{};
     for (final raw in body['items'] as List) {
       if (raw is Map && raw['id'] is String && raw['quantityOnHand'] is num) {
-        serverById[raw['id'] as String] = (raw['quantityOnHand'] as num).toDouble();
+        final id = raw['id'] as String;
+        serverById[id] = (raw['quantityOnHand'] as num).toDouble();
+        if (raw['name'] is String) serverNameById[id] = raw['name'] as String;
       }
     }
     final store = FirefaInventoryStore.instance;
     await store.initialize();
     final differences = <FirefaInventoryStockDifference>[];
+    final matchedServerIds = <String>{};
     for (final item in store.forOutlet(localOutletId)) {
-      final serverId = FirefaBackendConfig.resolveServerInventoryItemId(
-        localItemId: item.id,
-        mapping: itemMap,
-      );
-      final serverStock = serverById[serverId];
+      final serverId = itemMap[item.id];
+      if (serverId == null || !FirefaBackendConfig.isUuid(serverId)) {
+        differences.add(FirefaInventoryStockDifference(
+          localItemId: item.id,
+          itemName: item.name,
+          localStock: item.stock,
+          serverStock: double.nan,
+        ));
+        continue;
+      }
+      final normalizedServerId = serverId.toLowerCase();
+      matchedServerIds.add(normalizedServerId);
+      final serverStock = serverById[normalizedServerId];
       if (serverStock == null || serverStock != item.stock.toDouble()) {
         differences.add(FirefaInventoryStockDifference(
           localItemId: item.id,
           itemName: item.name,
           localStock: item.stock,
           serverStock: serverStock ?? double.nan,
+        ));
+      }
+    }
+    // Report server-side inventory rows that have no local counterpart rather
+    // than silently declaring the outlet reconciled.
+    for (final entry in serverById.entries) {
+      if (!matchedServerIds.contains(entry.key)) {
+        differences.add(FirefaInventoryStockDifference(
+          localItemId: 'server:${entry.key}',
+          itemName: serverNameById[entry.key] ?? 'Item server tidak terpetakan',
+          localStock: 0,
+          serverStock: entry.value,
         ));
       }
     }

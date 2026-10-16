@@ -352,7 +352,11 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (app
           [input.inventoryItemId, request.user.tenantId, input.outletId],
         );
         return reply.code(200).send({
-          id: old.id, replayed: true,
+          id: old.id,
+          eventId: idempotencyKey,
+          outletId: input.outletId,
+          inventoryItemId: old.inventory_item_id,
+          replayed: true,
           quantityOnHand: current.rows[0] ? Number(current.rows[0].quantity_on_hand) : null,
         });
       }
@@ -386,6 +390,10 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (app
       await client.query("COMMIT");
       return reply.code(201).send({
         id: movement.rows[0]!.id,
+        eventId: idempotencyKey,
+        outletId: input.outletId,
+        inventoryItemId: input.inventoryItemId,
+        replayed: false,
         quantityOnHand: Number(updated.rows[0]!.quantity_on_hand),
       });
     } catch (error) {
