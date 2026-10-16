@@ -99,8 +99,8 @@ class FirefaSyncCoordinator {
           await queue.markFailed(envelope.eventId);
         } else {
           await scheduleRetry(envelope.eventId);
+          retryableFailures++;
         }
-        retryableFailures++;
       } catch (_) {
         // A concurrent invocation may have claimed this event first. That is
         // not a transport failure and must not inflate retryable failure counts.
