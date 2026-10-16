@@ -97,13 +97,20 @@ Restore is destructive to the target database. Verify the target connection and 
 
 ## 3. CI evidence and test report
 
-The final commit and run links will be recorded here after the Stage 8 pull request is merged and the post-merge workflows complete. Do not treat an earlier commit's green result as evidence for a later commit.
+### Final validation evidence (Stage 8 candidate)
 
-Required checks:
-- Flutter workflow: `flutter pub get`, `flutter analyze`, full `flutter test --reporter expanded`, and `flutter build web --release` for both apps. The Main App's Android APK release build is documented as a manual command but is not a required CI step; the Staff App has no Android scaffold. Do not claim Android APK output was verified by the final CI.
-- Backend workflow: Node.js 22, typecheck, build, PostgreSQL migrations, backend unit/integration tests, idempotent migration rerun, schema table verification, API readiness, and Docker build.
+Validated commit before this evidence-only documentation update: `c3e8b32c3037733147b4a49e67f0dc27a075cc94`.
 
-A passing CI run validates code and an ephemeral PostgreSQL service only. It is not proof of a successful production deployment, live public network access, TLS configuration, or a real backup/restore drill.
+- Flutter CI: [run 38871638290](https://github.com/firefa123/FIREFA-9580220/actions/runs/38871638290) — **success**.
+  - Main App: analyzer clean, **258 tests passed**, web release build passed.
+  - Staff App: analyzer clean, **3 tests passed**, web release build passed.
+- Backend CI: [run 38871638494](https://github.com/firefa123/FIREFA-9580220/actions/runs/38871638494) — **success**.
+  - Typecheck/build passed; **28 backend unit/integration tests passed**.
+  - PostgreSQL 16 migrations applied and rerun successfully; required tables verified; API readiness passed; Docker image built successfully.
+- The initial expanded build attempt exposed missing Staff App platform scaffolding; the failure was kept visible, the web entry point/manifest were added, and the corrected web build passed.
+- Android APK release output is **not verified** in the final CI. Staff App has no Android platform scaffold; Main App APK build did not finish within the CI run and was removed from the required CI path. The manual APK command remains in this runbook; do not claim an APK artifact is release-ready until that command completes successfully.
+
+The workflow checks code and an ephemeral PostgreSQL service. They do not prove production deployment, public network/TLS configuration, or a real backup/restore drill. These results are on the pre-evidence-update commit; the final documentation commit and post-merge commit must also have green CI before Stage 8 is accepted.
 
 ## 4. Deployment and product boundaries
 
