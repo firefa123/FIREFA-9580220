@@ -1,8 +1,8 @@
 import 'offline_sync_queue.dart';
 import 'sync_adapter.dart';
 
-/// Safe preparation layer for a future authenticated sync worker.
-/// Does not mutate the queue, perform network requests, or mark events synced.
+/// Deterministic batch selection and acknowledgement/retry policy for the sync coordinator.
+/// Queue transitions and HTTP transport are handled by their respective layers.
 class FirefaSyncEngine {
   const FirefaSyncEngine();
 
