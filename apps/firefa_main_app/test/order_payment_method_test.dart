@@ -47,6 +47,7 @@ void main() {
     await store.waitForPendingSave();
 
     expect(order.paymentStatus, FirefaPaymentStatus.paid);
+    expect(order.paymentVerificationStatus, FirefaPaymentVerificationStatus.reported);
     expect(order.paymentMethod, 'Split:QRIS');
     expect(order.cashPaidAmount, 20000);
     expect(order.paidAt, isNotNull);
@@ -62,6 +63,7 @@ void main() {
     expect(savedOrder['paymentMethod'], 'Split:QRIS');
     expect(savedOrder['cashPaidAmount'], 20000);
     expect(savedOrder['paidAt'], isNotNull);
+    expect(savedOrder['paymentVerificationStatus'], FirefaPaymentVerificationStatus.reported.name);
   });
 
   test('legacy order JSON without payment details remains readable', () {
@@ -109,8 +111,14 @@ void main() {
     expect(await store.markPaidAndPersist('REFUND-TEST', order.id, paymentMethod: 'Cash', cashPaidAmount: 25000), isTrue);
     expect(await store.refundPaidAndPersist('REFUND-TEST', order.id, refundMethod: 'Cash', reason: 'Pesanan salah'), isTrue);
     await store.waitForPendingSave();
-    expect(order.paymentStatus, FirefaPaymentStatus.refunded);
+    expect(order.paymentStatus, FirefaPaymentStatus.paid);
+    expect(order.refundRecords.single.verificationStatus, FirefaRefundVerificationStatus.reported);
     expect(order.cashRefundAmount, 25000);
+    expect(calculateCashRefundsForShift(
+      orders: [order],
+      openedAt: DateTime(2026, 10, 16, 0),
+      closedAt: DateTime(2026, 10, 17, 0),
+    ), 0);
     expect(order.refundReason, 'Pesanan salah');
     expect(order.refundedAt, isNotNull);
     expect(await store.markPaidAndPersist('REFUND-TEST', order.id, paymentMethod: 'Cash', cashPaidAmount: 25000), isFalse);

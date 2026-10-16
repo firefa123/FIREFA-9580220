@@ -595,7 +595,7 @@ authSuite("authentication endpoints", () => {
       "11111111-1111-4111-8111-111111111111",
       "evt-cash-payment-0001",
     );
-    payload.orderSnapshot.status = "completed";
+    payload.orderSnapshot.status = "confirmed";
     payload.orderSnapshot.paymentMethod = "Cash";
     payload.orderSnapshot.cashPaidAmount = 10000;
     payload.orderSnapshot.paidAt = new Date().toISOString();
@@ -607,8 +607,8 @@ authSuite("authentication endpoints", () => {
       "SELECT payment_status, status FROM orders WHERE id = $1",
       [orderId],
     );
-    expect(stored.rows[0].payment_status).toBe("paid");
-    expect(stored.rows[0].status).toBe("completed");
+    expect(stored.rows[0].payment_status).toBe("unpaid");
+    expect(stored.rows[0].status).toBe("confirmed");
     const items = await adminPool.query(
       "SELECT count(*)::int AS count FROM order_items WHERE order_id = $1",
       [orderId],
@@ -621,43 +621,66 @@ authSuite("authentication endpoints", () => {
     expect(payments.rows).toEqual([{ method: "cash", amount: 10000, status: "reported" }]);
   });
 
-  it("records cash refunds atomically and updates fully refunded payment status", async () => {
+  it("does not treat client-reported cash as verified and rejects client-reported refunds", async () => {
     const ownerApp = createTestApp();
     const owner = (await bootstrap(ownerApp)).json();
     const deviceId = "11111111-1111-4111-8111-111111111111";
-    const created = makeSyncEvent(owner.outletIds[0], deviceId, "evt-refund-create-0001");
-    created.orderSnapshot.status = "completed";
+    const outletId = owner.outletIds[0];
+    const created = makeSyncEvent(outletId, deviceId, "evt-payment-report-only-001");
+    created.orderSnapshot.status = "served";
     created.orderSnapshot.paymentMethod = "Cash";
     created.orderSnapshot.cashPaidAmount = 10000;
     created.orderSnapshot.paidAt = new Date().toISOString();
-    expect((await postSyncEvent(ownerApp, owner.accessToken, created)).statusCode).toBe(201);
 
-    const updated = makeSyncEvent(
-      owner.outletIds[0], deviceId, "evt-refund-update-0002", "order.updated", 1,
+    const createdResponse = await postSyncEvent(ownerApp, owner.accessToken, created);
+    expect(createdResponse.statusCode).toBe(201);
+    const orderId = createdResponse.json().globalOrderId;
+    const stored = await adminPool.query("SELECT payment_status, snapshot FROM orders WHERE id = $1", [orderId]);
+    expect(stored.rows[0]!.payment_status).toBe("unpaid");
+    expect(stored.rows[0]!.snapshot.paymentStatus).toBe("unpaid");
+    const reported = await adminPool.query(
+      "SELECT id::text AS id, status FROM payments WHERE order_id = $1",
+      [orderId],
     );
-    updated.orderSnapshot.status = "completed";
-    updated.orderSnapshot.paymentMethod = "Cash";
-    updated.orderSnapshot.cashPaidAmount = 10000;
-    updated.orderSnapshot.paidAt = created.orderSnapshot.paidAt;
-    updated.orderSnapshot.paymentStatus = "refunded";
-    updated.orderSnapshot.refundAmount = 10000;
-    updated.orderSnapshot.cashRefundAmount = 10000;
-    updated.orderSnapshot.refundedAt = new Date().toISOString();
-    updated.orderSnapshot.refundMethod = "Cash";
-    updated.orderSnapshot.refundReason = "Customer request";
-    updated.orderSnapshot.refundRecords = [{
-      amount: 10000, method: "Cash", reason: "Customer request",
-      createdAt: updated.orderSnapshot.refundedAt,
-    }];
-    const response = await postSyncEvent(ownerApp, owner.accessToken, updated);
-    expect(response.statusCode).toBe(201);
+    expect(reported.rows).toHaveLength(1);
+    expect(reported.rows[0]!.status).toBe("reported");
 
-    const order = await adminPool.query("SELECT payment_status FROM orders WHERE id = $1", [response.json().globalOrderId]);
-    expect(order.rows[0].payment_status).toBe("refunded");
-    const refunds = await adminPool.query("SELECT amount::float8 AS amount, status FROM refunds WHERE order_id = $1", [response.json().globalOrderId]);
-    expect(refunds.rows).toEqual([{ amount: 10000, status: "reported" }]);
-    const payments = await adminPool.query("SELECT status FROM payments WHERE order_id = $1", [response.json().globalOrderId]);
-    expect(payments.rows[0].status).toBe("refunded");
+    const verified = await ownerApp.inject({
+      method: "POST",
+      url: "/api/v1/payments/" + reported.rows[0]!.id + "/verify",
+      headers: { authorization: "Bearer " + owner.accessToken },
+      payload: { outletId },
+    });
+    expect(verified.statusCode).toBe(200);
+    expect(verified.json().payment.verified).toBe(true);
+
+    const update = makeSyncEvent(outletId, deviceId, "evt-client-refund-claim-001", "order.updated", 1);
+    update.orderSnapshot.status = "completed";
+    update.orderSnapshot.paymentMethod = "Cash";
+    update.orderSnapshot.cashPaidAmount = 10000;
+    update.orderSnapshot.paymentStatus = "refunded";
+    update.orderSnapshot.refundAmount = 10000;
+    update.orderSnapshot.cashRefundAmount = 10000;
+    update.orderSnapshot.refundedAt = new Date().toISOString();
+    update.orderSnapshot.refundMethod = "Cash";
+    update.orderSnapshot.refundReason = "Client claim";
+    update.orderSnapshot.refundRecords = [{
+      amount: 10000, method: "Cash", reason: "Client claim",
+      createdAt: update.orderSnapshot.refundedAt,
+    }];
+    const rejected = await postSyncEvent(ownerApp, owner.accessToken, update);
+    expect(rejected.statusCode).toBe(422);
+    expect(rejected.json().error).toBe("refund_verification_required");
+    const unchanged = await adminPool.query(
+      "SELECT payment_status, snapshot FROM orders WHERE id = $1",
+      [orderId],
+    );
+    expect(unchanged.rows[0]!.payment_status).toBe("paid");
+    expect(unchanged.rows[0]!.snapshot.refundAmount).toBe(0);
+    const refunds = await adminPool.query("SELECT count(*)::int AS count FROM refunds WHERE order_id = $1", [orderId]);
+    expect(refunds.rows[0]!.count).toBe(0);
+    const payments = await adminPool.query("SELECT status FROM payments WHERE order_id = $1", [orderId]);
+    expect(payments.rows[0]!.status).toBe("succeeded");
   });
 
   it("creates an open receivable for a completed BON order with customer identity", async () => {
@@ -856,4 +879,308 @@ authSuite("authentication endpoints", () => {
     );
     expect(ledger.rows[0].count).toBe(1);
   });
+
+  async function createLedgerOrder(
+    owner: { tenantId: string; outletIds: string[] },
+    clientOrderId = "stage6-payment-order",
+    total = 10000,
+  ): Promise<string> {
+    const result = await adminPool.query<{ id: string }>(
+      "INSERT INTO orders (tenant_id, outlet_id, device_id, client_order_id, order_type, status, payment_status, subtotal, discount, tax, service_charge, total, snapshot) " +
+      "VALUES ($1, $2, $3, $4, 'Take Away', 'confirmed', 'unpaid', $5, 0, 0, 0, $5, $6::jsonb) RETURNING id::text AS id",
+      [
+        owner.tenantId,
+        owner.outletIds[0],
+        "11111111-1111-4111-8111-111111111111",
+        clientOrderId,
+        total,
+        JSON.stringify({
+          id: clientOrderId,
+          outletId: owner.outletIds[0],
+          status: "confirmed",
+          paymentStatus: "unpaid",
+          paymentMethod: null,
+          subtotal: total,
+          discount: 0,
+          tax: 0,
+          service: 0,
+          total,
+          refundAmount: 0,
+          cashRefundAmount: 0,
+          refundRecords: [],
+        }),
+      ],
+    );
+    return result.rows[0]!.id;
+  }
+
+  it("keeps cash payment reported until owner verification and preserves an auditable history", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const outletId = owner.outletIds[0];
+    const orderId = await createLedgerOrder(owner);
+    const headers = { authorization: "Bearer " + owner.accessToken, "idempotency-key": "stage6-cash-report-001" };
+    const payload = { outletId, orderId, method: "cash", amount: 10000 };
+
+    const reported = await ownerApp.inject({ method: "POST", url: "/api/v1/payments", headers, payload });
+    expect(reported.statusCode).toBe(201);
+    expect(reported.json().payment).toMatchObject({ status: "reported", verified: false, amount: 10000 });
+    const orderBeforeVerification = await adminPool.query(
+      "SELECT payment_status FROM orders WHERE id = $1",
+      [orderId],
+    );
+    expect(orderBeforeVerification.rows[0]!.payment_status).toBe("unpaid");
+
+    const replay = await ownerApp.inject({ method: "POST", url: "/api/v1/payments", headers, payload });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().replayed).toBe(true);
+    expect(replay.json().payment.id).toBe(reported.json().payment.id);
+
+    const mismatch = await ownerApp.inject({
+      method: "POST", url: "/api/v1/payments", headers, payload: { ...payload, amount: 9000 },
+    });
+    expect(mismatch.statusCode).toBe(409);
+    expect(mismatch.json().error).toBe("idempotency_key_payload_mismatch");
+
+    const cashier = await createCashierSession(ownerApp, owner);
+    const forbidden = await ownerApp.inject({
+      method: "POST",
+      url: "/api/v1/payments/" + reported.json().payment.id + "/verify",
+      headers: { authorization: "Bearer " + cashier.accessToken },
+      payload: { outletId },
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const verified = await ownerApp.inject({
+      method: "POST",
+      url: "/api/v1/payments/" + reported.json().payment.id + "/verify",
+      headers: { authorization: "Bearer " + owner.accessToken },
+      payload: { outletId },
+    });
+    expect(verified.statusCode).toBe(200);
+    expect(verified.json().payment).toMatchObject({ status: "succeeded", verified: true });
+    expect(verified.json().orderPaymentStatus).toBe("paid");
+    const orderAfterVerification = await adminPool.query(
+      "SELECT payment_status, snapshot FROM orders WHERE id = $1",
+      [orderId],
+    );
+    expect(orderAfterVerification.rows[0]!.payment_status).toBe("paid");
+    expect(orderAfterVerification.rows[0]!.snapshot.paymentStatus).toBe("paid");
+
+    const history = await ownerApp.inject({
+      method: "GET",
+      url: "/api/v1/payments/history?outletId=" + outletId + "&orderId=" + orderId,
+      headers: { authorization: "Bearer " + owner.accessToken },
+    });
+    expect(history.statusCode).toBe(200);
+    expect(history.json().payments).toHaveLength(1);
+    expect(history.json().payments[0]).toMatchObject({ status: "succeeded", verified: true });
+    expect(history.json().events.map((entry: { eventType: string }) => entry.eventType)).toEqual(
+      expect.arrayContaining(["payment.reported", "payment.verified"]),
+    );
+    const audit = await adminPool.query(
+      "SELECT action FROM audit_logs WHERE resource_type = 'payment' AND resource_id = $1 ORDER BY created_at",
+      [reported.json().payment.id],
+    );
+    expect(audit.rows.map((row: { action: string }) => row.action)).toEqual(["payment.reported", "payment.verified"]);
+  });
+
+  it("rejects overpayment and records BON as an unpaid receivable until collected", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const outletId = owner.outletIds[0];
+    const orderId = await createLedgerOrder(owner, "stage6-bon-order", 10000);
+    const headers = { authorization: "Bearer " + owner.accessToken };
+
+    const overpayment = await ownerApp.inject({
+      method: "POST", url: "/api/v1/payments",
+      headers: { ...headers, "idempotency-key": "stage6-overpayment-001" },
+      payload: { outletId, orderId, method: "cash", amount: 10001 },
+    });
+    expect(overpayment.statusCode).toBe(409);
+    expect(overpayment.json().error).toBe("payment_exceeds_balance");
+
+    const bonHeaders = { ...headers, "idempotency-key": "stage6-bon-report-001" };
+    const bon = await ownerApp.inject({
+      method: "POST", url: "/api/v1/payments/bon", headers: bonHeaders,
+      payload: { outletId, orderId, customerId: "CUS-1001", customerName: "Customer BON" },
+    });
+    expect(bon.statusCode).toBe(201);
+    expect(bon.json()).toMatchObject({ verified: false, receivable: { status: "open", originalAmount: 10000, outstandingAmount: 10000 } });
+    const bonReplay = await ownerApp.inject({
+      method: "POST", url: "/api/v1/payments/bon", headers: bonHeaders,
+      payload: { outletId, orderId, customerId: "CUS-1001", customerName: "Customer BON" },
+    });
+    expect(bonReplay.statusCode).toBe(200);
+    expect(bonReplay.json().replayed).toBe(true);
+
+    const unpaid = await adminPool.query(
+      "SELECT payment_status, snapshot FROM orders WHERE id = $1",
+      [orderId],
+    );
+    expect(unpaid.rows[0]!.payment_status).toBe("unpaid");
+    expect(unpaid.rows[0]!.snapshot.paymentMethod).toBe("BON");
+    expect(unpaid.rows[0]!.snapshot.paymentStatus).toBe("unpaid");
+
+    const first = await ownerApp.inject({
+      method: "POST", url: "/api/v1/payments",
+      headers: { ...headers, "idempotency-key": "stage6-bon-collection-001" },
+      payload: { outletId, orderId, method: "cash", amount: 4000 },
+    });
+    expect(first.statusCode).toBe(201);
+    expect(first.json().payment.verified).toBe(false);
+    await ownerApp.inject({
+      method: "POST", url: "/api/v1/payments/" + first.json().payment.id + "/verify",
+      headers, payload: { outletId },
+    });
+    const second = await ownerApp.inject({
+      method: "POST", url: "/api/v1/payments",
+      headers: { ...headers, "idempotency-key": "stage6-bon-collection-002" },
+      payload: { outletId, orderId, method: "bank_transfer", amount: 6000 },
+    });
+    expect(second.statusCode).toBe(201);
+    await ownerApp.inject({
+      method: "POST", url: "/api/v1/payments/" + second.json().payment.id + "/verify",
+      headers, payload: { outletId },
+    });
+
+    const receivable = await adminPool.query(
+      "SELECT outstanding_amount::float8 AS outstanding, status FROM accounts_receivable WHERE tenant_id = $1 AND order_id = $2",
+      [owner.tenantId, orderId],
+    );
+    expect(receivable.rows[0]).toEqual({ outstanding: 0, status: "paid" });
+    const settledOrder = await adminPool.query("SELECT payment_status, snapshot FROM orders WHERE id = $1", [orderId]);
+    expect(settledOrder.rows[0]!.payment_status).toBe("paid");
+    expect(settledOrder.rows[0]!.snapshot.paymentMethod).toBe("BON");
+    expect(settledOrder.rows[0]!.snapshot.settlementMethod).toBe("Transfer");
+  });
+
+  it("requires verified funds for refunds and supports partial then full refunds without false statuses", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const outletId = owner.outletIds[0];
+    const orderId = await createLedgerOrder(owner, "stage6-refund-order", 10000);
+    const headers = { authorization: "Bearer " + owner.accessToken };
+
+    const earlyRefund = await ownerApp.inject({
+      method: "POST", url: "/api/v1/refunds",
+      headers: { ...headers, "idempotency-key": "stage6-early-refund-001" },
+      payload: { outletId, orderId, amount: 1000, method: "cash", reason: "Before payment" },
+    });
+    expect(earlyRefund.statusCode).toBe(409);
+    expect(earlyRefund.json().error).toBe("refund_exceeds_verified_payment");
+
+    const payment = await ownerApp.inject({
+      method: "POST", url: "/api/v1/payments",
+      headers: { ...headers, "idempotency-key": "stage6-refund-payment-001" },
+      payload: { outletId, orderId, method: "cash", amount: 10000 },
+    });
+    expect(payment.statusCode).toBe(201);
+    await ownerApp.inject({
+      method: "POST", url: "/api/v1/payments/" + payment.json().payment.id + "/verify",
+      headers, payload: { outletId },
+    });
+
+    const partial = await ownerApp.inject({
+      method: "POST", url: "/api/v1/refunds",
+      headers: { ...headers, "idempotency-key": "stage6-partial-refund-001" },
+      payload: { outletId, orderId, amount: 4000, method: "cash", reason: "Item rusak" },
+    });
+    expect(partial.statusCode).toBe(201);
+    expect(partial.json().refund).toMatchObject({ status: "reported", verified: false });
+    const partialReplay = await ownerApp.inject({
+      method: "POST", url: "/api/v1/refunds",
+      headers: { ...headers, "idempotency-key": "stage6-partial-refund-001" },
+      payload: { outletId, orderId, amount: 4000, method: "cash", reason: "Item rusak" },
+    });
+    expect(partialReplay.statusCode).toBe(200);
+    expect(partialReplay.json().replayed).toBe(true);
+    const refundKeyMismatch = await ownerApp.inject({
+      method: "POST", url: "/api/v1/refunds",
+      headers: { ...headers, "idempotency-key": "stage6-partial-refund-001" },
+      payload: { outletId, orderId, amount: 4000, method: "cash", reason: "Different reason" },
+    });
+    expect(refundKeyMismatch.statusCode).toBe(409);
+    const beforeRefundVerification = await adminPool.query(
+      "SELECT payment_status, snapshot FROM orders WHERE id = $1", [orderId],
+    );
+    expect(beforeRefundVerification.rows[0]!.payment_status).toBe("paid");
+    expect(beforeRefundVerification.rows[0]!.snapshot.refundAmount).toBe(0);
+    const cashier = await createCashierSession(ownerApp, owner);
+    const forbidden = await ownerApp.inject({
+      method: "POST", url: "/api/v1/refunds/" + partial.json().refund.id + "/verify",
+      headers: { authorization: "Bearer " + cashier.accessToken }, payload: { outletId },
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const partialVerified = await ownerApp.inject({
+      method: "POST", url: "/api/v1/refunds/" + partial.json().refund.id + "/verify",
+      headers, payload: { outletId },
+    });
+    expect(partialVerified.statusCode).toBe(200);
+    expect(partialVerified.json()).toMatchObject({ orderPaymentStatus: "paid", refundedAmount: 4000, refundableAmount: 6000 });
+    let order = await adminPool.query("SELECT payment_status, snapshot FROM orders WHERE id = $1", [orderId]);
+    expect(order.rows[0]!.payment_status).toBe("paid");
+    expect(order.rows[0]!.snapshot.refundAmount).toBe(4000);
+    expect(order.rows[0]!.snapshot.refundRecords).toHaveLength(1);
+
+    const full = await ownerApp.inject({
+      method: "POST", url: "/api/v1/refunds",
+      headers: { ...headers, "idempotency-key": "stage6-full-refund-001" },
+      payload: { outletId, orderId, amount: 6000, method: "bank_transfer", reason: "Sisa refund" },
+    });
+    expect(full.statusCode).toBe(201);
+    const fullVerified = await ownerApp.inject({
+      method: "POST", url: "/api/v1/refunds/" + full.json().refund.id + "/verify",
+      headers, payload: { outletId },
+    });
+    expect(fullVerified.statusCode).toBe(200);
+    expect(fullVerified.json()).toMatchObject({ orderPaymentStatus: "refunded", refundedAmount: 10000, refundableAmount: 0 });
+    order = await adminPool.query("SELECT payment_status, snapshot FROM orders WHERE id = $1", [orderId]);
+    expect(order.rows[0]!.payment_status).toBe("refunded");
+    expect(order.rows[0]!.snapshot.paymentStatus).toBe("refunded");
+    expect(order.rows[0]!.snapshot.refundRecords).toHaveLength(2);
+    expect(order.rows[0]!.snapshot.cashRefundAmount).toBe(4000);
+
+    const extra = await ownerApp.inject({
+      method: "POST", url: "/api/v1/refunds",
+      headers: { ...headers, "idempotency-key": "stage6-extra-refund-001" },
+      payload: { outletId, orderId, amount: 1, method: "cash", reason: "Must reject" },
+    });
+    expect(extra.statusCode).toBe(409);
+
+    const history = await ownerApp.inject({
+      method: "GET", url: "/api/v1/payments/history?outletId=" + outletId + "&orderId=" + orderId, headers,
+    });
+    expect(history.statusCode).toBe(200);
+    expect(history.json().payments[0]).toMatchObject({ status: "succeeded", verified: true });
+    expect(history.json().refunds).toHaveLength(2);
+    expect(history.json().refunds.every((entry: { verified: boolean }) => entry.verified)).toBe(true);
+    expect(history.json().events.map((entry: { eventType: string }) => entry.eventType)).toEqual(
+      expect.arrayContaining(["refund.reported", "refund.verified"]),
+    );
+  });
+
+  it("records a failed payment without marking the order paid", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const outletId = owner.outletIds[0];
+    const orderId = await createLedgerOrder(owner, "stage6-failed-payment", 10000);
+    const headers = { authorization: "Bearer " + owner.accessToken };
+    const payment = await ownerApp.inject({
+      method: "POST", url: "/api/v1/payments",
+      headers: { ...headers, "idempotency-key": "stage6-failed-report-001" },
+      payload: { outletId, orderId, method: "bank_transfer", amount: 10000 },
+    });
+    expect(payment.statusCode).toBe(201);
+    const failed = await ownerApp.inject({
+      method: "POST", url: "/api/v1/payments/" + payment.json().payment.id + "/fail",
+      headers, payload: { outletId, reason: "Transfer tidak ditemukan" },
+    });
+    expect(failed.statusCode).toBe(200);
+    expect(failed.json().payment).toMatchObject({ status: "failed", verified: false });
+    const order = await adminPool.query("SELECT payment_status FROM orders WHERE id = $1", [orderId]);
+    expect(order.rows[0]!.payment_status).toBe("unpaid");
+  });
+
 });

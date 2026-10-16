@@ -208,36 +208,6 @@ function isBonSale(snapshot: z.infer<typeof snapshotSchema>): boolean {
     Boolean(snapshot.customerId?.trim() || snapshot.customerName?.trim());
 }
 
-function refundIdentity(deviceId: string, orderId: string, refund: {
-  amount: number; method: string; reason: string; createdAt: string;
-}): string {
-  return "refund:" + createHash("sha256").update(JSON.stringify([
-    deviceId, orderId, refund.amount, refund.method, refund.reason, refund.createdAt,
-  ])).digest("hex");
-}
-
-async function persistReportedRefunds(
-  client: PoolClient,
-  tenantId: string,
-  outletId: string,
-  orderId: string,
-  deviceId: string,
-  actorUserId: string,
-  refunds: z.infer<typeof snapshotSchema>["refundRecords"],
-): Promise<void> {
-  for (const refund of refunds) {
-    if (refund.method.toLowerCase() !== "cash") {
-      throw new Error("REFUND_PROVIDER_VERIFICATION_REQUIRED");
-    }
-    await client.query(
-      "INSERT INTO refunds (tenant_id, outlet_id, order_id, amount, method, reason, status, idempotency_key, actor_user_id, created_at) " +
-        "VALUES ($1, $2, $3, $4, $5, $6, 'reported', $7, $8, $9) ON CONFLICT (tenant_id, idempotency_key) DO NOTHING",
-      [tenantId, outletId, orderId, refund.amount, refund.method, refund.reason,
-       refundIdentity(deviceId, orderId, refund), actorUserId, refund.createdAt],
-    );
-  }
-}
-
 async function persistBonReceivable(
   client: PoolClient,
   tenantId: string,
@@ -395,7 +365,7 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
         }
         const reportedCashPayment = hasReportedCashPayment(event.orderSnapshot);
         const bonSale = isBonSale(event.orderSnapshot);
-        if (event.orderSnapshot.status === "completed" && !reportedCashPayment && !bonSale) {
+        if (event.orderSnapshot.status === "completed" && !bonSale) {
           await client.query("ROLLBACK");
           inTransaction = false;
           return reply.code(422).send({ error: "payment_verification_required" });
@@ -411,7 +381,7 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
           return reply.code(409).send({ error: "order_identity_conflict" });
         }
 
-        authoritativePaymentStatus = reportedCashPayment ? "paid" : "unpaid";
+        authoritativePaymentStatus = "unpaid";
         sanitizedSnapshot = safeSnapshot(event.orderSnapshot, authoritativePaymentStatus);
         const orderResult = await client.query<{ id: string; version: number }>(
           "INSERT INTO orders " +
@@ -439,12 +409,26 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
         serverVersion = orderResult.rows[0]!.version;
         await insertOrderItems(client, request.user.tenantId, event.outletId, globalOrderId, event.orderSnapshot);
         if (reportedCashPayment) {
-          await client.query(
+          const paymentReport = await client.query<{ id: string }>(
             "INSERT INTO payments (tenant_id, outlet_id, order_id, method, amount, status, idempotency_key, actor_user_id) " +
-              "VALUES ($1, $2, $3, 'cash', $4, 'reported', $5, $6) ON CONFLICT (tenant_id, idempotency_key) DO NOTHING",
+              "VALUES ($1, $2, $3, 'cash', $4, 'reported', $5, $6) ON CONFLICT (tenant_id, idempotency_key) DO NOTHING RETURNING id::text AS id",
             [request.user.tenantId, event.outletId, globalOrderId, event.orderSnapshot.total,
              event.eventId + ":cash-payment", request.user.sub],
           );
+          if (paymentReport.rowCount) {
+            await client.query(
+              "INSERT INTO payment_events (tenant_id, outlet_id, order_id, payment_id, event_type, status, amount, method, actor_user_id, details) " +
+                "VALUES ($1, $2, $3, $4, 'payment.reported', 'reported', $5, 'cash', $6, $7::jsonb)",
+              [request.user.tenantId, event.outletId, globalOrderId, paymentReport.rows[0]!.id,
+               event.orderSnapshot.total, request.user.sub, JSON.stringify({ source: "offline_sync", verified: false })],
+            );
+            await client.query(
+              "INSERT INTO audit_logs (tenant_id, outlet_id, actor_user_id, action, resource_type, resource_id, changes) " +
+                "VALUES ($1, $2, $3, 'payment.reported', 'payment', $4, $5::jsonb)",
+              [request.user.tenantId, event.outletId, request.user.sub, paymentReport.rows[0]!.id,
+               JSON.stringify({ orderId: globalOrderId, amount: event.orderSnapshot.total, method: "cash", status: "reported", verified: false })],
+            );
+          }
         }
         if (bonSale) {
           await persistBonReceivable(client, request.user.tenantId, event.outletId, globalOrderId, event.orderSnapshot);
@@ -481,6 +465,17 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
             serverSnapshot: { ...current.snapshot, id: event.orderId, outletId: event.outletId },
           });
         }
+        if (event.orderSnapshot.status === "cancelled") {
+          const activePayment = await client.query(
+            "SELECT id FROM payments WHERE tenant_id = $1 AND order_id = $2 AND status IN ('reported', 'pending', 'succeeded') LIMIT 1",
+            [request.user.tenantId, current.id],
+          );
+          if (current.payment_status !== "unpaid" || activePayment.rowCount) {
+            await client.query("ROLLBACK");
+            inTransaction = false;
+            return reply.code(422).send({ error: "order_payment_requires_review" });
+          }
+        }
         if (!isAllowedStatusTransition(current.status, event.orderSnapshot.status)) {
           await client.query("ROLLBACK");
           inTransaction = false;
@@ -511,20 +506,14 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
           inTransaction = false;
           return reply.code(422).send({ error: "refund_total_cannot_decrease" });
         }
-        if (incomingRefundAmount > previousRefundAmount) {
-          if (current.payment_status !== "paid" ||
-              Math.abs(newRefundTotal - (incomingRefundAmount - previousRefundAmount)) > 0.01 ||
-              newRefunds.some((refund) => refund.method.toLowerCase() !== "cash")) {
-            await client.query("ROLLBACK");
-            inTransaction = false;
-            return reply.code(422).send({ error: "refund_verification_required" });
-          }
+        // Refunds are only reported by /refunds and become authoritative after
+        // owner verification. A client snapshot can never verify or total a refund.
+        if (newRefunds.length > 0 || incomingRefundAmount > previousRefundAmount) {
+          await client.query("ROLLBACK");
+          inTransaction = false;
+          return reply.code(422).send({ error: "refund_verification_required" });
         }
-        const nextPaymentStatus = incomingRefundAmount >= event.orderSnapshot.total && incomingRefundAmount > 0
-          ? "refunded"
-          : current.payment_status === "paid" || reportedCashPayment
-            ? "paid"
-            : current.payment_status;
+        const nextPaymentStatus = current.payment_status;
         if (
           event.orderSnapshot.status === "completed" &&
           nextPaymentStatus !== "paid" &&
@@ -560,24 +549,12 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
         serverVersion = updated.rows[0]!.version;
         await client.query("DELETE FROM order_items WHERE tenant_id = $1 AND order_id = $2", [request.user.tenantId, globalOrderId]);
         await insertOrderItems(client, request.user.tenantId, event.outletId, globalOrderId, event.orderSnapshot);
-        if (current.payment_status !== "paid" && reportedCashPayment) {
+        if (current.payment_status === "unpaid" && reportedCashPayment) {
           await client.query(
             "INSERT INTO payments (tenant_id, outlet_id, order_id, method, amount, status, idempotency_key, actor_user_id) " +
               "VALUES ($1, $2, $3, 'cash', $4, 'reported', $5, $6) ON CONFLICT (tenant_id, idempotency_key) DO NOTHING",
             [request.user.tenantId, event.outletId, globalOrderId, event.orderSnapshot.total,
              event.eventId + ":cash-payment", request.user.sub],
-          );
-        }
-        if (newRefunds.length > 0) {
-          await persistReportedRefunds(
-            client, request.user.tenantId, event.outletId, globalOrderId,
-            event.deviceId, request.user.sub, newRefunds,
-          );
-        }
-        if (nextPaymentStatus === "refunded") {
-          await client.query(
-            "UPDATE payments SET status = 'refunded' WHERE tenant_id = $1 AND order_id = $2 AND method = 'cash' AND status = 'reported'",
-            [request.user.tenantId, globalOrderId],
           );
         }
         if (bonSale) {

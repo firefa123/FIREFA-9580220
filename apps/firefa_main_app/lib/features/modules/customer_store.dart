@@ -19,9 +19,29 @@ class FirefaCustomer {
 }
 class FirefaReceivablePayment {
  const FirefaReceivablePayment({required this.id,required this.outletId,required this.orderId,required this.customerId,required this.amount,required this.method,required this.createdAt,this.note=''});
- final String id,outletId,orderId,customerId,method,createdAt,note; final int amount;
- Map<String,dynamic> toJson()=>{'id':id,'outletId':outletId,'orderId':orderId,'customerId':customerId,'amount':amount,'method':method,'createdAt':createdAt,'note':note};
- factory FirefaReceivablePayment.fromJson(Map<String,dynamic> j)=>FirefaReceivablePayment(id:j['id'] as String,outletId:j['outletId'] as String,orderId:j['orderId'] as String,customerId:j['customerId'] as String,amount:j['amount'] as int,method:j['method'] as String,createdAt:j['createdAt'] as String,note:j['note'] as String? ?? '');
+ final String id,outletId,orderId,customerId,method,createdAt,note;
+ final int amount;
+ final FirefaPaymentVerificationStatus verificationStatus;
+ final DateTime? verifiedAt;
+ final String? verifiedBy;
+ FirefaReceivablePayment({
+   required this.id, required this.outletId, required this.orderId,
+   required this.customerId, required this.amount, required this.method,
+   required this.createdAt, this.note='',
+   this.verificationStatus=FirefaPaymentVerificationStatus.reported,
+   this.verifiedAt, this.verifiedBy,
+ });
+ FirefaReceivablePayment copyWith({FirefaPaymentVerificationStatus? verificationStatus,DateTime? verifiedAt,String? verifiedBy})=>FirefaReceivablePayment(
+   id:id,outletId:outletId,orderId:orderId,customerId:customerId,amount:amount,method:method,createdAt:createdAt,note:note,
+   verificationStatus:verificationStatus??this.verificationStatus,verifiedAt:verifiedAt??this.verifiedAt,verifiedBy:verifiedBy??this.verifiedBy,
+ );
+ Map<String,dynamic> toJson()=>{'id':id,'outletId':outletId,'orderId':orderId,'customerId':customerId,'amount':amount,'method':method,'createdAt':createdAt,'note':note,'verificationStatus':verificationStatus.name,'verifiedAt':verifiedAt?.toIso8601String(),'verifiedBy':verifiedBy};
+ factory FirefaReceivablePayment.fromJson(Map<String,dynamic> j)=>FirefaReceivablePayment(
+   id:j['id'] as String,outletId:j['outletId'] as String,orderId:j['orderId'] as String,customerId:j['customerId'] as String,
+   amount:j['amount'] as int,method:j['method'] as String,createdAt:j['createdAt'] as String,note:j['note'] as String? ?? '',
+   verificationStatus:FirefaPaymentVerificationStatus.values.byName(j['verificationStatus'] as String? ?? FirefaPaymentVerificationStatus.reported.name),
+   verifiedAt:j['verifiedAt']==null?null:DateTime.parse(j['verifiedAt'] as String),verifiedBy:j['verifiedBy'] as String?,
+ );
 }
 class FirefaCustomerStore extends ChangeNotifier {
  FirefaCustomerStore._(); static final instance=FirefaCustomerStore._(); static const storageKey='firefa_customers_stage6_v1';
@@ -37,15 +57,51 @@ class FirefaCustomerStore extends ChangeNotifier {
  bool update({required String outletId,required String id,required String name,required String phone,required String email,required int creditLimit,required String notes,bool? active}){_ready();final i=_customers.indexWhere((c)=>c.outletId==outletId&&c.id==id);if(i<0||name.trim().isEmpty||creditLimit<0||creditLimit>999999999999||notes.length>500)return false;if(_customers.any((c)=>c.outletId==outletId&&c.id!=id&&phone.trim().isNotEmpty&&c.phone==phone.trim()))return false;_customers[i]=_customers[i].copy(name:name.trim(),phone:phone.trim(),email:email.trim(),creditLimit:creditLimit,notes:notes.trim(),active:active);notifyListeners();_save();return true;}
  int outstanding(String outlet,String customerId){
   final orders=FirefaOrderStore.instance.ordersForOutlet(outlet);
-  return orders.where((o)=>o.customerId==customerId&&o.paymentMethod=='BON'&&o.paymentStatus==FirefaPaymentStatus.unpaid&&o.status!=FirefaOrderStatus.cancelled)
-    .fold<int>(0,(sum,o)=>sum+(o.total-paidForOrder(outlet,o.id)).clamp(0,o.total));
+  return orders.where((o)=>o.customerId==customerId&&o.status!=FirefaOrderStatus.cancelled&&
+      (o.paymentMethod=='BON'||_payments.any((p)=>p.outletId==outlet&&p.orderId==o.id)))
+    .fold<int>(0,(sum,o)=>sum+(o.total-verifiedPaidForOrder(outlet,o.id)).clamp(0,o.total));
  }
  int availableCredit(String outlet,String customerId){final c=find(outlet,customerId);return c==null?0:(c.creditLimit-outstanding(outlet,customerId)).clamp(0,999999999999);}
  Future<bool> assignOrder({required String outletId,required String orderId,required String customerId}) async {_ready();final c=find(outletId,customerId);final order=FirefaOrderStore.instance.findOrder(outletId,orderId);if(c==null||!c.active||order==null||order.status==FirefaOrderStatus.cancelled)return false;if(order.paymentMethod=='BON'&&order.paymentStatus==FirefaPaymentStatus.unpaid&&order.customerId!=customerId&&order.total>availableCredit(outletId,customerId))return false;return FirefaOrderStore.instance.assignCustomerAndPersist(outletId,orderId,customerId:customerId,customerName:c.name);}
  Future<bool> recordPayment({required String outletId,required String orderId,required int amount,required String method,String note=''}) async {_ready();final order=FirefaOrderStore.instance.findOrder(outletId,orderId);if(order==null||order.customerId==null||order.paymentMethod!='BON'||order.paymentStatus!=FirefaPaymentStatus.unpaid||order.status==FirefaOrderStatus.cancelled||amount<=0||note.length>200||!const ['Cash','Transfer','QRIS','Bank'].contains(method))return false;final already=paidForOrder(outletId,orderId);if(amount>order.total-already)return false;final p=FirefaReceivablePayment(id:'CRP-${_nextPayment++}',outletId:outletId,orderId:orderId,customerId:order.customerId!,amount:amount,method:method,createdAt:DateTime.now().toIso8601String(),note:note.trim());_payments.add(p);try{await _saveAndWait();if(already+amount==order.total){if(!await FirefaOrderStore.instance.markPaidAndPersist(outletId,orderId,paymentMethod:'Credit settlement'))throw StateError('Pelunasan gagal');await FirefaOrderStore.instance.waitForPendingSave();}}catch(_){_payments.remove(p);_save();return false;}notifyListeners();return true;}
- int paidForOrder(String outlet,String orderId)=>_payments.where((p)=>p.outletId==outlet&&p.orderId==orderId).fold<int>(0,(s,p)=>s+p.amount);
- Future<int> syncLoyalty(String outlet) async {_ready();final orders=FirefaOrderStore.instance.ordersForOutlet(outlet);var changed=0;for(var i=0;i<_customers.length;i++){final c=_customers[i];if(c.outletId!=outlet||!c.active)continue;final earned=orders.where((o)=>o.customerId==c.id&&o.status!=FirefaOrderStatus.cancelled&&(o.paymentStatus==FirefaPaymentStatus.paid||o.paymentMethod=='BON'&&paidForOrder(outlet,o.id)>=o.total));final fresh=earned.where((o)=>!c.earnedOrderIds.contains(o.id)).toList();if(fresh.isEmpty)continue;final pts=fresh.fold<int>(0,(s,o)=>s+(o.total~/1000).clamp(0,999999999));_customers[i]=c.copy(points:c.points+pts,earnedOrderIds:[...c.earnedOrderIds,...fresh.map((o)=>o.id)]);changed+=fresh.length;}if(changed>0){notifyListeners();await _saveAndWait();}return changed;}
- Map<String,dynamic> rfm(String outlet,String customerId){final orders=FirefaOrderStore.instance.ordersForOutlet(outlet).where((o)=>o.customerId==customerId&&o.status!=FirefaOrderStatus.cancelled&&(o.paymentStatus==FirefaPaymentStatus.paid||paidForOrder(outlet,o.id)>=o.total)).toList();if(orders.isEmpty)return {'recencyDays':null,'frequency':0,'monetary':0,'segment':'Belum ada transaksi'};orders.sort((a,b)=>b.createdAt.compareTo(a.createdAt));final days=DateTime.now().difference(orders.first.createdAt).inDays;final monetary=orders.fold<int>(0,(s,o)=>s+o.total-o.refundAmount);final segment=days<=30&&orders.length>=5&&monetary>=1000000?'Champions':days<=60&&orders.length>=3?'Loyal':days<=90?'Potential':'At Risk';return {'recencyDays':days,'frequency':orders.length,'monetary':monetary,'segment':segment};}
+ int paidForOrder(String outlet,String orderId)=>_payments.where((p)=>p.outletId==outlet&&p.orderId==orderId&&p.verificationStatus!=FirefaPaymentVerificationStatus.failed).fold<int>(0,(s,p)=>s+p.amount);
+ int verifiedPaidForOrder(String outlet,String orderId)=>_payments.where((p)=>p.outletId==outlet&&p.orderId==orderId&&p.verificationStatus==FirefaPaymentVerificationStatus.verified).fold<int>(0,(s,p)=>s+p.amount);
+
+ Future<bool> applyServerReceivablePaymentFailure({required String outletId,required String paymentId}) async {
+  _ready();
+  final i=_payments.indexWhere((p)=>p.outletId==outletId&&p.id==paymentId);
+  if(i<0)return false;
+  final payment=_payments[i];
+  if(payment.verificationStatus==FirefaPaymentVerificationStatus.failed)return true;
+  if(payment.verificationStatus!=FirefaPaymentVerificationStatus.reported)return false;
+  _payments[i]=payment.copyWith(verificationStatus:FirefaPaymentVerificationStatus.failed);
+  notifyListeners();
+  try {
+   await _saveAndWait();
+   await FirefaOrderStore.instance.applyServerPaymentFailure(outletId,payment.orderId);
+  } catch (_) {
+   _payments[i]=payment;
+   notifyListeners();
+   await _saveAndWait();
+   rethrow;
+  }
+  return true;
+ }
+
+ Future<bool> applyServerReceivablePaymentVerification({required String outletId,required String paymentId,String? verifiedBy,DateTime? verifiedAt}) async {
+  _ready();
+  final i=_payments.indexWhere((p)=>p.outletId==outletId&&p.id==paymentId);
+  if(i<0)return false;
+  final payment=_payments[i];
+  if(payment.verificationStatus==FirefaPaymentVerificationStatus.verified)return true;
+  if(payment.verificationStatus!=FirefaPaymentVerificationStatus.reported)return false;
+  _payments[i]=payment.copyWith(verificationStatus:FirefaPaymentVerificationStatus.verified,verifiedAt:verifiedAt??DateTime.now(),verifiedBy:verifiedBy);
+  notifyListeners();
+  try { await _saveAndWait(); } catch (_) { _payments[i]=payment; notifyListeners(); rethrow; }
+  return true;
+ }
+ Future<int> syncLoyalty(String outlet) async {_ready();final orders=FirefaOrderStore.instance.ordersForOutlet(outlet);var changed=0;for(var i=0;i<_customers.length;i++){final c=_customers[i];if(c.outletId!=outlet||!c.active)continue;final earned=orders.where((o)=>o.customerId==c.id&&o.status!=FirefaOrderStatus.cancelled&&o.paymentStatus==FirefaPaymentStatus.paid&&o.paymentVerificationStatus==FirefaPaymentVerificationStatus.verified);final fresh=earned.where((o)=>!c.earnedOrderIds.contains(o.id)).toList();if(fresh.isEmpty)continue;final pts=fresh.fold<int>(0,(s,o)=>s+(o.total~/1000).clamp(0,999999999));_customers[i]=c.copy(points:c.points+pts,earnedOrderIds:[...c.earnedOrderIds,...fresh.map((o)=>o.id)]);changed+=fresh.length;}if(changed>0){notifyListeners();await _saveAndWait();}return changed;}
+ Map<String,dynamic> rfm(String outlet,String customerId){final orders=FirefaOrderStore.instance.ordersForOutlet(outlet).where((o)=>o.customerId==customerId&&o.status!=FirefaOrderStatus.cancelled&&o.paymentStatus==FirefaPaymentStatus.paid&&o.paymentVerificationStatus==FirefaPaymentVerificationStatus.verified).toList();if(orders.isEmpty)return {'recencyDays':null,'frequency':0,'monetary':0,'segment':'Belum ada transaksi'};orders.sort((a,b)=>b.createdAt.compareTo(a.createdAt));final days=DateTime.now().difference(orders.first.createdAt).inDays;final monetary=orders.fold<int>(0,(s,o)=>s+o.total-o.refundAmount);final segment=days<=30&&orders.length>=5&&monetary>=1000000?'Champions':days<=60&&orders.length>=3?'Loyal':days<=90?'Potential':'At Risk';return {'recencyDays':days,'frequency':orders.length,'monetary':monetary,'segment':segment};}
  bool redeemPoints({required String outletId,required String customerId,int pointsRequired=100}){_ready();if(pointsRequired<=0)return false;final i=_customers.indexWhere((c)=>c.outletId==outletId&&c.id==customerId&&c.active);if(i<0||_customers[i].points<pointsRequired)return false;_customers[i]=_customers[i].copy(points: _customers[i].points-pointsRequired,rewardCount:_customers[i].rewardCount+1);notifyListeners();_save();return true;}
  String exportCsv(String outlet){_ready();String q(String s)=>'"'+s.replaceAll('"','""')+'"';final rows=<String>['id,name,phone,email,credit_limit,points,reward_count,active,notes'];for(final c in forOutlet(outlet)){rows.add([c.id,c.name,c.phone,c.email,'${c.creditLimit}','${c.points}','${c.rewardCount}','${c.active}',c.notes].map(q).join(','));}return rows.join('\r\n');}
  Future<int> importCsv(String outlet,String csv) async {_ready();final rows=_parseCsv(csv);if(rows.isEmpty)throw const FormatException('CSV kosong');final headers=rows.first.map((s)=>s.trim().toLowerCase()).toList();for(final h in ['name','phone','email','credit_limit','notes']){if(!headers.contains(h))throw FormatException('Kolom wajib: $h');}final staged=<FirefaCustomer>[];for(final row in rows.skip(1)){if(row.every((v)=>v.trim().isEmpty))continue;if(row.length!=headers.length)throw const FormatException('Kolom CSV tidak konsisten');String g(String h)=>row[headers.indexOf(h)].trim();final name=g('name'),phone=g('phone'),email=g('email'),limit=int.tryParse(g('credit_limit'));final points=headers.contains('points')?int.tryParse(g('points'))??-1:0;final rewards=headers.contains('reward_count')?int.tryParse(g('reward_count'))??-1:0;final active=headers.contains('active')?g('active').toLowerCase()=='true':true;if(name.isEmpty||limit==null||limit<0||limit>999999999999||points<0||rewards<0||name.length>100||phone.length>40||email.length>120)throw const FormatException('Data pelanggan tidak valid');if(staged.any((c)=>phone.isNotEmpty&&c.phone==phone)||_customers.any((c)=>c.outletId==outlet&&phone.isNotEmpty&&c.phone==phone))throw const FormatException('Nomor telepon duplikat');staged.add(FirefaCustomer(id:'CUS-${_nextCustomer+staged.length}',outletId:outlet,name:name,phone:phone,email:email,creditLimit:limit,points:points,rewardCount:rewards,active:active,createdAt:DateTime.now().toIso8601String(),notes:headers.contains('notes')?g('notes'):''));}_customers.addAll(staged);_nextCustomer+=staged.length;if(staged.isNotEmpty){notifyListeners();await _saveAndWait();}return staged.length;}

@@ -105,15 +105,18 @@ class _OrdersPageState extends State<OrdersPage> {
       return;
     }
     final csv = <String>[
-      'Order ID,Outlet ID,Tanggal,Tipe,Meja,Status Pembayaran,Metode Pembayaran,Kas Tunai,Refund At,Metode Refund,Refund Tunai,Alasan Refund,Item Qty,Subtotal,Diskon,Pajak,Service,Total,Produk',
+      'Order ID,Outlet ID,Tanggal,Tipe,Meja,Status Pembayaran,Verifikasi Pembayaran,Verifikasi Pada,Metode Pembayaran,Kas Tunai,Refund At,Metode Refund,Refund Tunai,Alasan Refund,Status Verifikasi Refund,Item Qty,Subtotal,Diskon,Pajak,Service,Total,Produk',
       for (final order in rows)
         [
           order.id, order.outletId, order.createdAt.toIso8601String(),
           order.orderType, order.tableId ?? '', order.status.label,
-          order.paymentStatus.name, order.paymentMethod ?? '',
+          order.paymentStatus.name, order.paymentVerificationStatus.label,
+          order.paymentVerifiedAt?.toIso8601String() ?? '', order.paymentMethod ?? '',
           order.cashPaidAmount.toString(), order.refundedAt?.toIso8601String() ?? '',
           order.refundMethod ?? '', order.cashRefundAmount.toString(),
-          order.refundReason ?? '', order.itemCount.toString(),
+          order.refundReason ?? '',
+          order.refundRecords.map((record) => record.verificationStatus.label).join('; '),
+          order.itemCount.toString(),
           order.subtotal.toString(), order.discount.toString(),
           order.tax.toString(), order.service.toString(),
           order.total.toString(),
@@ -598,7 +601,7 @@ class _OrdersPageState extends State<OrdersPage> {
               value: paymentFilter,
               items: const [
                 DropdownMenuItem(value: 'all', child: Text('Semua pembayaran')),
-                DropdownMenuItem(value: 'paid', child: Text('Paid')),
+                DropdownMenuItem(value: 'paid', child: Text('Paid lokal/dilaporkan')),
                 DropdownMenuItem(value: 'unpaid', child: Text('Unpaid')),
                 DropdownMenuItem(value: 'refunded', child: Text('Refunded')),
               ],
@@ -905,6 +908,17 @@ class _OrdersPageState extends State<OrdersPage> {
                   FirefaPaymentStatus.refunded => Colors.redAccent,
                 },
               ),
+              chip(
+                order.paymentVerificationStatus.label,
+                switch (order.paymentVerificationStatus) {
+                  FirefaPaymentVerificationStatus.notReported => Colors.blueGrey,
+                  FirefaPaymentVerificationStatus.reported => Colors.orange,
+                  FirefaPaymentVerificationStatus.verified => Colors.green,
+                  FirefaPaymentVerificationStatus.failed => Colors.redAccent,
+                },
+              ),
+              if (order.refundRecords.any((record) => record.verificationStatus == FirefaRefundVerificationStatus.reported))
+                chip('Refund dilaporkan', Colors.orange),
               if (order.paymentMethod != null)
                 chip('Metode: ${order.paymentMethod}', Colors.blueGrey),
               if (order.refundMethod != null)
@@ -980,6 +994,9 @@ class _OrdersPageState extends State<OrdersPage> {
               ),
             ),
           const Divider(height: 26),
+          Text('Status pembayaran: ${order.paymentStatus.name.toUpperCase()} • ${order.paymentVerificationStatus.label}', style: const TextStyle(color: muted, fontSize: 12)),
+          if (order.paymentVerifiedAt != null)
+            Text('Diverifikasi: ${order.paymentVerifiedAt!.toLocal()}${order.paymentVerifiedBy == null ? '' : ' • ${order.paymentVerifiedBy}'}', style: const TextStyle(color: muted, fontSize: 12)),
           amountRow('Subtotal', order.subtotal),
           if (order.discount > 0) amountRow('Discount', -order.discount),
           if (order.tax > 0) amountRow('Tax', order.tax),
@@ -988,14 +1005,14 @@ class _OrdersPageState extends State<OrdersPage> {
           amountRow('Grand Total', order.total, bold: true),
           if (order.refundRecords.isNotEmpty) ...[
             const Divider(height: 20),
-            Text('Total refund: ${rupiah(order.refundAmount)} • Sisa dapat direfund: ${rupiah(order.refundableAmount)}', style: const TextStyle(color: muted, fontSize: 12)),
+            Text('Total refund dilaporkan: ${rupiah(order.refundAmount)} • Sisa dapat dilaporkan: ${rupiah(order.refundableAmount)}', style: const TextStyle(color: muted, fontSize: 12)),
             for (final refundRecord in order.refundRecords)
-              Padding(padding: const EdgeInsets.only(top: 6), child: Text('${refundRecord.createdAt.toLocal()} • ${rupiah(refundRecord.amount)} • ${refundRecord.method}\nAlasan: ${refundRecord.reason}', style: const TextStyle(color: muted, fontSize: 12))),
+              Padding(padding: const EdgeInsets.only(top: 6), child: Text('${refundRecord.createdAt.toLocal()} • ${rupiah(refundRecord.amount)} • ${refundRecord.method}\nVerifikasi: ${refundRecord.verificationStatus.label}\nAlasan: ${refundRecord.reason}', style: const TextStyle(color: muted, fontSize: 12))),
           ],
           if (order.refundedAt != null) ...[
             const Divider(height: 20),
-            Text('Waktu refund: ${order.refundedAt!.toLocal()}', style: const TextStyle(color: muted, fontSize: 12)),
-            Text('Metode refund: ${order.refundMethod ?? '-'} • Tunai dikembalikan: ${rupiah(order.cashRefundAmount)}', style: const TextStyle(color: muted, fontSize: 12)),
+            Text('Waktu laporan refund: ${order.refundedAt!.toLocal()}', style: const TextStyle(color: muted, fontSize: 12)),
+            Text('Metode refund dilaporkan: ${order.refundMethod ?? '-'} • Tunai dilaporkan: ${rupiah(order.cashRefundAmount)}', style: const TextStyle(color: muted, fontSize: 12)),
             Text('Alasan: ${order.refundReason ?? '-'}', style: const TextStyle(color: muted, fontSize: 12)),
           ],
           ],
@@ -1030,13 +1047,13 @@ class _OrdersPageState extends State<OrdersPage> {
                   OutlinedButton.icon(
                     onPressed: canActOn(order) ? () => markPaid(order) : null,
                     icon: const Icon(Icons.payments_outlined, size: 16),
-                    label: Text(order.paymentMethod == 'BON' ? 'Terima Pembayaran BON' : 'Mark Paid (Demo)'),
+                    label: Text(order.paymentMethod == 'BON' ? 'Laporkan Pelunasan BON' : 'Laporkan Pembayaran (Belum Diverifikasi)'),
                   ),
                 if (order.paymentStatus == FirefaPaymentStatus.paid && order.refundableAmount > 0)
                   OutlinedButton.icon(
                     onPressed: canActOn(order) ? () => refund(order) : null,
                     icon: const Icon(Icons.currency_exchange, size: 16),
-                    label: const Text('Refund Parsial/Penuh'),
+                    label: const Text('Laporkan Refund Parsial/Penuh'),
                   ),
                 OutlinedButton.icon(
                   onPressed: canActOn(order) ? () => reorder(order) : null,

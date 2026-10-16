@@ -51,6 +51,7 @@ class TransactionReceiptFormatter {
       'TOTAL: ${money(itemTotal)}',
       'ID pembayaran: ${receipt.paymentId}',
       'Status: LUNAS (SIMULASI LOKAL)',
+      'Verifikasi pembayaran: ${payment.verificationStatus.label}',
       'Bukan bukti settlement bank.',
     ];
     return lines.join('\n');

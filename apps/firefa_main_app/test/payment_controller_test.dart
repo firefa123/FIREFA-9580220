@@ -23,6 +23,11 @@ PaymentModel payment({PaymentStatus status = PaymentStatus.pending}) {
     transactionId: 'TRX-1',
     method: PaymentMethod.cash,
     status: status,
+    verificationStatus: status == PaymentStatus.paid
+        ? PaymentVerificationStatus.reported
+        : status == PaymentStatus.failed
+            ? PaymentVerificationStatus.failed
+            : PaymentVerificationStatus.notReported,
     amount: 15000,
     createdAt: DateTime(2026, 1, 1),
   );
@@ -77,10 +82,31 @@ void main() {
     });
 
     test('marks pending payment as paid', () {
-      expect(
-        PaymentController().markPaid(payment()).status,
-        PaymentStatus.paid,
+      final reported = PaymentController().markPaid(payment());
+      expect(reported.status, PaymentStatus.paid);
+      expect(reported.verificationStatus, PaymentVerificationStatus.reported);
+    });
+
+    test('marks a reported payment verified only through explicit verification', () {
+      final controller = PaymentController();
+      final reported = controller.markPaid(payment());
+      expect(reported.verificationStatus, PaymentVerificationStatus.reported);
+      final verified = controller.markVerified(
+        reported,
+        verifiedBy: 'owner-1',
+        verifiedAt: DateTime(2026, 10, 16, 10),
       );
+      expect(verified.verificationStatus, PaymentVerificationStatus.verified);
+      expect(verified.verifiedBy, 'owner-1');
+      expect(verified.verifiedAt, DateTime(2026, 10, 16, 10));
+      expect(identical(controller.markVerified(verified), verified), isTrue);
+    });
+
+    test('cannot verify a pending, failed, or refunded payment', () {
+      final controller = PaymentController();
+      expect(() => controller.markVerified(payment()), throwsStateError);
+      expect(() => controller.markVerified(payment(status: PaymentStatus.failed)), throwsStateError);
+      expect(() => controller.markVerified(payment(status: PaymentStatus.refunded)), throwsStateError);
     });
 
     test('marking paid twice is idempotent', () {
@@ -106,6 +132,7 @@ void main() {
         PaymentController().markFailed(payment()).status,
         PaymentStatus.failed,
       );
+      expect(PaymentController().markFailed(payment()).verificationStatus, PaymentVerificationStatus.failed);
     });
 
     test('marking failed twice is idempotent', () {

@@ -40,11 +40,37 @@ class PaymentController {
   }
 
   PaymentModel markPaid(PaymentModel payment) {
-    if (payment.status == PaymentStatus.paid) return payment;
+    if (payment.status == PaymentStatus.paid) {
+      return payment.verificationStatus == PaymentVerificationStatus.notReported
+          ? payment.copyWith(verificationStatus: PaymentVerificationStatus.reported)
+          : payment;
+    }
     if (payment.status != PaymentStatus.pending) {
       throw StateError('Only pending payments can be marked as paid.');
     }
-    return payment.copyWith(status: PaymentStatus.paid);
+    return payment.copyWith(
+      status: PaymentStatus.paid,
+      verificationStatus: PaymentVerificationStatus.reported,
+      verifiedAt: null,
+      verifiedBy: null,
+    );
+  }
+
+  PaymentModel markVerified(
+    PaymentModel payment, {
+    String? verifiedBy,
+    DateTime? verifiedAt,
+  }) {
+    if (payment.verificationStatus == PaymentVerificationStatus.verified) return payment;
+    if (payment.status != PaymentStatus.paid ||
+        payment.verificationStatus != PaymentVerificationStatus.reported) {
+      throw StateError('Only reported paid payments can be verified.');
+    }
+    return payment.copyWith(
+      verificationStatus: PaymentVerificationStatus.verified,
+      verifiedAt: verifiedAt ?? DateTime.now(),
+      verifiedBy: verifiedBy,
+    );
   }
 
   PaymentModel markFailed(PaymentModel payment) {
@@ -52,7 +78,10 @@ class PaymentController {
     if (payment.status != PaymentStatus.pending) {
       throw StateError('Only pending payments can be marked as failed.');
     }
-    return payment.copyWith(status: PaymentStatus.failed);
+    return payment.copyWith(
+      status: PaymentStatus.failed,
+      verificationStatus: PaymentVerificationStatus.failed,
+    );
   }
 
   String _generatePaymentId() {

@@ -14,6 +14,7 @@ void main() {
   final payment = PaymentModel(
     id: 'PAY-100', transactionId: 'TRX-100',
     method: PaymentMethod.cash, status: PaymentStatus.paid,
+    verificationStatus: PaymentVerificationStatus.reported,
     amount: 45000, createdAt: DateTime(2026, 10, 14),
   );
   final receipt = ReceiptModel(
@@ -38,6 +39,7 @@ void main() {
     expect(text, contains('Rp 30000'));
     expect(text, contains('TOTAL: Rp 45000'));
     expect(text, contains('LUNAS (SIMULASI LOKAL)'));
+    expect(text, contains('Verifikasi pembayaran: Dilaporkan • belum diverifikasi'));
     expect(text, contains('Bukan bukti settlement bank.'));
   });
 

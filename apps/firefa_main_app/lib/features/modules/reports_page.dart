@@ -117,6 +117,7 @@ class _ReportsPageState extends State<ReportsPage> {
     if (!allowed || outlet.selectedOutletId != outletId ||
         paidOrders.any((order) => order.outletId != outletId ||
             order.paymentStatus != FirefaPaymentStatus.paid ||
+            order.paymentVerificationStatus != FirefaPaymentVerificationStatus.verified ||
             order.status == FirefaOrderStatus.cancelled)) {
       return;
     }
@@ -152,7 +153,7 @@ class _ReportsPageState extends State<ReportsPage> {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('CSV ${sorted.length} produk Paid disalin ke clipboard.'),
+      content: Text('CSV ${sorted.length} produk terverifikasi disalin ke clipboard.'),
     ));
   }
   Future<void> _selectDates() async {
@@ -203,6 +204,8 @@ class _ReportsPageState extends State<ReportsPage> {
         final paid = visible.where((order) =>
             order.paymentStatus == FirefaPaymentStatus.paid &&
             order.status != FirefaOrderStatus.cancelled).toList();
+        final verifiedPaid = paid.where((order) =>
+            order.paymentVerificationStatus == FirefaPaymentVerificationStatus.verified).toList();
         final completed = visible.where((order) =>
             order.status == FirefaOrderStatus.completed).length;
         final unpaid = visible.where((order) =>
@@ -211,8 +214,14 @@ class _ReportsPageState extends State<ReportsPage> {
         final cancelled = visible.where((order) =>
             order.status == FirefaOrderStatus.cancelled).length;
         final paidTotal = paid.fold<int>(0, (sum, order) => sum + order.total);
+        final verifiedTotal = verifiedPaid.fold<int>(0, (sum, order) {
+          final verifiedRefunds = order.refundRecords
+              .where((refund) => refund.verificationStatus == FirefaRefundVerificationStatus.verified)
+              .fold<int>(0, (refundSum, refund) => refundSum + refund.amount);
+          return sum + (order.total - verifiedRefunds).clamp(0, order.total);
+        });
         final byProduct = <String, ({int quantity, int revenue})>{};
-        for (final order in paid) {
+        for (final order in verifiedPaid) {
           for (final item in order.items) {
             final current = byProduct[item.productName] ??
                 (quantity: 0, revenue: 0);
@@ -239,8 +248,8 @@ class _ReportsPageState extends State<ReportsPage> {
             Text('${outlet.selectedOutletName} • Laporan dari pesanan lokal',
                 style: const TextStyle(color: muted)),
             const SizedBox(height: 6),
-            const Text('Pembayaran masih simulasi. Nilai Paid bukan settlement bank, '
-                'dan tidak termasuk biaya operasional atau laba.',
+            const Text('Status Paid lokal berarti pembayaran dilaporkan, bukan otomatis terverifikasi. '
+                'Verifikasi internal juga bukan bukti settlement bank/provider.',
                 style: TextStyle(color: muted, fontSize: 12)),
             const SizedBox(height: 16),
             Wrap(spacing: 10, runSpacing: 10,
@@ -250,7 +259,7 @@ class _ReportsPageState extends State<ReportsPage> {
                   value: statusFilter,
                   items: const [
                     DropdownMenuItem(value: 'all', child: Text('Semua pesanan')),
-                    DropdownMenuItem(value: 'paid', child: Text('Paid')),
+                    DropdownMenuItem(value: 'paid', child: Text('Paid lokal/dilaporkan')),
                     DropdownMenuItem(value: 'unpaid', child: Text('Unpaid')),
                     DropdownMenuItem(value: 'completed', child: Text('Completed')),
                   ],
@@ -286,9 +295,9 @@ class _ReportsPageState extends State<ReportsPage> {
                   label: Text('CSV pesanan (${visible.length})'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: () => _copyProductCsv(outletId, paid),
+                  onPressed: () => _copyProductCsv(outletId, verifiedPaid),
                   icon: const Icon(Icons.inventory_2_outlined),
-                  label: Text('CSV produk (${paid.length} Paid)'),
+                  label: Text('CSV produk (${verifiedPaid.length} terverifikasi)'),
                 ),
               ],
             ),
@@ -296,17 +305,19 @@ class _ReportsPageState extends State<ReportsPage> {
             Wrap(spacing: 12, runSpacing: 12, children: [
               _metric('Total pesanan', '${visible.length}'),
               _metric('Completed', '$completed'),
-              _metric('Paid', '${paid.length}'),
+              _metric('Pembayaran dilaporkan', '${paid.length}'),
+              _metric('Pembayaran terverifikasi', '${verifiedPaid.length}'),
               _metric('Unpaid aktif', '$unpaid'),
               _metric('Cancelled', '$cancelled'),
-              _metric('Nilai pembayaran Paid', _money(paidTotal)),
+              _metric('Nilai dilaporkan', _money(paidTotal)),
+              _metric('Nilai terverifikasi', _money(verifiedTotal)),
             ]),
             const SizedBox(height: 24),
-            const Text('Produk terjual (pesanan Paid)',
+            const Text('Produk terjual (pembayaran terverifikasi)',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 8),
             if (topProducts.isEmpty)
-              const Text('Belum ada produk dari pesanan Paid pada filter ini.',
+              const Text('Belum ada produk dari pembayaran terverifikasi pada filter ini.',
                   style: TextStyle(color: muted)),
             for (final entry in topProducts.take(10))
               Padding(
