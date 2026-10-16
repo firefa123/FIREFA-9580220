@@ -173,7 +173,9 @@ class _DashboardPageState extends State<DashboardPage> {
       if (session == null || !mounted) return;
       // A sync pass may only touch local outlets explicitly mapped to this
       // authenticated tenant/session. Never iterate every configured mapping.
-      outletStore.initializeForSession(session);
+      if (!outletStore.isBackendSession) {
+        outletStore.initializeForSession(session);
+      }
       final coordinator = FirefaSyncCoordinator(
         queue: queue,
         adapter: const FirefaHttpSyncAdapter(),
