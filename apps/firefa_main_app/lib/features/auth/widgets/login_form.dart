@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/auth/role_permissions.dart';
+import '../../../core/outlet/active_outlet_store.dart';
 import '../../dashboard/dashboard_page.dart';
 import '../../modules/backend_client.dart';
 
@@ -37,6 +38,7 @@ class _LoginFormState extends State<LoginForm> {
           email: emailController.text,
           password: passwordController.text,
         );
+        FirefaActiveOutletStore.instance.initializeForSession(session);
         if (!mounted) return;
         Navigator.pushReplacement(
           context,
