@@ -134,6 +134,13 @@ class FirefaNavigation {
       icon: Icons.people_alt_outlined,
       permission: FirefaPermission.reportsView,
     ),
+    FirefaModule(
+      id: 'staff-attendance',
+      title: 'Staff & Absensi',
+      description: 'Kelola staff, radius geofence, absensi, dan ketepatan waktu.',
+      icon: Icons.badge_outlined,
+      permission: FirefaPermission.staffManage,
+    ),
   ];
 
   static List<FirefaModule> accessibleModules(FirefaRole role) =>

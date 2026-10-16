@@ -29,6 +29,7 @@ import '../modules/cashier_shift_page.dart';
 import '../modules/fnb_operations_page.dart';
 import '../modules/finance_page.dart';
 import '../modules/customers_page.dart';
+import '../modules/staff_attendance_page.dart';
 import 'widgets/dashboard_sidebar.dart';
 import 'widgets/stat_card.dart';
 import 'widgets/revenue_card.dart';
@@ -75,6 +76,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'Operasional F&B',
     'Pembelian & Keuangan',
     'Pelanggan & Loyalitas',
+    'Staff & Absensi',
   ];
 
   static const pageDescriptions = [
@@ -94,6 +96,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'Kelola reservasi, antrean, KOT dapur, paket menu, harga per tipe pesanan, dan promo.',
     'Kelola utang pemasok, konsinyasi, pengeluaran, dan laporan keuangan.',
     'Kelola pelanggan, piutang BON, limit kredit, loyalty, RFM, dan backup.',
+    'Kelola staff, radius geofence, absensi, dan ketepatan waktu.',
   ];
 
   static const pagePermissions = [
@@ -113,6 +116,7 @@ class _DashboardPageState extends State<DashboardPage> {
     FirefaPermission.ordersView,
     FirefaPermission.inventoryManage,
     FirefaPermission.reportsView,
+    FirefaPermission.staffManage,
   ];
 
   @override
@@ -735,6 +739,8 @@ class _DashboardPageState extends State<DashboardPage> {
         return const FinancePage();
       case 15:
         return const CustomersPage();
+      case 16:
+        return const StaffAttendancePage();
       default:
         return const SizedBox.shrink();
     }
