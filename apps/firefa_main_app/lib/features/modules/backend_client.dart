@@ -46,6 +46,64 @@ class FirefaBackendConfig {
     return serverOutletId;
   }
 
+  /// Convert a persisted local outbox entry to the backend v1 contract.
+  /// This prepares a payload only; it does not send it or mark it synchronized.
+  static Map<String, dynamic> buildSyncPayload({
+    required Map<String, dynamic> event,
+    required String deviceId,
+    required Map<String, String> mapping,
+    required Iterable<String> authorizedServerOutletIds,
+    int? expectedServerVersion,
+  }) {
+    final eventId = event['eventId'];
+    final localOutletId = event['outletId'];
+    final orderId = event['orderId'];
+    final eventType = event['eventType'];
+    final createdAt = event['createdAt'];
+    final rawSnapshot = event['orderSnapshot'];
+    if (eventId is! String ||
+        eventId.trim().length < 16 ||
+        orderId is! String ||
+        orderId.trim().isEmpty ||
+        createdAt is! String ||
+        eventType is! String ||
+        !const {'order.created', 'order.updated', 'order.recovered'}.contains(eventType) ||
+        rawSnapshot is! Map) {
+      throw const FormatException('Event outbox tidak sesuai kontrak sinkronisasi.');
+    }
+    if (eventType == 'order.updated' &&
+        (expectedServerVersion == null || expectedServerVersion < 1)) {
+      throw const FormatException('Versi server wajib untuk memperbarui pesanan.');
+    }
+    final serverOutletId = resolveServerOutletId(
+      localOutletId: localOutletId is String ? localOutletId : '',
+      mapping: mapping,
+      authorizedServerOutletIds: authorizedServerOutletIds,
+    );
+    final snapshot = Map<String, dynamic>.from(rawSnapshot);
+    if (snapshot['id'] != orderId || snapshot['outletId'] != localOutletId) {
+      throw const FormatException('Identitas pesanan dan outlet pada snapshot tidak cocok.');
+    }
+    snapshot['outletId'] = serverOutletId;
+    final payload = <String, dynamic>{
+      'schemaVersion': 1,
+      'eventId': eventId,
+      'deviceId': deviceId,
+      'outletId': serverOutletId,
+      'orderId': orderId,
+      'eventType': eventType,
+      'createdAt': createdAt,
+      'orderSnapshot': snapshot,
+    };
+    if (expectedServerVersion != null) {
+      if (expectedServerVersion < 1) {
+        throw ArgumentError.value(expectedServerVersion, 'expectedServerVersion');
+      }
+      payload['expectedServerVersion'] = expectedServerVersion;
+    }
+    return payload;
+  }
+
   static bool get isConfigured =>
       enabled && baseUrl.trim().isNotEmpty && Uri.tryParse(baseUrl)?.hasAuthority == true;
 }
