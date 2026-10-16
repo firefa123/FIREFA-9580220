@@ -761,6 +761,10 @@ authSuite("authentication endpoints", () => {
     });
     expect(first.statusCode).toBe(201);
     expect(first.json().quantityOnHand).toBe(7);
+    expect(first.json().eventId).toBe("deviceA-movement-0001");
+    expect(first.json().outletId).toBe(outletId);
+    expect(first.json().inventoryItemId).toBe(inventoryItemId);
+    expect(first.json().replayed).toBe(false);
 
     // Simulate a retry after the client lost the response when the connection dropped.
     const replay = await ownerApp.inject({
@@ -769,6 +773,10 @@ authSuite("authentication endpoints", () => {
     });
     expect(replay.statusCode).toBe(200);
     expect(replay.json().replayed).toBe(true);
+    expect(replay.json().eventId).toBe("deviceA-movement-0001");
+    expect(replay.json().outletId).toBe(outletId);
+    expect(replay.json().inventoryItemId).toBe(inventoryItemId);
+    expect(replay.json().id).toBe(first.json().id);
     expect(replay.json().quantityOnHand).toBe(7);
 
     const changedPayload = await ownerApp.inject({
