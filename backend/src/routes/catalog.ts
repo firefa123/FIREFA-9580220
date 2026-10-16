@@ -265,9 +265,9 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (app
     try {
       await client.query("BEGIN");
       const role = await outletRole(client, request.user.sub, request.user.tenantId, input.outletId);
-      if (role !== "owner" && role !== "cashier") {
+      if (role !== "owner") {
         await client.query("ROLLBACK");
-        return reply.code(403).send({ error: role ? "role_forbidden" : "outlet_forbidden" });
+        return reply.code(403).send({ error: role ? "owner_required" : "outlet_forbidden" });
       }
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
         request.user.tenantId + ":" + input.outletId + ":" + idempotencyKey,
