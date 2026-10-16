@@ -810,4 +810,50 @@ authSuite("authentication endpoints", () => {
     );
     expect(movements.rows[0].count).toBe(2);
   });
+
+  it("serializes concurrent requests with the same inventory idempotency key", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const headers = { authorization: "Bearer " + owner.accessToken };
+    const outletId = owner.outletIds[0];
+    const productResponse = await ownerApp.inject({
+      method: "POST",
+      url: "/api/v1/products",
+      headers,
+      payload: { outletId, sku: "CONCURRENT-001", name: "Concurrent Item", unitPrice: 1000 },
+    });
+    expect(productResponse.statusCode).toBe(201);
+    const itemResponse = await ownerApp.inject({
+      method: "POST",
+      url: "/api/v1/inventory/items",
+      headers,
+      payload: {
+        outletId, productId: productResponse.json().id, sku: "CONCURRENT-001",
+        name: "Concurrent Item", unit: "unit", initialQuantity: 10,
+      },
+    });
+    expect(itemResponse.statusCode).toBe(201);
+    const inventoryItemId = itemResponse.json().id;
+    const movement = {
+      outletId, inventoryItemId, movementType: "sale", quantityDelta: -3,
+      unitCost: 0, sourceType: "concurrency_test", sourceId: "same-event",
+    };
+    const movementHeaders = { ...headers, "idempotency-key": "concurrent-stock-event-001" };
+    const send = () => ownerApp.inject({
+      method: "POST", url: "/api/v1/inventory/movements",
+      headers: movementHeaders, payload: movement,
+    });
+    const [first, second] = await Promise.all([send(), send()]);
+    expect([first.statusCode, second.statusCode].sort()).toEqual([200, 201]);
+    const stock = await adminPool.query(
+      "SELECT quantity_on_hand::float8 AS stock FROM inventory_items WHERE id = $1",
+      [inventoryItemId],
+    );
+    expect(stock.rows[0].stock).toBe(7);
+    const ledger = await adminPool.query(
+      "SELECT count(*)::int AS count FROM inventory_movements WHERE tenant_id = $1 AND outlet_id = $2 AND idempotency_key = $3",
+      [owner.tenantId, outletId, "concurrent-stock-event-001"],
+    );
+    expect(ledger.rows[0].count).toBe(1);
+  });
 });
