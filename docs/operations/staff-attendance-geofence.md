@@ -1,6 +1,6 @@
 # Staff and attendance API
 
-Migration `007_staff_attendance_geofence.sql` adds staff identities and server-recorded attendance without changing Owner/Kasir tenant membership roles.
+Migration `008_staff_attendance_geofence.sql` adds staff identities and server-recorded attendance without changing Owner/Kasir tenant membership roles.
 
 ## Owner/Kasir APIs
 
