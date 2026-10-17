@@ -28,6 +28,7 @@ const snapshotSchema = z.object({
   tableId: z.string().max(128).nullable().optional(),
   createdAt: z.string().datetime({ offset: true }),
   items: z.array(z.object({
+    productId: z.string().uuid().nullable().optional(),
     productName: z.string().trim().min(1).max(200),
     quantity: z.number().int().positive().max(100000),
     unitPrice: money,
@@ -167,6 +168,7 @@ function safeSnapshot(
     tableId: snapshot.tableId ?? null,
     createdAt: snapshot.createdAt,
     items: snapshot.items.map((item) => ({
+      ...(item.productId ? { productId: item.productId } : {}),
       productName: item.productName,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
@@ -235,10 +237,83 @@ async function insertOrderItems(
 ): Promise<void> {
   for (const item of snapshot.items) {
     await client.query(
-      "INSERT INTO order_items (tenant_id, outlet_id, order_id, product_name, quantity, unit_price, line_total, details) " +
-        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-      [tenantId, outletId, orderId, item.productName, item.quantity, item.unitPrice,
+      "INSERT INTO order_items (tenant_id, outlet_id, order_id, product_id, product_name, quantity, unit_price, line_total, details) " +
+        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+      [tenantId, outletId, orderId, item.productId ?? null, item.productName, item.quantity, item.unitPrice,
        item.quantity * item.unitPrice, item.details],
+    );
+  }
+}
+
+
+class InventoryStockError extends Error {
+  constructor() {
+    super("insufficient_stock");
+    this.name = "InventoryStockError";
+  }
+}
+
+/**
+ * Deduct only explicitly catalog-linked items. The order, stock update, ledger
+ * movement and sync receipt share one PostgreSQL transaction, so failed/retried
+ * offline sync cannot leave stock and order state out of step.
+ */
+async function deductInventoryForCompletedOrder(
+  client: PoolClient,
+  tenantId: string,
+  outletId: string,
+  globalOrderId: string,
+  clientOrderId: string,
+  actorUserId: string,
+  snapshot: z.infer<typeof snapshotSchema>,
+): Promise<void> {
+  const quantities = new Map<string, number>();
+  for (const item of snapshot.items) {
+    if (item.productId) {
+      quantities.set(item.productId, (quantities.get(item.productId) ?? 0) + item.quantity);
+    }
+  }
+
+  for (const [productId, quantity] of [...quantities.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const stockResult = await client.query<{
+      id: string;
+      average_unit_cost: string;
+    }>(
+      "SELECT id::text AS id, average_unit_cost::text FROM inventory_items " +
+        "WHERE tenant_id = $1 AND outlet_id = $2 AND product_id = $3 AND is_active = true FOR UPDATE",
+      [tenantId, outletId, productId],
+    );
+    const stock = stockResult.rows[0];
+    // A catalog product may intentionally be non-stock-tracked. Only linked
+    // inventory_items participate in stock enforcement.
+    if (!stock) continue;
+
+    const updated = await client.query(
+      "UPDATE inventory_items SET quantity_on_hand = quantity_on_hand - $1, updated_at = now() " +
+        "WHERE id = $2 AND tenant_id = $3 AND outlet_id = $4 AND is_active = true " +
+        "AND quantity_on_hand >= $1",
+      [quantity, stock.id, tenantId, outletId],
+    );
+    if (!updated.rowCount) throw new InventoryStockError();
+
+    const idempotencyKey = "pos-sale:" + globalOrderId + ":" + productId;
+    const movementPayload = {
+      outletId, inventoryItemId: stock.id, movementType: "sale",
+      quantityDelta: -quantity, sourceType: "order", sourceId: globalOrderId,
+    };
+    await client.query(
+      "INSERT INTO inventory_movements " +
+        "(tenant_id, outlet_id, inventory_item_id, movement_type, quantity_delta, unit_cost, source_type, source_id, idempotency_key, actor_user_id, note, payload_hash) " +
+        "VALUES ($1, $2, $3, 'sale', $4, $5, 'order', $6, $7, $8, $9, $10)",
+      [tenantId, outletId, stock.id, -quantity, Number(stock.average_unit_cost), globalOrderId,
+       idempotencyKey, actorUserId, "POS sale " + clientOrderId, hashPayload(movementPayload)],
+    );
+    await client.query(
+      "INSERT INTO audit_logs (tenant_id, outlet_id, actor_user_id, action, resource_type, resource_id, changes) " +
+        "VALUES ($1, $2, $3, 'inventory.sale', 'inventory_item', $4, $5::jsonb)",
+      [tenantId, outletId, actorUserId, stock.id, JSON.stringify({
+        orderId: clientOrderId, globalOrderId, productId, quantity, quantityDelta: -quantity,
+      })],
     );
   }
 }
@@ -360,6 +435,7 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
       let serverVersion: number;
       let authoritativePaymentStatus = "unpaid";
       let sanitizedSnapshot: Record<string, unknown>;
+      let shouldDeductInventory = false;
 
       if (event.eventType === "order.created" || event.eventType === "order.recovered") {
         if (event.eventType === "order.recovered" && scope.role !== "owner") {
@@ -412,6 +488,7 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
         globalOrderId = orderResult.rows[0]!.id;
         serverVersion = orderResult.rows[0]!.version;
         await insertOrderItems(client, request.user.tenantId, event.outletId, globalOrderId, event.orderSnapshot);
+        shouldDeductInventory = event.orderSnapshot.status === "completed";
         if (reportedCashPayment) {
           const paymentReport = await client.query<{ id: string }>(
             "INSERT INTO payments (tenant_id, outlet_id, order_id, method, amount, status, idempotency_key, actor_user_id) " +
@@ -554,6 +631,7 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
         serverVersion = updated.rows[0]!.version;
         await client.query("DELETE FROM order_items WHERE tenant_id = $1 AND order_id = $2", [request.user.tenantId, globalOrderId]);
         await insertOrderItems(client, request.user.tenantId, event.outletId, globalOrderId, event.orderSnapshot);
+        shouldDeductInventory = current.status !== "completed" && event.orderSnapshot.status === "completed";
         if (current.payment_status === "unpaid" && reportedCashPayment) {
           await client.query(
             "INSERT INTO payments (tenant_id, outlet_id, order_id, method, amount, status, idempotency_key, actor_user_id) " +
@@ -565,6 +643,13 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
         if (bonSale) {
           await persistBonReceivable(client, request.user.tenantId, event.outletId, globalOrderId, event.orderSnapshot);
         }
+      }
+
+      if (shouldDeductInventory) {
+        await deductInventoryForCompletedOrder(
+          client, request.user.tenantId, event.outletId, globalOrderId!,
+          event.orderId, request.user.sub, event.orderSnapshot,
+        );
       }
 
       const safeEventPayload = {
@@ -641,6 +726,9 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
       return reply.code(201).send(responseBody);
     } catch (error) {
       if (inTransaction) await client.query("ROLLBACK").catch(() => undefined);
+      if (error instanceof InventoryStockError) {
+        return reply.code(409).send({ error: "insufficient_stock" });
+      }
       app.log.error({ err: error }, "Sync event rejected by server");
       return reply.code(500).send({ error: "internal_error" });
     } finally {
