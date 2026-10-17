@@ -7,6 +7,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'order_models.dart';
 
+Map<String, dynamic> _freezeJsonMap(Map<String, dynamic> source) {
+  dynamic freeze(dynamic value) {
+    if (value is Map) {
+      return Map<String, dynamic>.unmodifiable(
+        value.map((key, nested) => MapEntry(key.toString(), freeze(nested))),
+      );
+    }
+    if (value is List) return List<dynamic>.unmodifiable(value.map(freeze));
+    return value;
+  }
+  return freeze(source) as Map<String, dynamic>;
+}
+
 enum FirefaSyncStatus { pending, syncing, synced, failed, conflict }
 
 class FirefaSyncEntry {
@@ -26,11 +39,11 @@ class FirefaSyncEntry {
     required this.orderId,
     required this.eventType,
     required this.createdAt,
-    required this.orderSnapshot,
+    required Map<String, dynamic> orderSnapshot,
     this.status = FirefaSyncStatus.pending,
     this.attempts = 0,
     this.nextAttemptAt,
-  });
+  }) : orderSnapshot = _freezeJsonMap(orderSnapshot);
 
   Map<String, dynamic> toJson() => {
     'eventId': eventId,
@@ -71,37 +84,53 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
   int _nextSequence = 1;
   final Random _random = Random.secure();
   Future<void> _pendingSave = Future<void>.value();
+  Future<void>? _initializing;
 
-  Future<void> initialize() async {
-    if (_initialized) return;
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_storageKey);
-    var recoveredInterruptedSend = false;
-    if (raw != null && raw.isNotEmpty) {
-      final decoded = Map<String, dynamic>.from(jsonDecode(raw) as Map);
-      _nextSequence = decoded['nextSequence'] as int;
-      _entries
-        ..clear()
-        ..addAll((decoded['entries'] as List).map(
+  Future<void> initialize() {
+    if (_initialized) return _initializing ?? Future<void>.value();
+    return _initializing ??= _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_storageKey);
+      var nextSequence = 1;
+      var restored = <FirefaSyncEntry>[];
+      var recoveredInterruptedSend = false;
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+        validateCombinedSnapshot(decoded);
+        nextSequence = decoded['nextSequence'] as int;
+        restored = (decoded['entries'] as List).map(
           (value) => FirefaSyncEntry.fromJson(
             Map<String, dynamic>.from(value as Map),
           ),
-        ));
-      // Interrupted sends must be retried after a future backend exists.
-      for (final entry in _entries) {
-        if (entry.status == FirefaSyncStatus.syncing) {
-          entry.status = FirefaSyncStatus.pending;
-          entry.nextAttemptAt = null;
-          recoveredInterruptedSend = true;
+        ).toList();
+        // Interrupted sends must be retried after a future backend exists.
+        for (final entry in restored) {
+          if (entry.status == FirefaSyncStatus.syncing) {
+            entry.status = FirefaSyncStatus.pending;
+            entry.nextAttemptAt = null;
+            recoveredInterruptedSend = true;
+          }
         }
       }
+      _entries..clear()..addAll(restored);
+      _nextSequence = nextSequence;
+      _initialized = true;
+      if (recoveredInterruptedSend) {
+        _scheduleSave();
+        await waitForPendingSave();
+      }
+      notifyListeners();
+    } catch (_) {
+      _entries.clear();
+      _nextSequence = 1;
+      _initialized = false;
+      _initializing = null;
+      rethrow;
     }
-    _initialized = true;
-    if (recoveredInterruptedSend) {
-      _scheduleSave();
-      await waitForPendingSave();
-    }
-    notifyListeners();
   }
 
   void _ensureInitialized() {
@@ -125,6 +154,9 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
   /// The future backend must still enforce idempotency on eventId.
   FirefaSyncEntry enqueueOrder(FirefaOrder order, String eventType) {
     _ensureInitialized();
+    if (order.outletId.trim().isEmpty || order.id.trim().isEmpty || eventType.trim().isEmpty) {
+      throw ArgumentError('Identitas outlet, order, dan event wajib diisi.');
+    }
     final sequence = _nextSequence++;
     final bytes = List<int>.generate(16, (_) => _random.nextInt(256));
     final nonce = bytes.map((value) => value.toRadixString(16).padLeft(2, '0')).join();
@@ -183,6 +215,11 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     if (entry == null) return;
     final previous = entry.status;
     final previousNextAttemptAt = entry.nextAttemptAt;
+    if (previous == FirefaSyncStatus.failed ||
+        previous == FirefaSyncStatus.synced ||
+        previous == FirefaSyncStatus.conflict) {
+      throw StateError('Event terminal tidak dapat kembali ke pending tanpa aksi eksplisit.');
+    }
     if (previous == FirefaSyncStatus.pending && retryDelay == null) return;
     entry.status = FirefaSyncStatus.pending;
     entry.nextAttemptAt = retryDelay == null
@@ -320,7 +357,8 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     for (final order in orders) {
       FirefaSyncEntry? latest;
       for (final entry in _entries) {
-        if (entry.outletId == order.outletId && entry.orderId == order.id) {
+        if (entry.outletId == order.outletId && entry.orderId == order.id &&
+            (latest == null || entry.createdAt.isAfter(latest.createdAt))) {
           latest = entry;
         }
       }
