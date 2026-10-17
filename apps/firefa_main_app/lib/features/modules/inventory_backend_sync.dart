@@ -82,8 +82,8 @@ class FirefaInventoryBackendSync {
   }) async {
     try {
       if (!FirefaBackendConfig.isConfigured) return true;
-      await store.initialize();
-      final saleMovements = store.historyForOutlet(localOutletId)
+      await FirefaInventoryStore.instance.initialize();
+      final saleMovements = FirefaInventoryStore.instance.historyForOutlet(localOutletId)
           .where((movement) => movement.note == 'POS order $orderId')
           .toList();
       if (saleMovements.isEmpty) return false;
