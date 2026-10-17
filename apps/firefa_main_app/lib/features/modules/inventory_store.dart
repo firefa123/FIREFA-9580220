@@ -427,10 +427,12 @@ class FirefaInventoryStore extends ChangeNotifier {
         final outletId = intent['outletId'];
         final orderId = intent['orderId'];
         final lines = intent['menuLines'];
+        final ingredientQuantities = intent['ingredientQuantities'];
         if (outletId is! String || outletId.trim().isEmpty ||
             orderId is! String || orderId.trim().isEmpty ||
             entry.key != jsonEncode([outletId, orderId]) ||
-            lines is! List || lines.isEmpty) {
+            lines is! List || lines.isEmpty ||
+            ingredientQuantities is! Map) {
           throw const FormatException('Jurnal pemakaian stok tidak valid.');
         }
         for (final rawLine in lines) {
@@ -444,6 +446,12 @@ class FirefaInventoryStore extends ChangeNotifier {
               (line['quantity'] as int) < 1 ||
               (line['quantity'] as int) > 999999999) {
             throw const FormatException('Baris jurnal pemakaian stok tidak valid.');
+          }
+        }
+        for (final entry in Map<String, dynamic>.from(ingredientQuantities).entries) {
+          if (entry.key.trim().isEmpty || entry.value is! int ||
+              (entry.value as int) < 1 || (entry.value as int) > 999999999) {
+            throw const FormatException('Kuantitas bahan pada jurnal stok tidak valid.');
           }
         }
       }
@@ -718,9 +726,25 @@ class FirefaInventoryStore extends ChangeNotifier {
       'menuId': line.menuId,
       'quantity': line.quantity,
     }).toList();
+    final requiredIngredients = <String, int>{};
+    for (final menu in menuLines) {
+      for (final recipe in _recipes.where((line) =>
+          line.outletId == outletId && line.menuId == menu.menuId)) {
+        final quantity = recipe.quantity * menu.quantity;
+        final current = requiredIngredients[recipe.ingredientId] ?? 0;
+        if (current > 999999999 - quantity) {
+          throw StateError('Total kebutuhan bahan melebihi batas.');
+        }
+        requiredIngredients[recipe.ingredientId] = current + quantity;
+      }
+    }
+    final serializedIngredients = <String, int>{
+      for (final entry in requiredIngredients.entries) entry.key: entry.value,
+    };
     final existing = _pendingOrderConsumptions[key];
     if (existing != null) {
-      if (jsonEncode(existing['menuLines']) != jsonEncode(serializedLines)) {
+      if (jsonEncode(existing['menuLines']) != jsonEncode(serializedLines) ||
+          jsonEncode(existing['ingredientQuantities']) != jsonEncode(serializedIngredients)) {
         throw StateError('Intent pemakaian stok order memiliki payload berbeda.');
       }
       return true;
@@ -729,6 +753,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       'orderId': orderId,
       'outletId': outletId,
       'menuLines': serializedLines,
+      'ingredientQuantities': serializedIngredients,
     };
     notifyListeners();
     _save();
@@ -810,13 +835,13 @@ class FirefaInventoryStore extends ChangeNotifier {
     }
     if (_containsOrderMarker(_processedOrderIds, outletId, orderId,
         legacyNote: 'POS order $orderId')) return false;
-    if (!validateOrderStock(outletId: outletId, menuLines: menuLines)) return false;
     final intentKey = _orderStockKey(outletId, orderId);
     final preparedIntent = _pendingOrderConsumptions[intentKey];
+    final requiredQuantities = <String, int>{};
     if (preparedIntent != null) {
-      final expectedLines = (preparedIntent['menuLines'] as List).map((value) => {
-        'menuId': (value as Map)['menuId'],
-        'quantity': value['quantity'],
+      final expectedLines = (preparedIntent['menuLines'] as List).map((value) {
+        final line = Map<String, dynamic>.from(value as Map);
+        return {'menuId': line['menuId'], 'quantity': line['quantity']};
       }).toList();
       final suppliedLines = menuLines.map((line) => {
         'menuId': line.menuId, 'quantity': line.quantity,
@@ -824,18 +849,22 @@ class FirefaInventoryStore extends ChangeNotifier {
       if (jsonEncode(expectedLines) != jsonEncode(suppliedLines)) {
         throw StateError('Kuantitas checkout berbeda dari intent stok yang tersimpan.');
       }
-    }
-
-    final requiredQuantities = <String, int>{};
-    final recipes = _recipes.where((line) => line.outletId == outletId).toList();
-    for (final menu in menuLines) {
-      for (final line in recipes.where((line) => line.menuId == menu.menuId)) {
-        final needed = line.quantity * menu.quantity;
-        final current = requiredQuantities[line.ingredientId] ?? 0;
-        if (current > 999999999 - needed) {
-          throw StateError('Total kebutuhan bahan melebihi batas.');
+      requiredQuantities.addAll(Map<String, int>.from(
+        Map<String, dynamic>.from(preparedIntent['ingredientQuantities'] as Map)
+            .map((key, value) => MapEntry(key, value as int)),
+      ));
+    } else {
+      if (!validateOrderStock(outletId: outletId, menuLines: menuLines)) return false;
+      final recipes = _recipes.where((line) => line.outletId == outletId).toList();
+      for (final menu in menuLines) {
+        for (final line in recipes.where((line) => line.menuId == menu.menuId)) {
+          final needed = line.quantity * menu.quantity;
+          final current = requiredQuantities[line.ingredientId] ?? 0;
+          if (current > 999999999 - needed) {
+            throw StateError('Total kebutuhan bahan melebihi batas.');
+          }
+          requiredQuantities[line.ingredientId] = current + needed;
         }
-        requiredQuantities[line.ingredientId] = current + needed;
       }
     }
     for (final entry in requiredQuantities.entries) {
