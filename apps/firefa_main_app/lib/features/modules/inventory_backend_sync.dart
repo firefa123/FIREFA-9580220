@@ -11,6 +11,7 @@ import 'inventory_store.dart';
 import 'firefa_http_sync_adapter.dart';
 import 'offline_sync_queue.dart';
 import 'order_store.dart';
+import 'order_models.dart';
 
 class FirefaInventorySyncResult {
   final int attempted;
@@ -153,8 +154,12 @@ class FirefaInventoryBackendSync {
         final order = FirefaOrderStore.instance.findOrder(localOutletId, posOrderId);
         final orderEvents = FirefaOfflineSyncQueue.instance.entriesForOutlet(localOutletId)
             .where((entry) => entry.orderId == posOrderId).toList();
+        final cancellationEventSynced = orderEvents.any((entry) =>
+            entry.status == FirefaSyncStatus.synced &&
+            entry.eventType == 'order.updated' &&
+            entry.orderSnapshot['status'] == 'cancelled');
         if (order != null && order.status == FirefaOrderStatus.cancelled &&
-            orderEvents.isNotEmpty &&
+            cancellationEventSynced &&
             orderEvents.every((entry) => entry.status == FirefaSyncStatus.synced)) {
           final saleMovementId = movements.where((candidate) =>
               candidate.note == 'POS order $posOrderId')
@@ -181,6 +186,12 @@ class FirefaInventoryBackendSync {
             await prefs.setStringList(blockedKey, blocked.toList());
             continue;
           }
+        }
+        if (order != null && order.status == FirefaOrderStatus.cancelled &&
+            !cancellationEventSynced && (isPosSale || isPosReversal)) {
+          pausedItemIds.add(movement.itemId);
+          errors.add('${movement.id}: menunggu pembatalan pesanan $posOrderId terkonfirmasi server');
+          continue;
         }
         if (orderEvents.any((entry) => entry.status != FirefaSyncStatus.synced)) {
           pausedItemIds.add(movement.itemId);
