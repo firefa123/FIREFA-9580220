@@ -34,6 +34,23 @@ const staffLoginInput = z.object({
   pin: z.string().regex(/^\d{6}$/),
 });
 const attendanceInput = z.object({ outletId: uuid, ...coordinates.shape });
+const checkInAttendanceInput = z.object({
+  ...attendanceInput.shape,
+  checkInPhotoBase64: z.string().min(8).max(800_000).regex(/^[A-Za-z0-9+/]+={0,2}$/),
+});
+const maxAttendancePhotoBytes = 600_000;
+
+function decodeAttendancePhoto(encoded: string): { bytes: Buffer; mimeType: string } | null {
+  const bytes = Buffer.from(encoded, 'base64');
+  if (bytes.length === 0 || bytes.length > maxAttendancePhotoBytes) return null;
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return { bytes, mimeType: 'image/jpeg' };
+  }
+  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+    return { bytes, mimeType: 'image/png' };
+  }
+  return null;
+}
 
 function invalid(reply: FastifyReply) {
   return reply.code(400).send({ error: "invalid_request" });
@@ -283,9 +300,11 @@ export const staffAttendanceRoutes: FastifyPluginAsync<StaffAttendanceOptions> =
       try { await request.jwtVerify(); } catch { return reply.code(401).send({ error: "unauthorized" }); }
     },
   }, async (request, reply) => {
-    const parsed = attendanceInput.safeParse(request.body);
+    const parsed = checkInAttendanceInput.safeParse(request.body);
     if (!parsed.success) return invalid(reply);
     const input = parsed.data;
+    const photo = decodeAttendancePhoto(input.checkInPhotoBase64);
+    if (!photo) return reply.code(400).send({ error: "invalid_attendance_photo" });
     if (!requestStaffRole(request, input.outletId)) return reply.code(403).send({ error: "staff_session_required" });
     const client = await options.pool.connect();
     try {
@@ -333,18 +352,18 @@ export const staffAttendanceRoutes: FastifyPluginAsync<StaffAttendanceOptions> =
       const late = lateMinutes(staff.rows[0]!.expected_start_time, now, outlet.timezone);
       const result = await client.query(
         "INSERT INTO staff_attendance (tenant_id, outlet_id, staff_id, work_date, check_in_at, " +
-        "check_in_latitude, check_in_longitude, check_in_distance_m, late_minutes) " +
-        "VALUES ($1, $2, $3, $4::date, now(), $5, $6, $7, $8) " +
+        "check_in_latitude, check_in_longitude, check_in_distance_m, late_minutes, check_in_photo, check_in_photo_mime_type) " +
+        "VALUES ($1, $2, $3, $4::date, now(), $5, $6, $7, $8, $9, $10) " +
         "ON CONFLICT (tenant_id, outlet_id, staff_id, work_date) DO NOTHING " +
         "RETURNING id::text AS id, work_date::text AS \"workDate\", check_in_at AS \"checkInAt\", late_minutes AS \"lateMinutes\"",
-        [request.user.tenantId, input.outletId, request.user.sub, workDate, input.latitude, input.longitude, distance, late],
+        [request.user.tenantId, input.outletId, request.user.sub, workDate, input.latitude, input.longitude, distance, late, photo.bytes, photo.mimeType],
       );
       if (!result.rowCount) {
         await client.query("ROLLBACK");
         return reply.code(409).send({ error: "already_checked_in_today" });
       }
       await client.query("COMMIT");
-      return reply.code(201).send({ attendance: result.rows[0] });
+      return reply.code(201).send({ attendance: { ...result.rows[0], checkInPhotoCaptured: true } });
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw error;
@@ -390,6 +409,29 @@ export const staffAttendanceRoutes: FastifyPluginAsync<StaffAttendanceOptions> =
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw error;
+    } finally { client.release(); }
+  });
+
+  app.get("/attendance/:attendanceId/photo", {
+    preHandler: async (request, reply) => {
+      try { await request.jwtVerify(); } catch { return reply.code(401).send({ error: "unauthorized" }); }
+    },
+  }, async (request, reply) => {
+    if (request.user.role !== "owner") return reply.code(403).send({ error: "owner_required" });
+    const params = z.object({ attendanceId: uuid }).safeParse(request.params);
+    if (!params.success) return invalid(reply);
+    const client = await options.pool.connect();
+    try {
+      const result = await client.query<{ outlet_id: string; photo: Buffer | null; mime_type: string | null }>(
+        "SELECT outlet_id::text AS outlet_id, check_in_photo AS photo, check_in_photo_mime_type AS mime_type " +
+        "FROM staff_attendance WHERE id = $1 AND tenant_id = $2",
+        [params.data.attendanceId, request.user.tenantId],
+      );
+      const attendance = result.rows[0];
+      if (!attendance?.photo || !attendance.mime_type) return reply.code(404).send({ error: "attendance_photo_not_found" });
+      const role = await outletRole(client, request.user.sub, request.user.tenantId, attendance.outlet_id);
+      if (role !== "owner") return reply.code(403).send({ error: "owner_required" });
+      return reply.header("cache-control", "no-store").type(attendance.mime_type).send(attendance.photo);
     } finally { client.release(); }
   });
 
