@@ -746,6 +746,19 @@ class _OrdersPageState extends State<OrdersPage> {
             icon: const Icon(Icons.sync),
             label: const Text('Sinkronkan Sekarang'),
           ),
+          OutlinedButton.icon(
+            onPressed: cloudConfigured && count(FirefaSyncStatus.failed) > 0 ? () async {
+              final retried = await syncQueue.retryFailedForOutlet(outletId);
+              await FirefaSyncWorker.instance.start();
+              await FirefaSyncWorker.instance.syncNow();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('$retried event gagal dikembalikan ke antrean. Periksa status hasil sinkronisasi.'),
+              ));
+            } : null,
+            icon: const Icon(Icons.refresh),
+            label: Text('Coba Ulang Gagal (${count(FirefaSyncStatus.failed)})'),
+          ),
           const SizedBox(height: 14),
           Wrap(
             spacing: 8,
