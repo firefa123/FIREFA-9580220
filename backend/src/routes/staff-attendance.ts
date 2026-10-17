@@ -412,6 +412,32 @@ export const staffAttendanceRoutes: FastifyPluginAsync<StaffAttendanceOptions> =
     } finally { client.release(); }
   });
 
+  app.get("/attendance", {
+    preHandler: async (request, reply) => {
+      try { await request.jwtVerify(); } catch { return reply.code(401).send({ error: "unauthorized" }); }
+    },
+  }, async (request, reply) => {
+    if (request.user.role !== "owner") return reply.code(403).send({ error: "owner_required" });
+    const parsed = uuid.safeParse((request.query as { outletId?: string }).outletId);
+    if (!parsed.success) return invalid(reply);
+    const client = await options.pool.connect();
+    try {
+      const role = await authorizeOwnerOutlet(client, request.user.sub, request.user.tenantId, parsed.data);
+      if (role !== "ok") return reply.code(403).send({ error: role === "forbidden" ? "outlet_forbidden" : "owner_required" });
+      const result = await client.query(
+        "SELECT sa.id::text AS id, sa.work_date::text AS \"workDate\", " +
+        "sa.check_in_at AS \"checkInAt\", sa.check_out_at AS \"checkOutAt\", " +
+        "sa.late_minutes AS \"lateMinutes\", (sa.check_in_photo IS NOT NULL) AS \"hasCheckInPhoto\", " +
+        "sm.staff_code AS \"staffCode\", sm.display_name AS \"displayName\" " +
+        "FROM staff_attendance sa JOIN staff_members sm ON sm.id = sa.staff_id AND sm.tenant_id = sa.tenant_id " +
+        "WHERE sa.tenant_id = $1 AND sa.outlet_id = $2 " +
+        "ORDER BY sa.work_date DESC, sa.check_in_at DESC LIMIT 100",
+        [request.user.tenantId, parsed.data],
+      );
+      return { attendance: result.rows };
+    } finally { client.release(); }
+  });
+
   app.get("/attendance/:attendanceId/photo", {
     preHandler: async (request, reply) => {
       try { await request.jwtVerify(); } catch { return reply.code(401).send({ error: "unauthorized" }); }
