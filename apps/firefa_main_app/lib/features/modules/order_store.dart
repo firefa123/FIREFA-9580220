@@ -217,7 +217,10 @@ class FirefaOrderStore extends ChangeNotifier {
     final restoredOutbox = Map<String, dynamic>.from(rawOutbox);
 
     // Parse both sides completely before mutating active local state.
-    FirefaOfflineSyncQueue.instance.restoreCombinedSnapshot(restoredOutbox);
+    FirefaOfflineSyncQueue.instance.restoreCombinedSnapshot(
+      restoredOutbox,
+      mergeOutbox: false,
+    );
 
     _orders
       ..clear()
