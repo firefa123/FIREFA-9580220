@@ -136,7 +136,7 @@ class InventoryStore extends ChangeNotifier {
           if (movement.type == 'transfer_in' || movement.type == 'transfer_out') {
             final pairOutlet = movement.referenceOutletId!;
             if (stockByKey['${movement.outletId}::${movement.itemId}'] == null ||
-                stockByKey['${pairOutlet}::${movement.itemId}'] == null) {
+                stockByKey['$pairOutlet::${movement.itemId}'] == null) {
               throw const FormatException('Transfer mengacu ke saldo stok yang tidak tersedia.');
             }
           }
