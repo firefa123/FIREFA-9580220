@@ -323,6 +323,7 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (app
         await client.query("ROLLBACK");
         return reply.code(403).send({ error: role ? "owner_required" : "outlet_forbidden" });
       }
+      let linkedOrderStatus: string | null = null;
       if (isPosMovement) {
         const orderResult = await client.query<{ status: string }>(
           "SELECT status FROM orders WHERE id = $1 AND tenant_id = $2 AND outlet_id = $3 AND device_id = $4 FOR SHARE",
@@ -333,14 +334,7 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (app
           await client.query("ROLLBACK");
           return reply.code(409).send({ error: "pos_order_not_synced" });
         }
-        if (isPosSale && linkedOrder.status === "cancelled") {
-          await client.query("ROLLBACK");
-          return reply.code(409).send({ error: "pos_order_cancelled" });
-        }
-        if (isPosReversal && linkedOrder.status !== "cancelled") {
-          await client.query("ROLLBACK");
-          return reply.code(409).send({ error: "pos_order_not_cancelled" });
-        }
+        linkedOrderStatus = linkedOrder.status;
       }
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
         request.user.tenantId + ":" + input.outletId + ":" + idempotencyKey,
@@ -438,6 +432,15 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (app
             return reply.code(409).send({ error: "pos_sale_not_found_for_reversal" });
           }
         }
+      }
+
+      if (isPosSale && linkedOrderStatus === "cancelled") {
+        await client.query("ROLLBACK");
+        return reply.code(409).send({ error: "pos_order_cancelled" });
+      }
+      if (isPosReversal && linkedOrderStatus !== "cancelled") {
+        await client.query("ROLLBACK");
+        return reply.code(409).send({ error: "pos_order_not_cancelled" });
       }
 
       const updated = await client.query<{ id: string; quantity_on_hand: string }>(
