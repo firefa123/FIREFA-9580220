@@ -21,8 +21,13 @@ CREATE TABLE menu_categories (
   UNIQUE (id, tenant_id, outlet_id)
 );
 
-CREATE UNIQUE INDEX menu_categories_name_unique
-  ON menu_categories (tenant_id, COALESCE(outlet_id, '00000000-0000-0000-0000-000000000000'::uuid), lower(name));
+CREATE UNIQUE INDEX menu_categories_global_name_unique
+  ON menu_categories (tenant_id, lower(name))
+  WHERE outlet_id IS NULL;
+
+CREATE UNIQUE INDEX menu_categories_outlet_name_unique
+  ON menu_categories (tenant_id, outlet_id, lower(name))
+  WHERE outlet_id IS NOT NULL;
 
 CREATE TABLE products (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
