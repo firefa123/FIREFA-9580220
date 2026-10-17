@@ -1456,6 +1456,28 @@ authSuite("authentication endpoints", () => {
     expect(ownerPhoto.headers["content-type"]).toContain("image/jpeg");
     expect(ownerPhoto.rawPayload).toEqual(Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
 
+    const ownerHistory = await ownerApp.inject({
+      method: "GET", url: "/api/v1/attendance?outletId=" + outletId,
+      headers: ownerHeaders,
+    });
+    expect(ownerHistory.statusCode).toBe(200);
+    expect(ownerHistory.json().attendance).toEqual([
+      expect.objectContaining({
+        id: attendanceId,
+        staffCode: "PHOTO-STAFF",
+        displayName: "Photo Staff",
+        hasCheckInPhoto: true,
+      }),
+    ]);
+
+    const cashier = await createCashierSession(ownerApp, owner);
+    const cashierHistory = await ownerApp.inject({
+      method: "GET", url: "/api/v1/attendance?outletId=" + outletId,
+      headers: { authorization: "Bearer " + cashier.accessToken },
+    });
+    expect(cashierHistory.statusCode).toBe(403);
+    expect(cashierHistory.json()).toEqual({ error: "owner_required" });
+
     const staffPhoto = await ownerApp.inject({
       method: "GET", url: "/api/v1/attendance/" + attendanceId + "/photo",
       headers: { authorization: "Bearer " + staffToken },
