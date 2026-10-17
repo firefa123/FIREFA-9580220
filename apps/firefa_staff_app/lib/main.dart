@@ -188,10 +188,11 @@ class _StaffShellState extends State<StaffShell> {
             title: Text('Pengingat shift'),
             subtitle: Text('Selesaikan tugas awal shift sebelum operasional ramai.'),
           )),
-          const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: Text('Mode demo: belum terhubung ke server atau akun outlet.', style: TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-          ),
+          if (!_backendEnabled)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text('Mode demo: belum terhubung ke server atau akun outlet.', style: TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+            ),
         ],
       );
 
@@ -217,11 +218,12 @@ class _StaffShellState extends State<StaffShell> {
           ]),
         )),
         const Card(child: Column(children: [
-          ListTile(leading: Icon(Icons.event_outlined), title: Text('Jadwal hari ini'), subtitle: Text('Jadwal resmi belum disinkronkan')),
+          ListTile(leading: Icon(Icons.event_outlined), title: Text('Jadwal hari ini'), subtitle: Text(_backendEnabled ? 'Absensi fleksibel; check-in saat siap bertugas' : 'Jadwal resmi belum disinkronkan')),
           Divider(height: 1),
-          ListTile(leading: Icon(Icons.history_rounded), title: Text('Riwayat kehadiran'), subtitle: Text('Tersedia setelah integrasi data')),
+          ListTile(leading: Icon(Icons.history_rounded), title: Text('Riwayat kehadiran'), subtitle: Text(_backendEnabled ? 'Status terbaru dimuat dari server' : 'Tersedia setelah integrasi data')),
         ])),
-        const Padding(padding: EdgeInsets.only(top: 8), child: Text('Check-in/check-out masih berupa simulasi lokal.', style: TextStyle(color: Color(0xFF64748B), fontSize: 12))),
+        if (!_backendEnabled)
+          const Padding(padding: EdgeInsets.only(top: 8), child: Text('Check-in/check-out masih berupa simulasi lokal.', style: TextStyle(color: Color(0xFF64748B), fontSize: 12))),
       ]);
 
   Widget _taskList() => ListView(padding: const EdgeInsets.all(20), children: [
