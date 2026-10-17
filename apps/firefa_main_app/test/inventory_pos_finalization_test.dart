@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:firefa_main_app/features/modules/inventory_store.dart';
 import 'package:firefa_main_app/features/modules/inventory_hybrid_sync.dart';
+import 'package:firefa_main_app/features/modules/order_models.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -47,6 +48,50 @@ void main() {
       menuLines: [(menuId: 'coffee', quantity: 2)],
     ), isFalse);
     expect(reopened.forOutlet('outlet-a').single.stock, 76);
+  });
+
+  test('startup recovers stock deduction after an interrupted checkout', () async {
+    inventory.add(
+      outletId: 'outlet-recovery', name: 'Recovery flour', unit: 'gram',
+      stock: 100, minimumStock: 1,
+    );
+    final ingredient = inventory.forOutlet('outlet-recovery').single;
+    inventory.addRecipeLine(
+      outletId: 'outlet-recovery', menuId: 'recovery-bread',
+      ingredientId: ingredient.id, quantity: 20,
+    );
+    await inventory.waitForPendingSave();
+
+    const orderId = 'ORD-RECOVERY-1';
+    expect(await inventory.prepareOrderStockConsumption(
+      orderId: orderId, outletId: 'outlet-recovery',
+      menuLines: [(menuId: 'recovery-bread', quantity: 2)],
+    ), isTrue);
+
+    final order = FirefaOrder(
+      id: orderId,
+      outletId: 'outlet-recovery',
+      orderType: 'Take Away',
+      tableId: null,
+      createdAt: DateTime.utc(2026, 10, 17),
+      items: const [FirefaOrderItem(
+        productName: 'Recovery bread', productId: 'recovery-bread',
+        quantity: 2, unitPrice: 1000,
+      )],
+      subtotal: 2000, discount: 0, tax: 0, service: 0, total: 2000,
+    );
+
+    // Simulate a new process after the order snapshot is durable but before
+    // consumeOrderStock is called.
+    final reopened = FirefaInventoryStore.forTesting();
+    await reopened.initialize();
+    expect(reopened.forOutlet('outlet-recovery').single.stock, 100);
+    expect(await reopened.recoverPendingOrderStock([order]), 1);
+    expect(reopened.forOutlet('outlet-recovery').single.stock, 60);
+    expect(await reopened.recoverPendingOrderStock([order]), 0);
+    expect(reopened.forOutlet('outlet-recovery').single.stock, 60);
+    expect(reopened.isOrderStockProcessed(orderId, outletId: 'outlet-recovery'), isTrue);
+    await reopened.waitForPendingSave();
   });
 
   test('cancellation restores exactly the original POS deduction once', () async {
