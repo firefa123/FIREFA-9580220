@@ -282,6 +282,9 @@ class FirefaInventoryBackendSync {
           sourceId = globalOrderId;
           sourceDeviceId = orderDeviceId;
         }
+        final devicePayload = sourceDeviceId == null
+            ? null
+            : <String, dynamic>{'deviceId': sourceDeviceId};
         final payload = <String, dynamic>{
           'outletId': serverOutletId,
           'inventoryItemId': serverItemId,
@@ -293,7 +296,7 @@ class FirefaInventoryBackendSync {
               .firstOrNull ?? 0,
           'sourceType': sourceType,
           'sourceId': sourceId,
-          if (sourceDeviceId != null) 'deviceId': sourceDeviceId,
+          ...?devicePayload,
           'note': movement.note,
         };
         final idempotencyKey = 'inventory:$deviceId:${movement.id}';
