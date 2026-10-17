@@ -594,7 +594,7 @@ class _InventoryPageState extends State<InventoryPage> {
     );
     if (!mounted || confirmed != true || !allowed ||
         sourceOutlet != outlet.selectedOutletId) { return; }
-    final ok = store.resolveOpname(outletId: sourceOutlet,
+    final ok = await store.resolveOpname(outletId: sourceOutlet,
       opnameId: record.id, approve: approve);
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
