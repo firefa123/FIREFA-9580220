@@ -8,6 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/auth/role_permissions.dart';
 import 'backend_client.dart';
 import 'inventory_store.dart';
+import 'firefa_http_sync_adapter.dart';
+import 'offline_sync_queue.dart';
+import 'order_store.dart';
 
 class FirefaInventorySyncResult {
   final int attempted;
@@ -49,6 +52,7 @@ class FirefaInventoryBackendSync {
   static const _deviceKey = 'firefa_inventory_sync_device_v1';
   static const _sentPrefix = 'firefa_inventory_synced_movements_v1';
   static const _blockedPrefix = 'firefa_inventory_blocked_movements_v1';
+  static const _suppressedPrefix = 'firefa_inventory_suppressed_movements_v1';
 
   Future<String> _deviceId() async {
     final prefs = await SharedPreferences.getInstance();
@@ -124,7 +128,12 @@ class FirefaInventoryBackendSync {
     final sent = (prefs.getStringList(sentKey) ?? <String>[]).toSet();
     final blockedKey = '$_blockedPrefix:${session.tenantId.toLowerCase()}:${serverOutletId.toLowerCase()}:${deviceId.toLowerCase()}';
     final blocked = (prefs.getStringList(blockedKey) ?? <String>[]).toSet();
+    final suppressedKey = '$_suppressedPrefix:${session.tenantId.toLowerCase()}:${serverOutletId.toLowerCase()}:${deviceId.toLowerCase()}';
+    final suppressed = (prefs.getStringList(suppressedKey) ?? <String>[]).toSet();
     final movements = store.historyForOutlet(localOutletId).reversed.toList();
+    final orderDeviceId = await FirefaHttpSyncAdapter.installationDeviceId();
+    await FirefaOfflineSyncQueue.instance.initialize();
+    await FirefaOrderStore.instance.initialize();
     var attempted = 0;
     var acknowledged = 0;
     var failed = 0;
@@ -135,11 +144,55 @@ class FirefaInventoryBackendSync {
 
     for (final movement in movements) {
       if (sent.contains(movement.id)) continue;
+      if (pausedItemIds.contains(movement.itemId)) continue;
+
+      final posOrderId = _posOrderIdFromMovement(movement);
+      final isPosSale = movement.note.startsWith('POS order ');
+      final isPosReversal = movement.note.startsWith('Pembatalan POS order ');
+      if (posOrderId != null && (isPosSale || isPosReversal)) {
+        final order = FirefaOrderStore.instance.findOrder(localOutletId, posOrderId);
+        final orderEvents = FirefaOfflineSyncQueue.instance.entriesForOutlet(localOutletId)
+            .where((entry) => entry.orderId == posOrderId).toList();
+        if (order != null && order.status == FirefaOrderStatus.cancelled &&
+            orderEvents.isNotEmpty &&
+            orderEvents.every((entry) => entry.status == FirefaSyncStatus.synced)) {
+          final saleMovementId = movements.where((candidate) =>
+              candidate.note == 'POS order $posOrderId')
+              .map((candidate) => candidate.id).firstOrNull;
+          if (isPosSale && !sent.contains(movement.id)) {
+            // The order was cancelled before its local sale movement reached
+            // the server. Suppress both local deltas instead of applying a
+            // sale to an already-cancelled server order and blocking reversal.
+            sent.add(movement.id);
+            suppressed.add(movement.id);
+            blocked.remove(movement.id);
+            await prefs.setStringList(sentKey, sent.toList());
+            await prefs.setStringList(suppressedKey, suppressed.toList());
+            await prefs.setStringList(blockedKey, blocked.toList());
+            continue;
+          }
+          if (isPosReversal && saleMovementId != null &&
+              suppressed.contains(saleMovementId)) {
+            sent.add(movement.id);
+            suppressed.add(movement.id);
+            blocked.remove(movement.id);
+            await prefs.setStringList(sentKey, sent.toList());
+            await prefs.setStringList(suppressedKey, suppressed.toList());
+            await prefs.setStringList(blockedKey, blocked.toList());
+            continue;
+          }
+        }
+        if (orderEvents.any((entry) => entry.status != FirefaSyncStatus.synced)) {
+          pausedItemIds.add(movement.itemId);
+          errors.add('${movement.id}: menunggu event pesanan $posOrderId tersinkron sebelum stok dikirim');
+          continue;
+        }
+      }
+
       if (blocked.contains(movement.id)) {
         pausedItemIds.add(movement.itemId);
         continue;
       }
-      if (pausedItemIds.contains(movement.itemId)) continue;
       attempted++;
       try {
         final serverItemId = FirefaBackendConfig.resolveServerInventoryItemId(
@@ -156,6 +209,25 @@ class FirefaInventoryBackendSync {
         final movementType = movement.type == 'correction'
             ? 'adjustment'
             : delta > 0 ? 'receipt' : 'sale';
+        var sourceType = 'firefa_local_movement';
+        var sourceId = movement.id;
+        String? sourceDeviceId;
+        if (posOrderId != null && (isPosSale || isPosReversal)) {
+          final globalOrderId = await FirefaHttpSyncAdapter.serverOrderIdFor(
+            tenantId: session.tenantId,
+            serverOutletId: serverOutletId,
+            localOrderId: posOrderId,
+          );
+          if (globalOrderId == null) {
+            attempted--;
+            pausedItemIds.add(movement.itemId);
+            errors.add('${movement.id}: menunggu receipt pesanan $posOrderId untuk mendapatkan identitas server');
+            continue;
+          }
+          sourceType = isPosReversal ? 'pos_order_reversal' : 'pos_order';
+          sourceId = globalOrderId;
+          sourceDeviceId = orderDeviceId;
+        }
         final payload = <String, dynamic>{
           'outletId': serverOutletId,
           'inventoryItemId': serverItemId,
@@ -165,8 +237,9 @@ class FirefaInventoryBackendSync {
               .where((item) => item.id == movement.itemId)
               .map((item) => item.unitCost)
               .firstOrNull ?? 0,
-          'sourceType': 'firefa_local_movement',
-          'sourceId': movement.id,
+          'sourceType': sourceType,
+          'sourceId': sourceId,
+          if (sourceDeviceId != null) 'deviceId': sourceDeviceId,
           'note': movement.note,
         };
         final idempotencyKey = 'inventory:$deviceId:${movement.id}';
@@ -307,6 +380,20 @@ class FirefaInventoryBackendSync {
       }
     }
     return List.unmodifiable(differences);
+  }
+
+  String? _posOrderIdFromMovement(FirefaStockMovement movement) {
+    const salePrefix = 'POS order ';
+    const reversalPrefix = 'Pembatalan POS order ';
+    if (movement.note.startsWith(reversalPrefix)) {
+      final value = movement.note.substring(reversalPrefix.length).trim();
+      return value.isEmpty ? null : value;
+    }
+    if (movement.note.startsWith(salePrefix)) {
+      final value = movement.note.substring(salePrefix.length).trim();
+      return value.isEmpty ? null : value;
+    }
+    return null;
   }
 
   Map<String, dynamic>? _tryJson(String value) {
