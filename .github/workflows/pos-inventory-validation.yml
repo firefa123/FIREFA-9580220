@@ -1,0 +1,42 @@
+name: POS and Inventory Validation
+
+on:
+  push:
+    branches:
+      - development
+    paths:
+      - 'apps/firefa_main_app/**'
+      - '.github/workflows/pos-inventory-validation.yml'
+  pull_request:
+    branches:
+      - development
+    paths:
+      - 'apps/firefa_main_app/**'
+      - '.github/workflows/pos-inventory-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-main-app:
+    name: Validate POS and inventory
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/firefa_main_app
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Run complete test suite
+        run: flutter test
+      - name: Build production web app
+        run: flutter build web --release
