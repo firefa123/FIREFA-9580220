@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -44,6 +45,7 @@ class _StaffShellState extends State<StaffShell> {
   bool _checkedIn = false;
   bool _loading = true;
   final Set<int> _done = <int>{};
+  final ImagePicker _imagePicker = ImagePicker();
   final _staffCodeController = TextEditingController();
   final _pinController = TextEditingController();
   bool _apiBusy = false;
@@ -210,6 +212,11 @@ class _StaffShellState extends State<StaffShell> {
             const SizedBox(height: 8),
             Text(_backendEnabled ? (_checkedIn ? 'Waktu check-in tersimpan di server.' : 'Kamu bebas check-in saat siap bertugas; waktu dicatat server.') : (_checkedIn ? 'Status demo tercatat selama sesi aplikasi.' : 'Mulai shift ketika kamu siap bertugas.'), style: const TextStyle(color: Color(0xFF64748B))),
             const SizedBox(height: 18),
+            if (_backendEnabled && !_checkedIn)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text('Foto kamera wajib diambil sebelum check-in.', style: TextStyle(color: Color(0xFF64748B))),
+              ),
             SizedBox(width: double.infinity, child: FilledButton.icon(
               onPressed: _toggleShift,
               icon: Icon(_checkedIn ? Icons.logout_rounded : Icons.login_rounded),
@@ -401,6 +408,24 @@ class _StaffShellState extends State<StaffShell> {
     if (token == null || _apiBusy) return;
     setState(() => _apiBusy = true);
     try {
+      String? checkInPhotoBase64;
+      if (!_checkedIn) {
+        final photo = await _imagePicker.pickImage(
+          source: ImageSource.camera,
+          maxWidth: 1280,
+          maxHeight: 1280,
+          imageQuality: 70,
+        );
+        if (photo == null) {
+          _message('Check-in dibatalkan karena foto absensi wajib diambil.');
+          return;
+        }
+        final photoBytes = await photo.readAsBytes();
+        if (photoBytes.isEmpty || photoBytes.length > 600000) {
+          throw Exception('Foto terlalu besar. Ambil ulang foto dengan ukuran lebih kecil.');
+        }
+        checkInPhotoBase64 = base64Encode(photoBytes);
+      }
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -420,6 +445,7 @@ class _StaffShellState extends State<StaffShell> {
           'outletId': _configuredOutletId,
           'latitude': position.latitude,
           'longitude': position.longitude,
+          if (checkInPhotoBase64 != null) 'checkInPhotoBase64': checkInPhotoBase64,
         }),
       );
       final body = jsonDecode(response.body) as Map<String, dynamic>;
