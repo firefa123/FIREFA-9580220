@@ -168,6 +168,13 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
         final rawSnapshot = body['serverSnapshot'];
         if (rawSnapshot is Map) {
           final snapshot = Map<String, dynamic>.from(rawSnapshot);
+          final conflictServerVersion = body['serverVersion'];
+          if (conflictServerVersion is int && conflictServerVersion > 0) {
+            await prefs.setInt(versionKey, conflictServerVersion);
+          } else {
+            // Do not send future updates using a possibly stale version.
+            await prefs.remove(versionKey);
+          }
           final responseOutlet = body['serverOutletId'];
           final responseOrder = body['serverOrderId'];
           if (responseOutlet == serverOutletId &&
