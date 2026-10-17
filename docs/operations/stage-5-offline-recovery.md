@@ -10,6 +10,22 @@ The local preference store is not a transactional database. These journals prote
 
 **Deployment boundary:** the Fastify backend and PostgreSQL migration files exist in this repository, but no live staging host, provisioned database, or credentials were available to this task. Client/server code and CI can be validated here; live authenticated cloud sync, migration-on-a-real-database, multi-device conflict behavior, and production reconciliation remain unverified until a real staging backend is provisioned.
 
+## Configure the cloud transport
+
+The transport runs only when a backend URL is provided and the authenticated session is valid. Release builds must use HTTPS. Supply real server UUID mappings; never put passwords, refresh tokens, or bootstrap secrets in Dart defines.
+
+Example build configuration (replace every placeholder with the provisioned staging values):
+
+~~~powershell
+flutter build web --release `
+  --dart-define=FIREFA_BACKEND_ENABLED=true `
+  --dart-define=FIREFA_API_BASE_URL=https://<staging-host> `
+  --dart-define=FIREFA_OUTLET_MAP='{"outlet-001":"<server-outlet-uuid>","outlet-002":"<server-outlet-uuid>"}' `
+  --dart-define=FIREFA_INVENTORY_ITEM_MAP='{"<local-item-id>":"<server-inventory-item-uuid>"}'
+~~~
+
+A successful build does not prove the URL is reachable. Verify login, event receipts, movement receipts, restart recovery, conflict review, and server-side idempotency against the same staging database before production sign-off.
+
 ## Offline → restart → reconnect acceptance test
 
 1. Start Main App with the device offline; keep cloud sync configured but unavailable.
