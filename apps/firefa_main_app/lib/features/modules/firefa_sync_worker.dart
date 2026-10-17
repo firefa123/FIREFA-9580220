@@ -39,11 +39,15 @@ class FirefaSyncWorker with WidgetsBindingObserver {
 
   void _onQueueChanged() {
     if (!_started || !FirefaBackendConfig.isConfigured) return;
-    if (_queue.entries.any((entry) =>
-        entry.status == FirefaSyncStatus.pending &&
-        (entry.nextAttemptAt == null ||
-            !entry.nextAttemptAt!.isAfter(DateTime.now().toUtc())))) {
-      unawaited(syncNow());
+    final now = DateTime.now().toUtc();
+    for (final outletId in FirefaBackendConfig.validatedOutletMap.keys) {
+      if (_queue.entriesForOutlet(outletId).any((entry) =>
+          entry.status == FirefaSyncStatus.pending &&
+          (entry.nextAttemptAt == null ||
+              !entry.nextAttemptAt!.toUtc().isAfter(now)))) {
+        unawaited(syncNow());
+        return;
+      }
     }
   }
 
