@@ -128,7 +128,7 @@ authSuite("authentication endpoints", () => {
         orderType: "Take Away",
         tableId: null,
         createdAt,
-        items: [{ productName: "Coffee", quantity: 1, unitPrice: 10000, details: "" }],
+        items: [{ productId: undefined as string | undefined, productName: "Coffee", quantity: 1, unitPrice: 10000, details: "" }],
         subtotal: 10000,
         discount: 0,
         tax: 0,
@@ -839,6 +839,124 @@ authSuite("authentication endpoints", () => {
       [owner.tenantId, outletId, inventoryItemId],
     );
     expect(movements.rows[0].count).toBe(2);
+  });
+
+  it("deducts linked product stock once when a POS order completes and reconciles its ledger", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const outletId = owner.outletIds[0];
+    const headers = { authorization: "Bearer " + owner.accessToken };
+
+    const product = await ownerApp.inject({
+      method: "POST", url: "/api/v1/products", headers,
+      payload: { outletId, sku: "POS-STOCK-001", name: "Coffee", unitPrice: 10000 },
+    });
+    expect(product.statusCode).toBe(201);
+    const productId = product.json().id;
+    const inventory = await ownerApp.inject({
+      method: "POST", url: "/api/v1/inventory/items", headers,
+      payload: {
+        outletId, productId, sku: "POS-STOCK-001", name: "Coffee",
+        unit: "cup", initialQuantity: 5, averageUnitCost: 2000,
+      },
+    });
+    expect(inventory.statusCode).toBe(201);
+    const inventoryItemId = inventory.json().id;
+
+    const event = makeSyncEvent(outletId, "11111111-1111-4111-8111-111111111111", "pos-stock-sale-001");
+    event.orderSnapshot.status = "completed";
+    event.orderSnapshot.paymentStatus = "paid";
+    event.orderSnapshot.paymentMethod = "cash";
+    event.orderSnapshot.cashPaidAmount = event.orderSnapshot.total;
+    event.orderSnapshot.items[0]!.productId = productId;
+    event.orderSnapshot.items[0]!.quantity = 2;
+    event.orderSnapshot.subtotal = 20000;
+    event.orderSnapshot.total = 20000;
+    event.orderSnapshot.items[0]!.unitPrice = 10000;
+
+    const created = await postSyncEvent(ownerApp, owner.accessToken, event);
+    expect(created.statusCode).toBe(201);
+
+    const stock = await adminPool.query(
+      "SELECT quantity_on_hand::float8 AS quantity FROM inventory_items WHERE id = $1",
+      [inventoryItemId],
+    );
+    expect(stock.rows[0]!.quantity).toBe(3);
+
+    const replay = await postSyncEvent(ownerApp, owner.accessToken, event);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().eventId).toBe("pos-stock-sale-001");
+
+    const movements = await adminPool.query(
+      "SELECT movement_type, quantity_delta::float8 AS delta FROM inventory_movements " +
+        "WHERE tenant_id = $1 AND outlet_id = $2 AND inventory_item_id = $3 ORDER BY created_at, id",
+      [owner.tenantId, outletId, inventoryItemId],
+    );
+    expect(movements.rows).toEqual([
+      expect.objectContaining({ movement_type: "receipt", delta: 5 }),
+      expect.objectContaining({ movement_type: "sale", delta: -2 }),
+    ]);
+
+    const reconciliation = await ownerApp.inject({
+      method: "GET", url: "/api/v1/inventory/reconcile?outletId=" + outletId, headers,
+    });
+    expect(reconciliation.statusCode).toBe(200);
+    expect(reconciliation.json().items[0]).toMatchObject({
+      id: inventoryItemId, productId, quantityOnHand: 3,
+      movementTotal: 3, ledgerMatches: true, unexplainedDelta: 0,
+    });
+  });
+
+  it("rejects POS completion when linked stock is insufficient without persisting the order", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const outletId = owner.outletIds[0];
+    const headers = { authorization: "Bearer " + owner.accessToken };
+
+    const product = await ownerApp.inject({
+      method: "POST", url: "/api/v1/products", headers,
+      payload: { outletId, sku: "POS-OVERSELL-001", name: "Coffee", unitPrice: 10000 },
+    });
+    const productId = product.json().id;
+    const inventory = await ownerApp.inject({
+      method: "POST", url: "/api/v1/inventory/items", headers,
+      payload: {
+        outletId, productId, sku: "POS-OVERSELL-001", name: "Coffee",
+        unit: "cup", initialQuantity: 1,
+      },
+    });
+    const inventoryItemId = inventory.json().id;
+
+    const event = makeSyncEvent(outletId, "11111111-1111-4111-8111-111111111111", "pos-stock-oversell-001");
+    event.orderSnapshot.status = "completed";
+    event.orderSnapshot.paymentStatus = "paid";
+    event.orderSnapshot.paymentMethod = "cash";
+    event.orderSnapshot.cashPaidAmount = event.orderSnapshot.total;
+    event.orderSnapshot.items[0]!.productId = productId;
+    event.orderSnapshot.items[0]!.quantity = 2;
+    event.orderSnapshot.subtotal = 20000;
+    event.orderSnapshot.total = 20000;
+    event.orderSnapshot.items[0]!.unitPrice = 10000;
+
+    const rejected = await postSyncEvent(ownerApp, owner.accessToken, event);
+    expect(rejected.statusCode).toBe(409);
+    expect(rejected.json().error).toBe("insufficient_stock");
+
+    const persistedOrder = await adminPool.query(
+      "SELECT count(*)::int AS count FROM orders WHERE tenant_id = $1 AND client_order_id = $2",
+      [owner.tenantId, event.orderId],
+    );
+    expect(persistedOrder.rows[0]!.count).toBe(0);
+    const stock = await adminPool.query(
+      "SELECT quantity_on_hand::float8 AS quantity FROM inventory_items WHERE id = $1",
+      [inventoryItemId],
+    );
+    expect(stock.rows[0]!.quantity).toBe(1);
+    const saleMovements = await adminPool.query(
+      "SELECT count(*)::int AS count FROM inventory_movements WHERE inventory_item_id = $1 AND movement_type = 'sale'",
+      [inventoryItemId],
+    );
+    expect(saleMovements.rows[0]!.count).toBe(0);
   });
 
   it("serializes concurrent requests with the same inventory idempotency key", async () => {
