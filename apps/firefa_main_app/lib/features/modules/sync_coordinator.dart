@@ -97,6 +97,9 @@ class FirefaSyncCoordinator {
         // remain retryable and never count as a successful sync.
         if (receipt.outcome == FirefaSyncOutcome.permanentFailure) {
           await queue.markFailed(envelope.eventId);
+          // Count terminal server rejection as a failed attempt too. This
+          // summary field tracks failed items, not only retry-scheduled ones.
+          retryableFailures++;
         } else {
           await scheduleRetry(envelope.eventId);
           retryableFailures++;
