@@ -45,32 +45,133 @@ class InventoryStore extends ChangeNotifier {
   bool _initialized = false;
   int _nextMovementId = 1;
 
-  Future<void> initialize() async {
-    if (_initialized) return;
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(storageKey);
-    if (raw != null && raw.isNotEmpty) {
-      final data = Map<String, dynamic>.from(jsonDecode(raw) as Map);
-      if (data['version'] != 1) throw const FormatException('Versi inventory tidak didukung.');
-      final items = (data['items'] as List).map((v) => InventoryCatalogItem.fromJson(Map<String, dynamic>.from(v as Map))).toList();
-      final stock = Map<String, dynamic>.from(data['stock'] as Map);
-      final movements = (data['movements'] as List).map((v) => InventoryMovement.fromJson(Map<String, dynamic>.from(v as Map))).toList();
-      for (final item in items) {
-        _validateItem(item);
-        if (_items.containsKey(item.id)) throw const FormatException('ID item duplikat.');
-        _items[item.id] = item;
+  Future<void>? _initializing;
+
+  Future<void> initialize() {
+    if (_initialized) return _initializing ?? Future<void>.value();
+    return _initializing ??= _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(storageKey);
+      final itemsById = <String, InventoryCatalogItem>{};
+      final stockByKey = <String, double>{};
+      final movements = <InventoryMovement>[];
+      final processedOrders = <String>{};
+      var nextMovementId = 1;
+
+      if (raw != null && raw.isNotEmpty) {
+        final data = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+        if (data['version'] != 1 ||
+            data['items'] is! List ||
+            data['stock'] is! Map ||
+            data['movements'] is! List ||
+            data['nextMovementId'] is! int ||
+            (data['nextMovementId'] as int) < 1 ||
+            (data['processedOrderIds'] != null &&
+                data['processedOrderIds'] is! List)) {
+          throw const FormatException('Struktur inventory tidak valid.');
+        }
+
+        final items = (data['items'] as List)
+            .map((value) => InventoryCatalogItem.fromJson(
+                Map<String, dynamic>.from(value as Map)))
+            .toList();
+        for (final item in items) {
+          _validateItem(item);
+          if (itemsById.containsKey(item.id)) {
+            throw const FormatException('ID item inventory duplikat.');
+          }
+          itemsById[item.id] = item;
+        }
+
+        final rawStock = Map<String, dynamic>.from(data['stock'] as Map);
+        for (final entry in rawStock.entries) {
+          final parts = entry.key.split('::');
+          final quantity = (entry.value as num).toDouble();
+          if (parts.length != 2 ||
+              parts.first.trim().isEmpty ||
+              parts.last.trim().isEmpty ||
+              !itemsById.containsKey(parts.last) ||
+              !quantity.isFinite ||
+              quantity < 0) {
+            throw const FormatException('Stok tersimpan mengacu ke item tidak valid.');
+          }
+          stockByKey[entry.key] = quantity;
+        }
+
+        movements.addAll((data['movements'] as List)
+            .map((value) => InventoryMovement.fromJson(
+                Map<String, dynamic>.from(value as Map))));
+        final movementIds = <String>{};
+        var maxMovementSequence = 0;
+        for (final movement in movements) {
+          final match = RegExp(r'^INV-(\\d+)$').firstMatch(movement.id);
+          final sequence = int.tryParse(match?.group(1) ?? '');
+          final validType = const {
+            'stock_in', 'stock_out', 'transfer_in', 'transfer_out',
+            'order_consumption',
+          }.contains(movement.type);
+          if (sequence == null ||
+              sequence < 1 ||
+              !movementIds.add(movement.id) ||
+              movement.outletId.trim().isEmpty ||
+              !itemsById.containsKey(movement.itemId) ||
+              !movement.quantity.isFinite ||
+              movement.quantity <= 0 ||
+              !validType ||
+              (movement.referenceOutletId != null &&
+                  movement.referenceOutletId!.trim().isEmpty) ||
+              (movement.referenceOrderId != null &&
+                  movement.referenceOrderId!.trim().isEmpty)) {
+            throw const FormatException('Pergerakan inventory tidak valid.');
+          }
+          if ((movement.type == 'transfer_in' || movement.type == 'transfer_out') &&
+              (movement.referenceOutletId == null ||
+               movement.referenceOutletId == movement.outletId)) {
+            throw const FormatException('Referensi transfer inventory tidak valid.');
+          }
+          if (movement.type == 'transfer_in' || movement.type == 'transfer_out') {
+            final pairOutlet = movement.referenceOutletId!;
+            if (stockByKey['${movement.outletId}::${movement.itemId}'] == null ||
+                stockByKey['${pairOutlet}::${movement.itemId}'] == null) {
+              throw const FormatException('Transfer mengacu ke saldo stok yang tidak tersedia.');
+            }
+          }
+          if (sequence > maxMovementSequence) maxMovementSequence = sequence;
+        }
+        nextMovementId = data['nextMovementId'] as int;
+        if (nextMovementId <= maxMovementSequence) {
+          throw const FormatException('Counter inventory akan menggunakan ulang ID pergerakan.');
+        }
+
+        final processed = data['processedOrderIds'] as List? ?? const [];
+        if (processed.any((value) => value is! String || value.trim().isEmpty)) {
+          throw const FormatException('Riwayat order inventory tidak valid.');
+        }
+        processedOrders.addAll(processed.cast<String>());
       }
-      for (final entry in stock.entries) {
-        final quantity = (entry.value as num).toDouble();
-        if (!quantity.isFinite || quantity < 0) throw const FormatException('Stok tersimpan tidak valid.');
-        _stock[entry.key] = quantity;
-      }
-      _movements.addAll(movements);
-      _processedOrderIds.addAll((data['processedOrderIds'] as List? ?? const []).cast<String>());
-      _nextMovementId = data['nextMovementId'] as int;
+
+      _items..clear()..addAll(itemsById);
+      _stock..clear()..addAll(stockByKey);
+      _movements..clear()..addAll(movements);
+      _processedOrderIds..clear()..addAll(processedOrders);
+      _nextMovementId = nextMovementId;
+      _initialized = true;
+      notifyListeners();
+    } catch (error) {
+      _items.clear();
+      _stock.clear();
+      _movements.clear();
+      _processedOrderIds.clear();
+      _nextMovementId = 1;
+      _initialized = false;
+      _initializing = null;
+      if (error is FormatException) rethrow;
+      throw FormatException('Snapshot inventory tidak valid: $error');
     }
-    _initialized = true;
-    notifyListeners();
   }
 
   void _ready() {
