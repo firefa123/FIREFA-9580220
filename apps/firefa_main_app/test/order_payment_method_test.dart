@@ -117,10 +117,12 @@ void main() {
     expect(order.refundRecords.single.verificationStatus, FirefaRefundVerificationStatus.verified);
     expect(order.cashRefundAmount, 25000);
     // Only verified cash refunds are included in shift reconciliation.
+    // Use the recorded refund timestamp so the test stays valid across dates.
+    final refundCreatedAt = order.refundRecords.single.createdAt;
     expect(calculateCashRefundsForShift(
       orders: [order],
-      openedAt: DateTime(2026, 10, 16, 0),
-      closedAt: DateTime(2026, 10, 17, 0),
+      openedAt: refundCreatedAt.subtract(const Duration(days: 1)),
+      closedAt: refundCreatedAt.add(const Duration(days: 1)),
     ), 25000);
     expect(order.refundReason, 'Pesanan salah');
     expect(order.refundedAt, isNotNull);
