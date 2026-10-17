@@ -15,6 +15,7 @@ CREATE TABLE products (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   FOREIGN KEY (outlet_id, tenant_id) REFERENCES outlets(id, tenant_id) ON DELETE RESTRICT,
+  UNIQUE (id, tenant_id),
   UNIQUE (id, tenant_id, outlet_id)
 );
 
@@ -92,8 +93,8 @@ CREATE TABLE order_items (
   FOREIGN KEY (outlet_id, tenant_id) REFERENCES outlets(id, tenant_id) ON DELETE RESTRICT,
   FOREIGN KEY (order_id, tenant_id, outlet_id)
     REFERENCES orders(id, tenant_id, outlet_id) ON DELETE RESTRICT,
-  FOREIGN KEY (product_id, tenant_id, outlet_id)
-    REFERENCES products(id, tenant_id, outlet_id) ON DELETE RESTRICT
+  FOREIGN KEY (product_id, tenant_id)
+    REFERENCES products(id, tenant_id) ON DELETE RESTRICT
 );
 
 CREATE INDEX order_items_order_idx ON order_items (tenant_id, order_id);
