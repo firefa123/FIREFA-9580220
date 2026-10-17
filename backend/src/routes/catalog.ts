@@ -399,10 +399,7 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (app
         );
         const priorBusiness = priorBusinessMovement.rows[0];
         if (priorBusiness) {
-          const expectedDelta = isPosSale
-            ? input.quantityDelta
-            : input.quantityDelta;
-          if (Number(priorBusiness.quantity_delta) !== expectedDelta) {
+          if (Number(priorBusiness.quantity_delta) !== input.quantityDelta) {
             await client.query("ROLLBACK");
             return reply.code(409).send({ error: "pos_inventory_delta_mismatch" });
           }
