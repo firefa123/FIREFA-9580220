@@ -1,23 +1,24 @@
 import 'package:flutter/material.dart';
 
 import '../../modules/conflict_store.dart';
+import '../../modules/backend_client.dart';
+import '../../modules/firefa_http_sync_adapter.dart';
 import '../../modules/hybrid_sync_conflict_bridge.dart';
 import '../../modules/offline_sync_queue.dart';
 import '../../modules/sync_adapter.dart';
 import '../../modules/sync_coordinator.dart';
 
-/// Shows local outbox state and runs the coordinator through the configured
-/// adapter. The default adapter is intentionally disabled until an authenticated
-/// backend transport is implemented and configured.
+/// Shows local outbox state and runs the coordinator through the authenticated
+/// HTTP transport by default. Tests and previews may inject a fake adapter.
 class SyncStatusCard extends StatefulWidget {
   const SyncStatusCard({
     super.key,
     required this.outletId,
-    this.adapter = const FirefaDisabledSyncAdapter(),
+    this.adapter,
   });
 
   final String outletId;
-  final FirefaSyncAdapter adapter;
+  final FirefaSyncAdapter? adapter;
 
   @override
   State<SyncStatusCard> createState() => _SyncStatusCardState();
@@ -41,7 +42,7 @@ class _SyncStatusCardState extends State<SyncStatusCard> {
       await queue.retryFailedForOutlet(widget.outletId);
       final summary = await FirefaSyncCoordinator(
         queue: queue,
-        adapter: widget.adapter,
+        adapter: widget.adapter ?? FirefaHttpSyncAdapter(),
         conflictBridge: FirefaHybridSyncConflictBridge(
           store: FirefaConflictStore.instance,
         ),
@@ -132,10 +133,11 @@ class _SyncStatusCardState extends State<SyncStatusCard> {
                   Text('Konflik di antrean: $queuedConflicts'),
                   Text('Konflik perlu ditinjau: $conflicts'),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Mode: Lokal Offline. Cloud sync hanya aktif setelah '
-                    'backend terautentikasi dikonfigurasi.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  Text(
+                    FirefaBackendConfig.isConfigured
+                        ? 'Mode: Offline-first dengan transport HTTP terautentikasi. Event baru dihapus dari antrean setelah receipt server valid.'
+                        : 'Mode: Lokal Offline. Transport HTTP sudah tersedia, tetapi URL backend belum dikonfigurasi; event tetap pending.',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   const SizedBox(height: 12),
                   SizedBox(
