@@ -420,25 +420,35 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
   }
 
   /// Used only when a validated combined snapshot is restored.
+  /// Merge the combined order/outbox snapshot with the dedicated outbox.
+  /// The dedicated outbox is written on every state transition, so when an
+  /// event exists in both places its state is authoritative. Events present
+  /// only in the combined snapshot are recovered instead of being discarded.
   void restoreCombinedSnapshot(Map<String, dynamic> data) {
     _ensureInitialized();
     validateCombinedSnapshot(data);
-    final restored = (data['entries'] as List)
+    final combinedEntries = (data['entries'] as List)
         .map((value) => FirefaSyncEntry.fromJson(
               Map<String, dynamic>.from(value as Map),
             ))
         .toList();
-    final sequence = data['nextSequence'] as int;
-    _entries
-      ..clear()
-      ..addAll(restored);
-    _nextSequence = sequence;
-    for (final entry in _entries) {
+    final mergedById = <String, FirefaSyncEntry>{
+      for (final entry in _entries) entry.eventId: entry,
+    };
+    for (final entry in combinedEntries) {
+      mergedById.putIfAbsent(entry.eventId, () => entry);
+    }
+    for (final entry in mergedById.values) {
       if (entry.status == FirefaSyncStatus.syncing) {
         entry.status = FirefaSyncStatus.pending;
         entry.nextAttemptAt = null;
       }
     }
+    _entries
+      ..clear()
+      ..addAll(mergedById.values);
+    final combinedSequence = data['nextSequence'] as int;
+    if (combinedSequence > _nextSequence) _nextSequence = combinedSequence;
     _scheduleSave();
     notifyListeners();
   }
