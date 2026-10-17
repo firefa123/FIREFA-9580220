@@ -1190,6 +1190,7 @@ class FirefaInventoryStore extends ChangeNotifier {
     _preparedYields..clear()..addAll(preparedYields);
     _processedOrderIds..clear()..addAll((snapshot['processedOrderIds'] as List? ?? []).cast<String>());
     _reversedOrderIds..clear()..addAll((snapshot['reversedOrderIds'] as List? ?? []).cast<String>());
+    _processedTransferIds..clear()..addAll((snapshot['processedTransferIds'] as List? ?? []).cast<String>());
     _nextId = snapshot['nextId'] as int;
     _nextMovementId = snapshot['nextMovementId'] as int? ?? 1;
     _nextOpnameId = snapshot['nextOpnameId'] as int? ?? 1;
