@@ -187,15 +187,25 @@ class FirefaInventoryBackendSync {
             continue;
           }
         }
-        if (order != null && order.status == FirefaOrderStatus.cancelled &&
-            !cancellationEventSynced && (isPosSale || isPosReversal)) {
+        if (isPosSale) {
+          final creationEventExists = orderEvents.any((entry) =>
+              entry.eventType == 'order.created' || entry.eventType == 'order.recovered');
+          final creationEventSynced = orderEvents.any((entry) =>
+              entry.status == FirefaSyncStatus.synced &&
+              (entry.eventType == 'order.created' || entry.eventType == 'order.recovered'));
+          if (creationEventExists && !creationEventSynced) {
+            pausedItemIds.add(movement.itemId);
+            errors.add('${movement.id}: menunggu pembuatan pesanan $posOrderId tersinkron sebelum stok dikirim');
+            continue;
+          }
+          // Later status events must not pass an unacknowledged sale movement:
+          // retry the sale before a pending cancellation, then send its reversal.
+        }
+        if (isPosReversal &&
+            (!cancellationEventSynced ||
+             orderEvents.any((entry) => entry.status != FirefaSyncStatus.synced))) {
           pausedItemIds.add(movement.itemId);
           errors.add('${movement.id}: menunggu pembatalan pesanan $posOrderId terkonfirmasi server');
-          continue;
-        }
-        if (orderEvents.any((entry) => entry.status != FirefaSyncStatus.synced)) {
-          pausedItemIds.add(movement.itemId);
-          errors.add('${movement.id}: menunggu event pesanan $posOrderId tersinkron sebelum stok dikirim');
           continue;
         }
       }
