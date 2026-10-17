@@ -1,6 +1,6 @@
 # FIREFA 7K-A — Backend Sync Contract (Draft v1)
 
-Status: **CLIENT AND SERVER IMPLEMENTATIONS PRESENT; LIVE DEPLOYMENT AND END-TO-END VALIDATION OUTSTANDING.** The repository contains the authenticated client session, durable local outbox, HTTP adapter for `POST /api/v1/sync/events`, foreground retry worker, conflict inbox, Fastify sync endpoint, transactional PostgreSQL order receipts, and inventory movement API. The inventory/order tables required by those routes are now included in the migration chain. A provisioned staging/production endpoint and credentials were not available to verify the live network path; do not claim production cloud sync is complete until the acceptance tests below pass against that endpoint.
+Status: **CLIENT AND SERVER IMPLEMENTATIONS PRESENT; LIVE DEPLOYMENT AND END-TO-END VALIDATION OUTSTANDING.** The repository contains the authenticated client session, durable local outbox, HTTP adapter for `POST /api/v1/sync/events`, foreground retry worker, conflict inbox, Fastify sync endpoint, transactional PostgreSQL order receipts, inventory movement API, and existing catalog/inventory/payment migrations. A provisioned staging/production endpoint and credentials were not available to verify the live network path; do not claim production cloud sync is complete until the acceptance tests below pass against that endpoint.
 
 ## Scope and invariants
 
@@ -112,7 +112,7 @@ Existing client order IDs are display/local IDs, not global IDs. Before multi-de
 ## Planned implementation boundaries
 
 1. 7K-A: contract and threat model documented.
-2. 7K-B: backend auth, scoped order endpoint, transactional idempotency receipts, and inventory movement endpoint are implemented; the operational schema migration was added. Live database migration and deployment tests remain outstanding.
+2. 7K-B: backend auth, scoped order endpoint, transactional idempotency receipts, and inventory movement endpoint are implemented; the existing migration chain provides the operational schema. Live database migration and deployment tests remain outstanding.
 3. 7K-C: client HTTP adapter and outlet mapping are implemented; live endpoint and cross-device identity behavior remain unverified.
 4. 7K-D: foreground retry worker, jittered order-event retry, app-resume recovery, and manual retry controls are implemented; background execution when the app is terminated is not guaranteed.
 5. 7K-E: **outstanding** — run cross-device, crash/restart, conflict, payment, and tenant-isolation tests against a real staging backend.
