@@ -11,7 +11,7 @@ import '../../core/auth/role_permissions.dart';
 class FirefaBackendConfig {
   const FirefaBackendConfig._();
 
-  static const bool enabled = bool.fromEnvironment('FIREFA_BACKEND_ENABLED');
+  static const bool enabled = bool.fromEnvironment('FIREFA_BACKEND_ENABLED', defaultValue: true);
   static const String baseUrl = String.fromEnvironment('FIREFA_API_BASE_URL');
   static const String outletMapJson = String.fromEnvironment(
     'FIREFA_OUTLET_MAP',
