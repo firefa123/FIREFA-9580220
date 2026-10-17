@@ -35,6 +35,7 @@ const inventoryInput = z.object({
 const movementInput = z.object({
   outletId: uuid,
   inventoryItemId: uuid,
+  deviceId: uuid.optional(),
   movementType: z.enum(["receipt", "sale", "adjustment", "waste", "return", "transfer_in", "transfer_out"]),
   quantityDelta: z.number().finite().min(-1_000_000_000).max(1_000_000_000).refine((value) => value !== 0),
   unitCost: z.number().finite().min(0).max(999999999999).default(0),
@@ -307,9 +308,39 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (app
     try {
       await client.query("BEGIN");
       const role = await outletRole(client, request.user.sub, request.user.tenantId, input.outletId);
-      if (role !== "owner") {
+      const isPosSale = input.sourceType === "pos_order" &&
+        input.movementType === "sale" && input.quantityDelta < 0;
+      const isPosReversal = input.sourceType === "pos_order_reversal" &&
+        input.movementType === "receipt" && input.quantityDelta > 0;
+      const isPosMovement = isPosSale || isPosReversal;
+      if (input.sourceType === "pos_order" || input.sourceType === "pos_order_reversal") {
+        if (!isPosMovement || !input.deviceId || !input.sourceId || !uuid.safeParse(input.sourceId).success) {
+          await client.query("ROLLBACK");
+          return reply.code(400).send({ error: "invalid_pos_inventory_source" });
+        }
+      }
+      if (role !== "owner" && !(role === "cashier" && isPosMovement)) {
         await client.query("ROLLBACK");
         return reply.code(403).send({ error: role ? "owner_required" : "outlet_forbidden" });
+      }
+      if (isPosMovement) {
+        const orderResult = await client.query<{ status: string }>(
+          "SELECT status FROM orders WHERE id = $1 AND tenant_id = $2 AND outlet_id = $3 AND device_id = $4 FOR SHARE",
+          [input.sourceId, request.user.tenantId, input.outletId, input.deviceId],
+        );
+        const linkedOrder = orderResult.rows[0];
+        if (!linkedOrder) {
+          await client.query("ROLLBACK");
+          return reply.code(409).send({ error: "pos_order_not_synced" });
+        }
+        if (isPosSale && linkedOrder.status === "cancelled") {
+          await client.query("ROLLBACK");
+          return reply.code(409).send({ error: "pos_order_cancelled" });
+        }
+        if (isPosReversal && linkedOrder.status !== "cancelled") {
+          await client.query("ROLLBACK");
+          return reply.code(409).send({ error: "pos_order_not_cancelled" });
+        }
       }
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
         request.user.tenantId + ":" + input.outletId + ":" + idempotencyKey,
@@ -322,6 +353,7 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (app
         unitCost: input.unitCost,
         sourceType: input.sourceType ?? null,
         sourceId: input.sourceId ?? null,
+        deviceId: input.deviceId ?? null,
         note: input.note ?? null,
       })).digest("hex");
       const prior = await client.query<{
@@ -360,6 +392,54 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (app
           quantityOnHand: current.rows[0] ? Number(current.rows[0].quantity_on_hand) : null,
         });
       }
+      if (isPosMovement) {
+        const sourceType = isPosSale ? "order" : "order_reversal";
+        const movementType = isPosSale ? "sale" : "receipt";
+        const priorBusinessMovement = await client.query<{
+          id: string; quantity_delta: string; movement_type: string;
+        }>(
+          "SELECT id::text AS id, quantity_delta::text, movement_type FROM inventory_movements " +
+            "WHERE tenant_id = $1 AND outlet_id = $2 AND inventory_item_id = $3 " +
+            "AND source_type = $4 AND source_id = $5 AND movement_type = $6 FOR UPDATE",
+          [request.user.tenantId, input.outletId, input.inventoryItemId, sourceType, input.sourceId, movementType],
+        );
+        const priorBusiness = priorBusinessMovement.rows[0];
+        if (priorBusiness) {
+          const expectedDelta = isPosSale
+            ? input.quantityDelta
+            : input.quantityDelta;
+          if (Number(priorBusiness.quantity_delta) !== expectedDelta) {
+            await client.query("ROLLBACK");
+            return reply.code(409).send({ error: "pos_inventory_delta_mismatch" });
+          }
+          const current = await options.pool.query<{ quantity_on_hand: string }>(
+            "SELECT quantity_on_hand::text FROM inventory_items WHERE id = $1 AND tenant_id = $2 AND outlet_id = $3",
+            [input.inventoryItemId, request.user.tenantId, input.outletId],
+          );
+          await client.query("ROLLBACK");
+          return reply.code(200).send({
+            id: priorBusiness.id,
+            eventId: idempotencyKey,
+            outletId: input.outletId,
+            inventoryItemId: input.inventoryItemId,
+            replayed: true,
+            quantityOnHand: current.rows[0] ? Number(current.rows[0].quantity_on_hand) : null,
+          });
+        }
+        if (isPosReversal) {
+          const priorSale = await client.query<{ quantity_delta: string }>(
+            "SELECT quantity_delta::text FROM inventory_movements " +
+              "WHERE tenant_id = $1 AND outlet_id = $2 AND inventory_item_id = $3 " +
+              "AND source_type = 'order' AND source_id = $4 AND movement_type = 'sale' FOR UPDATE",
+            [request.user.tenantId, input.outletId, input.inventoryItemId, input.sourceId],
+          );
+          if (!priorSale.rows[0] || Number(priorSale.rows[0].quantity_delta) !== -input.quantityDelta) {
+            await client.query("ROLLBACK");
+            return reply.code(409).send({ error: "pos_sale_not_found_for_reversal" });
+          }
+        }
+      }
+
       const updated = await client.query<{ id: string; quantity_on_hand: string }>(
         "UPDATE inventory_items SET quantity_on_hand = quantity_on_hand + $1, updated_at = now() " +
           "WHERE id = $2 AND tenant_id = $3 AND outlet_id = $4 AND is_active = true " +
@@ -380,8 +460,9 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (app
         "INSERT INTO inventory_movements (tenant_id, outlet_id, inventory_item_id, movement_type, quantity_delta, unit_cost, source_type, source_id, idempotency_key, actor_user_id, note, payload_hash) " +
           "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id::text AS id",
         [request.user.tenantId, input.outletId, input.inventoryItemId, input.movementType,
-         input.quantityDelta, input.unitCost, input.sourceType ?? null, input.sourceId ?? null,
-         idempotencyKey, request.user.sub, input.note ?? null, payloadHash],
+         input.quantityDelta, input.unitCost,
+         isPosSale ? "order" : isPosReversal ? "order_reversal" : input.sourceType ?? null,
+         input.sourceId ?? null, idempotencyKey, request.user.sub, input.note ?? null, payloadHash],
       );
       await audit(client, request.user.tenantId, input.outletId, request.user.sub, "inventory.movement", "inventory_item", input.inventoryItemId, {
         movementId: movement.rows[0]!.id, movementType: input.movementType,
