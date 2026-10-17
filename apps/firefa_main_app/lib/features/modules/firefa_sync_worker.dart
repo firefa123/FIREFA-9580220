@@ -105,8 +105,36 @@ class FirefaSyncWorker with WidgetsBindingObserver {
           debugPrint('FIREFA inventory pre-sync deferred safely: $error');
         }
 
+        final orderedEntries = _queue.entriesForOutlet(outletId).toList()
+          ..sort((a, b) {
+            final byTime = a.createdAt.compareTo(b.createdAt);
+            return byTime != 0 ? byTime : a.eventId.compareTo(b.eventId);
+          });
+        final firstUnresolvedByOrder = <String, FirefaSyncEntry>{};
+        for (final entry in orderedEntries) {
+          if (entry.status == FirefaSyncStatus.synced) continue;
+          firstUnresolvedByOrder.putIfAbsent(entry.orderId, () => entry);
+        }
+        final deferredOrderIds = <String>{};
+        for (final entry in firstUnresolvedByOrder.values) {
+          if (entry.status != FirefaSyncStatus.pending ||
+              entry.eventType != 'order.updated' ||
+              entry.orderSnapshot['status'] != 'cancelled') {
+            continue;
+          }
+          if (await FirefaInventoryBackendSync.instance.hasUnsentPosSaleForOrder(
+            localOutletId: outletId,
+            orderId: entry.orderId,
+          )) {
+            deferredOrderIds.add(entry.orderId);
+          }
+        }
+
         try {
-          final orderResult = await coordinator.syncOutlet(outletId);
+          final orderResult = await coordinator.syncOutlet(
+            outletId,
+            deferOrderIds: deferredOrderIds,
+          );
           if (orderResult.retryableFailures > 0 || orderResult.conflicts > 0) {
             debugPrint('FIREFA order sync $outletId: acknowledged=${orderResult.acknowledged}, retry=${orderResult.retryableFailures}, conflicts=${orderResult.conflicts}');
           }
