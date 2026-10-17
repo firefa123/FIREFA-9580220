@@ -304,13 +304,32 @@ export const staffAttendanceRoutes: FastifyPluginAsync<StaffAttendanceOptions> =
         await client.query("ROLLBACK");
         return reply.code(409).send({ error: "outlet_geofence_not_configured" });
       }
+      const now = new Date();
+      const workDate = localWorkDate(now, outlet.timezone);
+
+      // A missed check-out must not allow a second active shift on a later day.
+      // The staff row is locked above, so concurrent check-ins for this identity
+      // serialize before checking for an open attendance record.
+      const openAttendance = await client.query<{ work_date: string }>(
+        "SELECT work_date::text AS work_date FROM staff_attendance " +
+        "WHERE tenant_id = $1 AND outlet_id = $2 AND staff_id = $3 AND check_out_at IS NULL " +
+        "ORDER BY work_date DESC LIMIT 1 FOR UPDATE",
+        [request.user.tenantId, input.outletId, request.user.sub],
+      );
+      if (openAttendance.rowCount) {
+        await client.query("ROLLBACK");
+        return reply.code(409).send({
+          error: openAttendance.rows[0]!.work_date === workDate
+            ? "already_checked_in_today"
+            : "previous_attendance_not_closed",
+        });
+      }
+
       const distance = distanceMeters(outlet.latitude, outlet.longitude, input.latitude, input.longitude);
       if (distance > outlet.geofence_radius_m) {
         await client.query("ROLLBACK");
         return reply.code(403).send({ error: "outside_geofence", distanceMeters: distance, radiusMeters: outlet.geofence_radius_m });
       }
-      const now = new Date();
-      const workDate = localWorkDate(now, outlet.timezone);
       const late = lateMinutes(staff.rows[0]!.expected_start_time, now, outlet.timezone);
       const result = await client.query(
         "INSERT INTO staff_attendance (tenant_id, outlet_id, staff_id, work_date, check_in_at, " +
