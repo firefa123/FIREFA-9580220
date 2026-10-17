@@ -196,6 +196,86 @@ class _StaffAttendancePageState extends State<StaffAttendancePage> {
     }
   }
 
+  Future<void> _editStaff(Map<String, dynamic> row) async {
+    final staffId = row['id'];
+    if (staffId is! String || staffId.isEmpty) {
+      _message('ID staff tidak valid.');
+      return;
+    }
+    final name = TextEditingController(text: '${row['displayName'] ?? ''}');
+    final start = TextEditingController(text: '${row['expectedStartTime'] ?? ''}');
+    final pin = TextEditingController();
+    var status = row['status'] == 'inactive' ? 'inactive' : 'active';
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Edit Staff • ${row['staffCode']}'),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 420,
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                TextField(controller: name, decoration: const InputDecoration(labelText: 'Nama staff')),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: pin, keyboardType: TextInputType.number, maxLength: 6, obscureText: true,
+                  decoration: const InputDecoration(labelText: 'PIN baru (opsional)', helperText: 'Kosongkan jika tidak diganti.'),
+                ),
+                TextField(
+                  controller: start,
+                  decoration: const InputDecoration(labelText: 'Jam mulai target (opsional)', hintText: '09:00', helperText: 'Kosongkan agar bebas absen.'),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: status, decoration: const InputDecoration(labelText: 'Status akun'),
+                  items: const [
+                    DropdownMenuItem(value: 'active', child: Text('Aktif')),
+                    DropdownMenuItem(value: 'inactive', child: Text('Nonaktif')),
+                  ],
+                  onChanged: (value) { if (value != null) setDialogState(() => status = value); },
+                ),
+              ]),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Batal')),
+            FilledButton(
+              onPressed: () {
+                final target = start.text.trim();
+                final validTime = target.isEmpty || RegExp(r'^(?:[01]\\d|2[0-3]):[0-5]\\d$').hasMatch(target);
+                final validPin = pin.text.isEmpty || (pin.text.length == 6 && int.tryParse(pin.text) != null);
+                if (name.text.trim().length < 2 || !validTime || !validPin) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Periksa nama, jam HH:mm, dan PIN 6 digit.')));
+                  return;
+                }
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text('Simpan perubahan'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved != true || !mounted) { name.dispose(); start.dispose(); pin.dispose(); return; }
+    setState(() { _saving = true; _error = null; });
+    try {
+      final body = <String, dynamic>{
+        'displayName': name.text.trim(),
+        'expectedStartTime': start.text.trim().isEmpty ? null : start.text.trim(),
+        'status': status,
+      };
+      if (pin.text.isNotEmpty) body['pin'] = pin.text;
+      await _request('PATCH', '/staff/$staffId', body: body);
+      if (mounted) _message('Data staff berhasil diperbarui.');
+      await _load();
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString().replaceFirst('FormatException: ', ''));
+    } finally {
+      name.dispose(); start.dispose(); pin.dispose();
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Future<void> _saveRadius() async {
     final radius = int.tryParse(_radius.text.trim());
     if (radius == null || radius < 25 || radius > 2000) {
@@ -328,9 +408,14 @@ class _StaffAttendancePageState extends State<StaffAttendancePage> {
             if (_staff.isEmpty) const Text('Belum ada staff. Tambahkan staff di atas.'),
             for (final row in _staff) ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.badge_outlined),
+              leading: CircleAvatar(child: Icon(row['status'] == 'inactive' ? Icons.person_off_outlined : Icons.badge_outlined)),
               title: Text('${row['displayName']}'),
-              subtitle: Text('${row['staffCode']} • ${row['expectedStartTime'] == null ? 'Bebas absen' : 'Target ${row['expectedStartTime']}'} • ${row['status']}'),
+              subtitle: Text('${row['staffCode']} • ${row['expectedStartTime'] == null ? 'Bebas absen' : 'Target ${row['expectedStartTime']}'} • ${row['status'] == 'inactive' ? 'Nonaktif' : 'Aktif'}'),
+              trailing: IconButton(
+                tooltip: 'Edit data, reset PIN, atau ubah status',
+                onPressed: _saving ? null : () => _editStaff(row),
+                icon: const Icon(Icons.edit_outlined),
+              ),
             ),
           ]),
         )),
