@@ -68,6 +68,19 @@ void main() {
     expect(payload['expectedServerVersion'], 4);
   });
 
+  test('sync payload rejects a non-positive server version', () {
+    expect(
+      () => FirefaBackendConfig.buildSyncPayload(
+        event: event(eventType: 'order.updated'),
+        deviceId: deviceId,
+        mapping: const {'outlet-001': serverOutletId},
+        authorizedServerOutletIds: const [serverOutletId],
+        expectedServerVersion: 0,
+      ),
+      throwsFormatException,
+    );
+  });
+
   test('sync payload rejects an outlet outside authenticated scope', () {
     expect(
       () => FirefaBackendConfig.buildSyncPayload(
