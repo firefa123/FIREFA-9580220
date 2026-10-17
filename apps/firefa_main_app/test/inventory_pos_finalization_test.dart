@@ -115,6 +115,18 @@ void main() {
     ), isFalse);
     expect(reopened.forOutlet('outlet-a').single.stock, 23);
     expect(reopened.forOutlet('outlet-b').single.stock, 11);
+
+    final backup = reopened.exportLocalSnapshot();
+    final restored = FirefaInventoryStore.forTesting();
+    await restored.initialize();
+    await restored.restoreLocalSnapshot(backup);
+    expect(await restored.transferStock(
+      transferId: 'TRF-1', sourceOutletId: 'outlet-a',
+      sourceItemId: source.id, targetOutletId: 'outlet-b',
+      targetItemId: target.id, quantity: 7,
+    ), isFalse);
+    expect(restored.forOutlet('outlet-a').single.stock, 23);
+    expect(restored.forOutlet('outlet-b').single.stock, 11);
   });
 
   test('stock opname correction and approval are applied only once', () async {
