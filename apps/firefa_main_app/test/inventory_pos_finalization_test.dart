@@ -103,6 +103,11 @@ void main() {
       sourceItemId: source.id, targetOutletId: 'outlet-b',
       targetItemId: target.id, quantity: 7,
     ), isFalse);
+    expect(await inventory.transferStock(
+      transferId: 'TRF-1 ', sourceOutletId: 'outlet-a',
+      sourceItemId: source.id, targetOutletId: 'outlet-b',
+      targetItemId: target.id, quantity: 7,
+    ), isFalse);
     expect(inventory.forOutlet('outlet-a').single.stock, 23);
     expect(inventory.forOutlet('outlet-b').single.stock, 11);
 
