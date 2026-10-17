@@ -424,7 +424,10 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
   /// The dedicated outbox is written on every state transition, so when an
   /// event exists in both places its state is authoritative. Events present
   /// only in the combined snapshot are recovered instead of being discarded.
-  void restoreCombinedSnapshot(Map<String, dynamic> data) {
+  void restoreCombinedSnapshot(
+    Map<String, dynamic> data, {
+    bool mergeOutbox = true,
+  }) {
     _ensureInitialized();
     validateCombinedSnapshot(data);
     final combinedEntries = (data['entries'] as List)
@@ -432,13 +435,13 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
               Map<String, dynamic>.from(value as Map),
             ))
         .toList();
-    final mergedById = <String, FirefaSyncEntry>{
-      for (final entry in _entries) entry.eventId: entry,
+    final restoredById = <String, FirefaSyncEntry>{
+      if (mergeOutbox) for (final entry in _entries) entry.eventId: entry,
     };
     for (final entry in combinedEntries) {
-      mergedById.putIfAbsent(entry.eventId, () => entry);
+      restoredById.putIfAbsent(entry.eventId, () => entry);
     }
-    for (final entry in mergedById.values) {
+    for (final entry in restoredById.values) {
       if (entry.status == FirefaSyncStatus.syncing) {
         entry.status = FirefaSyncStatus.pending;
         entry.nextAttemptAt = null;
@@ -446,9 +449,13 @@ class FirefaOfflineSyncQueue extends ChangeNotifier {
     }
     _entries
       ..clear()
-      ..addAll(mergedById.values);
+      ..addAll(restoredById.values);
     final combinedSequence = data['nextSequence'] as int;
-    if (combinedSequence > _nextSequence) _nextSequence = combinedSequence;
+    if (mergeOutbox) {
+      if (combinedSequence > _nextSequence) _nextSequence = combinedSequence;
+    } else {
+      _nextSequence = combinedSequence;
+    }
     _scheduleSave();
     notifyListeners();
   }
