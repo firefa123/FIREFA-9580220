@@ -142,29 +142,265 @@ class FirefaInventoryStore extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(storageKey);
+      var snapshot = <String, dynamic>{
+        'version': 1,
+        'nextId': 1,
+        'items': <dynamic>[],
+        'nextMovementId': 1,
+        'movements': <dynamic>[],
+        'nextOpnameId': 1,
+        'opnames': <dynamic>[],
+        'recipes': <dynamic>[],
+        'prepRecipes': <dynamic>[],
+        'preparedYields': <String, dynamic>{},
+        'processedOrderIds': <dynamic>[],
+        'reversedOrderIds': <dynamic>[],
+      };
       if (raw != null && raw.isNotEmpty) {
-        final decoded = jsonDecode(raw) as Map<String, dynamic>;
-        final restored = (decoded['items'] as List<dynamic>)
-            .map((entry) => FirefaInventoryItem.fromJson(
-                Map<String, dynamic>.from(entry as Map)))
-            .toList();
-        _items..clear()..addAll(restored);
-        _nextId = decoded['nextId'] as int;
-        _movements..clear()..addAll((decoded['movements'] as List<dynamic>? ?? []).map((entry) => FirefaStockMovement.fromJson(Map<String,dynamic>.from(entry as Map))));
-        _nextMovementId = decoded['nextMovementId'] as int? ?? 1;
-        _opnames..clear()..addAll((decoded['opnames'] as List<dynamic>? ?? []).map((entry) => FirefaStockOpname.fromJson(Map<String, dynamic>.from(entry as Map))));
-        _nextOpnameId = decoded['nextOpnameId'] as int? ?? 1;
-        _recipes..clear()..addAll((decoded['recipes'] as List<dynamic>? ?? []).map((entry) => FirefaRecipeLine.fromJson(Map<String, dynamic>.from(entry as Map))));
-        _prepRecipes..clear()..addAll((decoded['prepRecipes'] as List<dynamic>? ?? []).map((entry) => FirefaPrepRecipeLine.fromJson(Map<String, dynamic>.from(entry as Map))));
-        _preparedYields..clear()..addAll(Map<String, dynamic>.from(decoded['preparedYields'] as Map? ?? const {}).map((key, value) => MapEntry(key, value as int)));
-        _processedOrderIds..clear()..addAll((decoded['processedOrderIds'] as List<dynamic>? ?? []).whereType<String>());
-        _reversedOrderIds..clear()..addAll((decoded['reversedOrderIds'] as List<dynamic>? ?? []).whereType<String>());
+        snapshot = Map<String, dynamic>.from(jsonDecode(raw) as Map);
       }
+      _validateSnapshotData(snapshot);
+
+      // Parse and validate everything into temporary values before replacing
+      // the in-memory state. A corrupt persisted snapshot must be recoverable.
+      final items = (snapshot['items'] as List<dynamic>)
+          .map((entry) => FirefaInventoryItem.fromJson(
+              Map<String, dynamic>.from(entry as Map)))
+          .toList();
+      final movements = (snapshot['movements'] as List<dynamic>? ?? [])
+          .map((entry) => FirefaStockMovement.fromJson(
+              Map<String, dynamic>.from(entry as Map)))
+          .toList();
+      final opnames = (snapshot['opnames'] as List<dynamic>? ?? [])
+          .map((entry) => FirefaStockOpname.fromJson(
+              Map<String, dynamic>.from(entry as Map)))
+          .toList();
+      final recipes = (snapshot['recipes'] as List<dynamic>? ?? [])
+          .map((entry) => FirefaRecipeLine.fromJson(
+              Map<String, dynamic>.from(entry as Map)))
+          .toList();
+      final prepRecipes = (snapshot['prepRecipes'] as List<dynamic>? ?? [])
+          .map((entry) => FirefaPrepRecipeLine.fromJson(
+              Map<String, dynamic>.from(entry as Map)))
+          .toList();
+      final preparedYields = Map<String, dynamic>.from(
+        snapshot['preparedYields'] as Map? ?? const {},
+      ).map((key, value) => MapEntry(key, value as int));
+      final processedOrderIds =
+          (snapshot['processedOrderIds'] as List<dynamic>? ?? []).cast<String>();
+      final reversedOrderIds =
+          (snapshot['reversedOrderIds'] as List<dynamic>? ?? []).cast<String>();
+
+      _items..clear()..addAll(items);
+      _movements..clear()..addAll(movements);
+      _opnames..clear()..addAll(opnames);
+      _recipes..clear()..addAll(recipes);
+      _prepRecipes..clear()..addAll(prepRecipes);
+      _preparedYields..clear()..addAll(preparedYields);
+      _processedOrderIds..clear()..addAll(processedOrderIds);
+      _reversedOrderIds..clear()..addAll(reversedOrderIds);
+      _nextId = snapshot['nextId'] as int;
+      _nextMovementId = (snapshot['nextMovementId'] as int?) ?? 1;
+      _nextOpnameId = (snapshot['nextOpnameId'] as int?) ?? 1;
       _initialized = true;
       notifyListeners();
-    } catch (_) {
+    } catch (error) {
+      _items.clear();
+      _movements.clear();
+      _opnames.clear();
+      _recipes.clear();
+      _prepRecipes.clear();
+      _preparedYields.clear();
+      _processedOrderIds.clear();
+      _reversedOrderIds.clear();
+      _nextId = 1;
+      _nextMovementId = 1;
+      _nextOpnameId = 1;
+      _initialized = false;
       _initializing = null;
+      if (error is FormatException) rethrow;
+      throw FormatException('Snapshot inventory tidak valid: $error');
+    }
+  }
+
+  void _validateSnapshotData(Map<String, dynamic> snapshot) {
+    if (snapshot['version'] != 1 ||
+        snapshot['items'] is! List ||
+        snapshot['nextId'] is! int ||
+        (snapshot['nextId'] as int) < 1 ||
+        (snapshot['nextMovementId'] != null &&
+            (snapshot['nextMovementId'] is! int ||
+             (snapshot['nextMovementId'] as int) < 1)) ||
+        (snapshot['nextOpnameId'] != null &&
+            (snapshot['nextOpnameId'] is! int ||
+             (snapshot['nextOpnameId'] as int) < 1)) ||
+        (snapshot['movements'] != null && snapshot['movements'] is! List) ||
+        (snapshot['opnames'] != null && snapshot['opnames'] is! List) ||
+        (snapshot['recipes'] != null && snapshot['recipes'] is! List) ||
+        (snapshot['prepRecipes'] != null && snapshot['prepRecipes'] is! List) ||
+        (snapshot['preparedYields'] != null && snapshot['preparedYields'] is! Map) ||
+        (snapshot['processedOrderIds'] != null && snapshot['processedOrderIds'] is! List) ||
+        (snapshot['reversedOrderIds'] != null && snapshot['reversedOrderIds'] is! List)) {
+      throw const FormatException('Struktur snapshot inventory tidak valid.');
+    }
+
+    try {
+      final items = (snapshot['items'] as List)
+          .map((entry) => FirefaInventoryItem.fromJson(
+              Map<String, dynamic>.from(entry as Map)))
+          .toList();
+      final itemsByKey = <String, FirefaInventoryItem>{};
+      var maximumItemSequence = 0;
+      for (final item in items) {
+        final match = RegExp(r'^inventory-(\\d+)$').firstMatch(item.id);
+        final sequence = int.tryParse(match?.group(1) ?? '');
+        if (item.id.trim().isEmpty ||
+            item.outletId.trim().isEmpty ||
+            item.name.trim().isEmpty ||
+            item.name.length > 80 ||
+            !units.contains(item.unit) ||
+            item.stock < 0 || item.stock > 999999999 ||
+            item.minimumStock < 0 || item.minimumStock > 999999999 ||
+            !item.unitCost.isFinite || item.unitCost < 0 ||
+            item.unitCost > 999999999999 ||
+            itemsByKey.containsKey('${item.outletId}::${item.id}')) {
+          throw const FormatException('Data item inventory tidak valid.');
+        }
+        itemsByKey['${item.outletId}::${item.id}'] = item;
+        if (sequence != null && sequence > maximumItemSequence) {
+          maximumItemSequence = sequence;
+        }
+      }
+      if ((snapshot['nextId'] as int) <= maximumItemSequence) {
+        throw const FormatException('Counter item inventory akan menggunakan ulang ID.');
+      }
+
+      final movements = (snapshot['movements'] as List<dynamic>? ?? [])
+          .map((entry) => FirefaStockMovement.fromJson(
+              Map<String, dynamic>.from(entry as Map)))
+          .toList();
+      var maximumMovementSequence = 0;
+      final movementIds = <String>{};
+      for (final movement in movements) {
+        final match = RegExp(r'^movement-(\\d+)$').firstMatch(movement.id);
+        final sequence = int.tryParse(match?.group(1) ?? '');
+        final item = itemsByKey['${movement.outletId}::${movement.itemId}'];
+        final directionIsValid = switch (movement.type) {
+          'in' => movement.after > movement.before,
+          'out' => movement.after < movement.before,
+          'correction' => movement.after != movement.before,
+          _ => false,
+        };
+        if (sequence == null || sequence < 1 ||
+            !movementIds.add(movement.id) ||
+            movement.outletId.trim().isEmpty ||
+            movement.itemId.trim().isEmpty ||
+            item == null ||
+            movement.itemName != item.name ||
+            movement.before < 0 || movement.after < 0 ||
+            movement.before > 999999999 || movement.after > 999999999 ||
+            !directionIsValid ||
+            movement.note.trim().length > 200) {
+          throw const FormatException('Data pergerakan stok tidak valid.');
+        }
+        try { DateTime.parse(movement.timestamp); } catch (_) {
+          throw const FormatException('Waktu pergerakan stok tidak valid.');
+        }
+        if (sequence > maximumMovementSequence) maximumMovementSequence = sequence;
+      }
+      if (((snapshot['nextMovementId'] as int?) ?? 1) <= maximumMovementSequence) {
+        throw const FormatException('Counter pergerakan stok akan menggunakan ulang ID.');
+      }
+
+      final opnames = (snapshot['opnames'] as List<dynamic>? ?? [])
+          .map((entry) => FirefaStockOpname.fromJson(
+              Map<String, dynamic>.from(entry as Map)))
+          .toList();
+      var maximumOpnameSequence = 0;
+      final opnameIds = <String>{};
+      for (final opname in opnames) {
+        final match = RegExp(r'^opname-(\\d+)$').firstMatch(opname.id);
+        final sequence = int.tryParse(match?.group(1) ?? '');
+        if (sequence == null || sequence < 1 ||
+            !opnameIds.add(opname.id) ||
+            opname.outletId.trim().isEmpty ||
+            itemsByKey['${opname.outletId}::${opname.itemId}'] == null ||
+            opname.systemStock < 0 || opname.physicalStock < 0 ||
+            opname.systemStock > 999999999 || opname.physicalStock > 999999999 ||
+            !['pending', 'approved', 'rejected'].contains(opname.status) ||
+            (opname.status == 'pending' && opname.resolvedAt != null) ||
+            (opname.status != 'pending' && opname.resolvedAt == null) ||
+            opname.note.trim().length > 200) {
+          throw const FormatException('Data stock opname tidak valid.');
+        }
+        try {
+          DateTime.parse(opname.createdAt);
+          if (opname.resolvedAt != null) DateTime.parse(opname.resolvedAt!);
+        } catch (_) {
+          throw const FormatException('Waktu stock opname tidak valid.');
+        }
+        if (sequence > maximumOpnameSequence) maximumOpnameSequence = sequence;
+      }
+      if (((snapshot['nextOpnameId'] as int?) ?? 1) <= maximumOpnameSequence) {
+        throw const FormatException('Counter stock opname akan menggunakan ulang ID.');
+      }
+
+      final recipes = (snapshot['recipes'] as List<dynamic>? ?? [])
+          .map((entry) => FirefaRecipeLine.fromJson(
+              Map<String, dynamic>.from(entry as Map)))
+          .toList();
+      for (final recipe in recipes) {
+        if (recipe.outletId.trim().isEmpty || recipe.menuId.trim().isEmpty ||
+            recipe.quantity <= 0 || recipe.quantity > 999999999 ||
+            itemsByKey['${recipe.outletId}::${recipe.ingredientId}'] == null) {
+          throw const FormatException('Resep menu inventory tidak valid.');
+        }
+      }
+
+      final prepRecipes = (snapshot['prepRecipes'] as List<dynamic>? ?? [])
+          .map((entry) => FirefaPrepRecipeLine.fromJson(
+              Map<String, dynamic>.from(entry as Map)))
+          .toList();
+      for (final recipe in prepRecipes) {
+        final target = itemsByKey['${recipe.outletId}::${recipe.preparedItemId}'];
+        if (recipe.outletId.trim().isEmpty || recipe.quantity <= 0 ||
+            recipe.quantity > 999999999 || target == null ||
+            !target.isPreparedIngredient ||
+            itemsByKey['${recipe.outletId}::${recipe.ingredientId}'] == null ||
+            recipe.preparedItemId == recipe.ingredientId) {
+          throw const FormatException('Resep bahan olahan tidak valid.');
+        }
+      }
+
+      final yields = Map<String, dynamic>.from(
+        snapshot['preparedYields'] as Map? ?? const {},
+      );
+      for (final entry in yields.entries) {
+        if (entry.value is! int || (entry.value as int) <= 0 ||
+            (entry.value as int) > 999999999) {
+          throw const FormatException('Hasil produksi bahan olahan tidak valid.');
+        }
+        final parts = entry.key.split('::');
+        if (parts.length != 2) {
+          throw const FormatException('Referensi hasil produksi tidak valid.');
+        }
+        final item = itemsByKey['${parts[0]}::${parts[1]}'];
+        if (item == null || !item.isPreparedIngredient) {
+          throw const FormatException('Referensi hasil produksi tidak valid.');
+        }
+      }
+
+      final processedValues = snapshot['processedOrderIds'] as List? ?? const [];
+      final reversedValues = snapshot['reversedOrderIds'] as List? ?? const [];
+      if (processedValues.any((value) => value is! String || value.trim().isEmpty) ||
+          reversedValues.any((value) => value is! String || value.trim().isEmpty) ||
+          !processedValues.toSet().containsAll(reversedValues)) {
+        throw const FormatException('Riwayat konsumsi stok tidak valid.');
+      }
+    } on FormatException {
       rethrow;
+    } catch (error) {
+      throw FormatException('Data snapshot inventory tidak valid: $error');
     }
   }
 
@@ -792,25 +1028,7 @@ class FirefaInventoryStore extends ChangeNotifier {
   }
 
   void validateLocalSnapshot(Map<String, dynamic> snapshot) {
-    if (snapshot['items'] is! List || snapshot['nextId'] is! int) {
-      throw const FormatException('Snapshot inventory tidak valid.');
-    }
-    (snapshot['items'] as List).map((e) => FirefaInventoryItem.fromJson(Map<String, dynamic>.from(e as Map))).toList();
-    (snapshot['movements'] as List? ?? []).map((e) => FirefaStockMovement.fromJson(Map<String, dynamic>.from(e as Map))).toList();
-    (snapshot['opnames'] as List? ?? []).map((e) => FirefaStockOpname.fromJson(Map<String, dynamic>.from(e as Map))).toList();
-    (snapshot['recipes'] as List? ?? []).map((e) => FirefaRecipeLine.fromJson(Map<String, dynamic>.from(e as Map))).toList();
-    (snapshot['prepRecipes'] as List? ?? []).map((e) => FirefaPrepRecipeLine.fromJson(Map<String, dynamic>.from(e as Map))).toList();
-    if ((snapshot['preparedYields'] != null && snapshot['preparedYields'] is! Map)) throw const FormatException('Data bahan olahan tidak valid.');
-    if (snapshot['nextMovementId'] != null && snapshot['nextMovementId'] is! int ||
-        snapshot['nextOpnameId'] != null && snapshot['nextOpnameId'] is! int) {
-      throw const FormatException('Counter inventory tidak valid.');
-    }
-    for (final key in ['processedOrderIds', 'reversedOrderIds']) {
-      final values = snapshot[key];
-      if (values != null && (values is! List || values.any((v) => v is! String))) {
-        throw const FormatException('Riwayat order inventory tidak valid.');
-      }
-    }
+    _validateSnapshotData(snapshot);
   }
 
   Future<void> restoreLocalSnapshot(Map<String, dynamic> snapshot) async {
