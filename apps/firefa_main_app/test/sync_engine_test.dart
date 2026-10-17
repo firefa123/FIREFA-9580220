@@ -159,6 +159,36 @@ void main() {
     await queue.waitForPendingSave();
   });
 
+  test('coordinator can defer cancellation until stock receipt is durable', () async {
+    final order = makeOrder('CANCEL-STOCK-GATE', 'cancel-stock-gate-outlet');
+    order.status = FirefaOrderStatus.cancelled;
+    final entry = queue.enqueueOrder(order, 'order.updated');
+    await queue.waitForPendingSave();
+    final adapter = _CountingAckAdapter();
+    final coordinator = FirefaSyncCoordinator(
+      queue: queue,
+      adapter: adapter,
+      conflictBridge: FirefaHybridSyncConflictBridge(
+        store: FirefaConflictStore.instance,
+      ),
+    );
+
+    final deferred = await coordinator.syncOutlet(
+      order.outletId,
+      deferOrderIds: {order.id},
+    );
+    expect(deferred.attempted, 0);
+    expect(adapter.sends, 0);
+    expect(queue.findEvent(entry.eventId)!.status, FirefaSyncStatus.pending);
+
+    final resumed = await coordinator.syncOutlet(order.outletId);
+    expect(resumed.acknowledged, 1);
+    expect(adapter.sends, 1);
+    expect(queue.findEvent(entry.eventId)!.status, FirefaSyncStatus.synced);
+    await queue.removeEvent(entry.eventId);
+    await queue.waitForPendingSave();
+  });
+
   test('retry backoff adds bounded jitter and respects five minute cap', () {
     expect(
       engine.retryDelay(0, jitterMilliseconds: 500),
