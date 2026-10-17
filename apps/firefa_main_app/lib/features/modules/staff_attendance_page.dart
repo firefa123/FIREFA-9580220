@@ -227,7 +227,7 @@ class _StaffAttendancePageState extends State<StaffAttendancePage> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
-                  value: status, decoration: const InputDecoration(labelText: 'Status akun'),
+                  initialValue: status, decoration: const InputDecoration(labelText: 'Status akun'),
                   items: const [
                     DropdownMenuItem(value: 'active', child: Text('Aktif')),
                     DropdownMenuItem(value: 'inactive', child: Text('Nonaktif')),
