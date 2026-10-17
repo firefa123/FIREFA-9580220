@@ -1431,6 +1431,13 @@ authSuite("authentication endpoints", () => {
     });
     expect(missingPhoto.statusCode).toBe(400);
 
+    const invalidPhoto = await ownerApp.inject({
+      method: "POST", url: "/api/v1/attendance/check-in",
+      headers: { authorization: "Bearer " + staffToken },
+      payload: { ...checkInPayload, checkInPhotoBase64: Buffer.from("not-an-image").toString("base64") },
+    });
+    expect(invalidPhoto.statusCode).toBe(400);
+
     const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString("base64");
     const checkIn = await ownerApp.inject({
       method: "POST", url: "/api/v1/attendance/check-in",
@@ -1477,6 +1484,11 @@ authSuite("authentication endpoints", () => {
     });
     expect(cashierHistory.statusCode).toBe(403);
     expect(cashierHistory.json()).toEqual({ error: "owner_required" });
+    const cashierPhoto = await ownerApp.inject({
+      method: "GET", url: "/api/v1/attendance/" + attendanceId + "/photo",
+      headers: { authorization: "Bearer " + cashier.accessToken },
+    });
+    expect(cashierPhoto.statusCode).toBe(403);
 
     const staffPhoto = await ownerApp.inject({
       method: "GET", url: "/api/v1/attendance/" + attendanceId + "/photo",
