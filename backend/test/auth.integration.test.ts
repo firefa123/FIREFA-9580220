@@ -872,6 +872,7 @@ authSuite("authentication endpoints", () => {
     event.orderSnapshot.items[0]!.quantity = 2;
     event.orderSnapshot.subtotal = 20000;
     event.orderSnapshot.total = 20000;
+    event.orderSnapshot.cashPaidAmount = event.orderSnapshot.total;
     event.orderSnapshot.items[0]!.unitPrice = 10000;
 
     const created = await postSyncEvent(ownerApp, owner.accessToken, event);
@@ -936,6 +937,7 @@ authSuite("authentication endpoints", () => {
     event.orderSnapshot.items[0]!.quantity = 2;
     event.orderSnapshot.subtotal = 20000;
     event.orderSnapshot.total = 20000;
+    event.orderSnapshot.cashPaidAmount = event.orderSnapshot.total;
     event.orderSnapshot.items[0]!.unitPrice = 10000;
 
     const rejected = await postSyncEvent(ownerApp, owner.accessToken, event);
