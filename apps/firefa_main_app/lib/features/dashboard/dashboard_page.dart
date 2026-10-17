@@ -76,7 +76,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'Operasional F&B',
     'Pembelian & Keuangan',
     'Pelanggan & Loyalitas',
-    'Staff & Absensi',
+    'Pengaturan Staff',
   ];
 
   static const pageDescriptions = [
@@ -96,7 +96,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'Kelola reservasi, antrean, KOT dapur, paket menu, harga per tipe pesanan, dan promo.',
     'Kelola utang pemasok, konsinyasi, pengeluaran, dan laporan keuangan.',
     'Kelola pelanggan, piutang BON, limit kredit, loyalty, RFM, dan backup.',
-    'Kelola staff, radius geofence, absensi, dan ketepatan waktu.',
+    'Tambah dan edit akun Staff, atur PIN, radius geofence, serta pantau absensi dan ketepatan waktu.',
   ];
 
   static const pagePermissions = [
