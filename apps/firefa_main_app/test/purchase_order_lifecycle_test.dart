@@ -52,7 +52,7 @@ void main() {
     expect(po.remainingQuantity, 8);
     expect(po.totalCost, 16000);
 
-    expect(await orders.receiveDurably(
+    expect(await orders.receive(
       outletId: outletId,
       orderId: po.id,
       quantity: 3,
@@ -64,7 +64,7 @@ void main() {
     expect(po.receipts, hasLength(1));
     expect(inventory.forOutlet(outletId).single.stock, 13);
 
-    expect(await orders.receiveDurably(
+    expect(await orders.receive(
       outletId: outletId,
       orderId: po.id,
       quantity: 6,
@@ -72,7 +72,7 @@ void main() {
     expect(inventory.forOutlet(outletId).single.stock, 13);
     expect(orders.forOutlet(outletId).single.receivedQuantity, 3);
 
-    expect(await orders.receiveDurably(
+    expect(await orders.receive(
       outletId: outletId,
       orderId: po.id,
       quantity: 5,
@@ -95,12 +95,12 @@ void main() {
     ), isTrue);
     final second = orders.forOutlet(outletId).first;
     final concurrentReceipts = await Future.wait([
-      orders.receiveDurably(
+      orders.receive(
         outletId: outletId,
         orderId: second.id,
         quantity: 1,
       ),
-      orders.receiveDurably(
+      orders.receive(
         outletId: outletId,
         orderId: second.id,
         quantity: 1,
@@ -110,12 +110,12 @@ void main() {
     expect(orders.forOutlet(outletId).first.receivedQuantity, 1);
     expect(inventory.forOutlet(outletId).single.stock, 19);
 
-    expect(await orders.cancelDurably(outletId: outletId, orderId: second.id), isTrue);
+    expect(await orders.cancel(outletId: outletId, orderId: second.id), isTrue);
     final cancelled = orders.forOutlet(outletId).first;
     expect(cancelled.status, 'cancelled');
     expect(cancelled.receivedQuantity, 1);
     expect(cancelled.remainingQuantity, 1);
-    expect(await orders.receiveDurably(
+    expect(await orders.receive(
       outletId: outletId,
       orderId: second.id,
       quantity: 1,
