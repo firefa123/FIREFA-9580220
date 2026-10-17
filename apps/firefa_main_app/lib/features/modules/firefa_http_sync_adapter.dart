@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -46,6 +48,13 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
     }
 
     final backend = FirefaBackendClient.instance;
+    if (!kDebugMode && !backend.baseUrl.toLowerCase().startsWith('https://')) {
+      return FirefaSyncReceipt(
+        eventId: event.eventId,
+        outcome: FirefaSyncOutcome.permanentFailure,
+        message: 'Sinkronisasi produksi wajib menggunakan HTTPS.',
+      );
+    }
     try {
       final session = await backend.restoreSession();
       if (session == null) {
