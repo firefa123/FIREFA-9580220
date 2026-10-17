@@ -10,6 +10,8 @@ import 'pos_payment_dialog.dart';
 import 'receipt_formatter.dart';
 import 'persistent_cart_store.dart';
 import 'settings_store.dart';
+import 'backend_client.dart';
+import 'firefa_sync_worker.dart';
 
 class OrdersPage extends StatefulWidget {
   final VoidCallback? onReorder;
@@ -689,6 +691,8 @@ class _OrdersPageState extends State<OrdersPage> {
       ('Conflict', count(FirefaSyncStatus.conflict), Colors.deepPurple),
     ];
 
+    final cloudConfigured = FirefaBackendConfig.isConfigured;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -700,27 +704,47 @@ class _OrdersPageState extends State<OrdersPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Wrap(
+          Wrap(
             spacing: 10,
             runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Icon(Icons.cloud_off_outlined, color: muted),
-              Text(
+              Icon(cloudConfigured ? Icons.cloud_sync_outlined : Icons.cloud_off_outlined, color: muted),
+              const Text(
                 'Sync Monitoring',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: ink),
               ),
               Text(
-                'Local Only — Cloud belum terhubung',
-                style: TextStyle(color: muted, fontSize: 12),
+                cloudConfigured
+                    ? 'Transport cloud dikonfigurasi; status mengikuti receipt server'
+                    : 'Local Only — URL backend belum dikonfigurasi',
+                style: const TextStyle(color: muted, fontSize: 12),
               ),
             ],
           ),
           const SizedBox(height: 10),
           Text(
-            'Antrean perubahan pesanan untuk $outletName. '
-            'Belum ada pengiriman ke server.',
+            cloudConfigured
+                ? 'Antrean perubahan pesanan untuk $outletName. Pengiriman dicoba otomatis saat aplikasi aktif dan setelah resume.'
+                : 'Antrean perubahan pesanan untuk $outletName tetap tersimpan lokal sampai URL backend dan sesi terautentikasi tersedia.',
             style: const TextStyle(color: muted, fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: cloudConfigured ? () async {
+              await FirefaSyncWorker.instance.start();
+              await FirefaSyncWorker.instance.syncNow();
+              if (!mounted) return;
+              final current = syncQueue.entriesForOutlet(outletId);
+              final pending = current.where((entry) => entry.status == FirefaSyncStatus.pending).length;
+              final conflicts = current.where((entry) => entry.status == FirefaSyncStatus.conflict).length;
+              final failed = current.where((entry) => entry.status == FirefaSyncStatus.failed).length;
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('Sinkronisasi dipicu. Pending: $pending • Konflik: $conflicts • Gagal: $failed.'),
+              ));
+            } : null,
+            icon: const Icon(Icons.sync),
+            label: const Text('Sinkronkan Sekarang'),
           ),
           const SizedBox(height: 14),
           Wrap(
