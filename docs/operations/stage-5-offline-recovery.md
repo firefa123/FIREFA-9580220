@@ -8,7 +8,7 @@ The authenticated order HTTP adapter targets POST /api/v1/sync/events. A foregro
 
 The local preference store is not a transactional database. These journals protect ordinary process-stop/reopen recovery and uncertain network acknowledgements, but they are not a guarantee against device loss, storage corruption, or abrupt power failure during a preference write. A transactional local database and cross-device tests remain necessary before making stronger durability claims.
 
-**Deployment boundary:** this repository currently has no verifiable deployed backend host or credentials available to this task. Therefore client-side sync implementation and CI can be validated here, but live authenticated cloud sync, PostgreSQL idempotency, multi-device conflict behavior, and production reconciliation cannot honestly be marked passed until a real staging backend is available.
+**Deployment boundary:** the Fastify backend and PostgreSQL migration files exist in this repository, but no live staging host, provisioned database, or credentials were available to this task. Client/server code and CI can be validated here; live authenticated cloud sync, migration-on-a-real-database, multi-device conflict behavior, and production reconciliation remain unverified until a real staging backend is provisioned.
 
 ## Offline → restart → reconnect acceptance test
 
