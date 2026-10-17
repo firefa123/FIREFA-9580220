@@ -166,7 +166,7 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
 
       if (response.statusCode == 409 && body != null) {
         final code = body['code'] ?? body['error'];
-        if (code == 'idempotency_payload_mismatch') {
+        if (code == 'idempotency_payload_mismatch' || code == 'event_id_payload_mismatch') {
           return FirefaSyncReceipt(
             eventId: event.eventId,
             outcome: FirefaSyncOutcome.permanentFailure,
@@ -185,13 +185,13 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
           }
           final responseOutlet = body['serverOutletId'];
           final responseOrder = body['serverOrderId'];
-          if (responseOutlet == serverOutletId &&
-              responseOrder == event.orderId &&
+          if ((responseOutlet == null || responseOutlet == serverOutletId) &&
+              (responseOrder == null || responseOrder == event.orderId) &&
               snapshot['id'] == event.orderId &&
               snapshot['outletId'] == serverOutletId) {
             snapshot['outletId'] = event.outletId;
             final kind = switch (code) {
-              'stale_server_version' || 'stale_version' => FirefaConflictKind.staleServerVersion,
+              'stale_order_version' || 'stale_server_version' || 'stale_version' => FirefaConflictKind.staleServerVersion,
               'duplicate_payment' => FirefaConflictKind.duplicatePayment,
               'inventory_divergence' => FirefaConflictKind.inventoryDivergence,
               'invalid_server_response' => FirefaConflictKind.invalidServerResponse,
