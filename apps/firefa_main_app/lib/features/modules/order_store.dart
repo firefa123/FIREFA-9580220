@@ -20,6 +20,7 @@ class FirefaOrderStore extends ChangeNotifier {
   final List<FirefaOrder> _orders = [];
 
   int _nextNumber = 1001;
+  final Set<String> _reservedOrderIds = <String>{};
   bool _initialized = false;
 
   Future<void> _pendingSave = Future.value();
@@ -74,6 +75,13 @@ class FirefaOrderStore extends ChangeNotifier {
       _scheduleSave();
     }
     _registerTableOrderChecker();
+    // Resume any checkout whose order was durable but whose stock deduction
+    // had not completed before the app stopped.
+    final recoveredStock = await FirefaInventoryStore.instance
+        .recoverPendingOrderStock(_orders);
+    if (recoveredStock > 0) {
+      debugPrint('FIREFA: recovered stock for $recoveredStock interrupted checkout(s).');
+    }
     // Recover stock reversals if the app was interrupted after a cancelled
     // order became durable but before its inventory restoration completed.
     await recoverCancelledOrderStock();
@@ -286,7 +294,21 @@ class FirefaOrderStore extends ChangeNotifier {
     );
   }
 
+  Future<String> reserveOrderIdAndPersist() async {
+    _ensureInitialized();
+    final id = 'ORD-${_nextNumber++}';
+    _reservedOrderIds.add(id);
+    _scheduleSave();
+    await waitForPendingSave();
+    return id;
+  }
+
+  void releaseReservedOrderId(String orderId) {
+    _reservedOrderIds.remove(orderId);
+  }
+
   FirefaOrder createOrder({
+    String? reservedOrderId,
     required String outletId,
     required String orderType,
     required String? tableId,
@@ -329,7 +351,11 @@ class FirefaOrderStore extends ChangeNotifier {
     }
 
     final order = FirefaOrder(
-      id: 'ORD-${_nextNumber++}',
+      id: reservedOrderId == null
+          ? 'ORD-${_nextNumber++}'
+          : (_reservedOrderIds.remove(reservedOrderId)
+              ? reservedOrderId
+              : throw StateError('ID pesanan tidak dicadangkan oleh store.')),
       outletId: outletId,
       orderType: orderType,
       tableId: orderType == 'Dine In' ? tableId : null,
@@ -697,6 +723,8 @@ class FirefaOrderStore extends ChangeNotifier {
           orderId: orderId,
           outletId: outletId,
         );
+      } else if (!inventory.isOrderStockProcessed(orderId, outletId: outletId)) {
+        await inventory.discardOrderStockIntent(orderId: orderId, outletId: outletId);
       }
     } catch (error) {
       // Keep the durable cancellation. Startup recovery retries any missing
