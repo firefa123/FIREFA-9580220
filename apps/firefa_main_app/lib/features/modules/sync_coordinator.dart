@@ -24,12 +24,13 @@ class FirefaSyncCoordinator {
   Future<FirefaSyncRunSummary> syncOutlet(
     String outletId, {
     int limit = 25,
+    Set<String> deferOrderIds = const <String>{},
   }) async {
     final batch = engine.pendingBatch(
       queue: queue,
       outletId: outletId,
       limit: limit,
-    );
+    ).where((event) => !deferOrderIds.contains(event.orderId)).toList();
     var attempted = 0;
     var acknowledged = 0;
     var conflicts = 0;
