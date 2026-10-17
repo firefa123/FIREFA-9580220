@@ -1,13 +1,6 @@
 -- Operational tables required by authenticated POS sync and inventory APIs.
 -- Applied transactionally by backend/src/db/migrate.ts.
 
-ALTER TABLE refresh_tokens
-  ADD COLUMN tenant_id uuid REFERENCES tenants(id) ON DELETE RESTRICT;
-
-CREATE INDEX refresh_tokens_tenant_active_idx
-  ON refresh_tokens (tenant_id, expires_at)
-  WHERE revoked_at IS NULL;
-
 CREATE TABLE menu_categories (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
