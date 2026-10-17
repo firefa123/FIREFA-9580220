@@ -8,6 +8,22 @@ CREATE INDEX refresh_tokens_tenant_active_idx
   ON refresh_tokens (tenant_id, expires_at)
   WHERE revoked_at IS NULL;
 
+CREATE TABLE menu_categories (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  outlet_id uuid,
+  name text NOT NULL CHECK (length(trim(name)) > 0),
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  FOREIGN KEY (outlet_id, tenant_id) REFERENCES outlets(id, tenant_id) ON DELETE RESTRICT,
+  UNIQUE (id, tenant_id),
+  UNIQUE (id, tenant_id, outlet_id)
+);
+
+CREATE UNIQUE INDEX menu_categories_name_unique
+  ON menu_categories (tenant_id, COALESCE(outlet_id, '00000000-0000-0000-0000-000000000000'::uuid), lower(name));
+
 CREATE TABLE products (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
@@ -22,6 +38,7 @@ CREATE TABLE products (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   FOREIGN KEY (outlet_id, tenant_id) REFERENCES outlets(id, tenant_id) ON DELETE RESTRICT,
+  FOREIGN KEY (category_id, tenant_id) REFERENCES menu_categories(id, tenant_id) ON DELETE RESTRICT,
   UNIQUE (id, tenant_id),
   UNIQUE (id, tenant_id, outlet_id)
 );
@@ -29,6 +46,24 @@ CREATE TABLE products (
 CREATE UNIQUE INDEX products_outlet_sku_unique
   ON products (tenant_id, outlet_id, lower(sku))
   WHERE sku IS NOT NULL;
+
+CREATE TABLE sync_devices (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  outlet_id uuid NOT NULL,
+  device_id uuid NOT NULL,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  device_name text NOT NULL DEFAULT 'FIREFA device',
+  last_seen_at timestamptz NOT NULL DEFAULT now(),
+  revoked_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  FOREIGN KEY (outlet_id, tenant_id) REFERENCES outlets(id, tenant_id) ON DELETE RESTRICT,
+  UNIQUE (tenant_id, device_id)
+);
+
+CREATE INDEX sync_devices_outlet_last_seen_idx
+  ON sync_devices (tenant_id, outlet_id, last_seen_at DESC);
 
 CREATE TABLE inventory_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
