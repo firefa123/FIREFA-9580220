@@ -419,6 +419,34 @@ class FirefaInventoryStore extends ChangeNotifier {
           !processedValues.toSet().containsAll(reversedValues)) {
         throw const FormatException('Riwayat konsumsi stok tidak valid.');
       }
+      final intents = Map<String, dynamic>.from(
+        snapshot['pendingOrderConsumptions'] as Map? ?? const {},
+      );
+      for (final entry in intents.entries) {
+        final intent = Map<String, dynamic>.from(entry.value as Map);
+        final outletId = intent['outletId'];
+        final orderId = intent['orderId'];
+        final lines = intent['menuLines'];
+        if (outletId is! String || outletId.trim().isEmpty ||
+            orderId is! String || orderId.trim().isEmpty ||
+            entry.key != jsonEncode([outletId, orderId]) ||
+            lines is! List || lines.isEmpty) {
+          throw const FormatException('Jurnal pemakaian stok tidak valid.');
+        }
+        for (final rawLine in lines) {
+          if (rawLine is! Map) {
+            throw const FormatException('Baris jurnal pemakaian stok tidak valid.');
+          }
+          final line = Map<String, dynamic>.from(rawLine);
+          if (line['menuId'] is! String ||
+              (line['menuId'] as String).trim().isEmpty ||
+              line['quantity'] is! int ||
+              (line['quantity'] as int) < 1 ||
+              (line['quantity'] as int) > 999999999) {
+            throw const FormatException('Baris jurnal pemakaian stok tidak valid.');
+          }
+        }
+      }
     } on FormatException {
       rethrow;
     } catch (error) {
