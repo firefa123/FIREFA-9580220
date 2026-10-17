@@ -2,13 +2,13 @@ name: Flutter validation
 
 on:
   pull_request:
-    types: [ready_for_review]
-    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    branches: [main, development]
     paths:
       - 'apps/firefa_main_app/**'
       - '.github/workflows/flutter-validation.yml'
   push:
-    branches: [main]
+    branches: [main, development]
     paths:
       - 'apps/firefa_main_app/**'
       - '.github/workflows/flutter-validation.yml'
@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   validate:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    if: true
     runs-on: ubuntu-latest
     defaults:
       run:
