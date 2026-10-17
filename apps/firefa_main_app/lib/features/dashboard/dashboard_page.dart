@@ -55,7 +55,7 @@ class _DashboardPageState extends State<DashboardPage> {
   final orderStore = FirefaOrderStore.instance;
 
   late int selectedIndex;
-  bool sidebarCollapsed = true;
+  bool sidebarCollapsed = false;
   bool _syncInProgress = false;
   Timer? _syncRetryTimer;
 
