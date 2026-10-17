@@ -1,6 +1,19 @@
 import 'offline_sync_queue.dart';
 import 'conflict_management.dart';
 
+Map<String, dynamic> _deepFreezeJsonMap(Map<String, dynamic> source) {
+  dynamic freeze(dynamic value) {
+    if (value is Map) {
+      return Map<String, dynamic>.unmodifiable(
+        value.map((key, nested) => MapEntry(key.toString(), freeze(nested))),
+      );
+    }
+    if (value is List) return List<dynamic>.unmodifiable(value.map(freeze));
+    return value;
+  }
+  return freeze(source) as Map<String, dynamic>;
+}
+
 /// Immutable event envelope used by the authenticated FIREFA HTTP adapter.
 /// eventId is the idempotency key; orderId is only unique within the local
 /// installation today and must not be treated as a global database key.
@@ -19,7 +32,7 @@ class FirefaSyncEnvelope {
     required this.eventType,
     required this.createdAt,
     required Map<String, dynamic> orderSnapshot,
-  }) : orderSnapshot = Map.unmodifiable(orderSnapshot);
+  }) : orderSnapshot = _deepFreezeJsonMap(orderSnapshot);
 
   factory FirefaSyncEnvelope.fromEntry(FirefaSyncEntry entry) {
     return FirefaSyncEnvelope(
@@ -77,7 +90,7 @@ class FirefaSyncReceipt {
       outcome == FirefaSyncOutcome.acknowledged &&
       eventId == event.eventId &&
       serverReference != null &&
-      serverReference!.isNotEmpty;
+      serverReference!.trim().isNotEmpty;
 }
 
 /// Transport contract. Implementations perform the network I/O; the coordinator

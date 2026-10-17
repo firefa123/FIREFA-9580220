@@ -93,6 +93,11 @@ void main() {
   final queue = FirefaOfflineSyncQueue.instance;
   const engine = FirefaSyncEngine();
 
+  Future<void> markAsConflict(String eventId) async {
+    await queue.markSyncing(eventId);
+    await queue.markConflict(eventId);
+  }
+
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
     await queue.initialize();
@@ -271,6 +276,7 @@ void main() {
       local: entry, outletId: order.outletId, orderId: order.id,
       serverSnapshot: server,
     ), isTrue);
+    await markAsConflict(entry.eventId);
 
     await store.reconcileConflict(
       eventId: entry.eventId, outletId: order.outletId, orderId: order.id,
@@ -308,6 +314,7 @@ void main() {
       local: entry, outletId: order.outletId, orderId: order.id,
       serverSnapshot: server,
     ), isTrue);
+    await markAsConflict(entry.eventId);
 
     await store.reconcileConflict(
       eventId: entry.eventId, outletId: order.outletId, orderId: order.id,
@@ -334,6 +341,7 @@ void main() {
         FirefaOrderItem(productName: 'Rice', quantity: -1, unitPrice: 1500).toJson(),
       ]
       ..['status'] = 'preparing';
+    await markAsConflict(entry.eventId);
     await expectLater(
       store.reconcileConflict(
         eventId: entry.eventId,
@@ -403,6 +411,7 @@ void main() {
     final event = queue.entriesForOutlet(outletId).last;
     final invalidSnapshot = Map<String, dynamic>.from(order.toJson())
       ..['total'] = 500;
+    await markAsConflict(event.eventId);
 
     await expectLater(
       store.reconcileConflict(
@@ -417,7 +426,7 @@ void main() {
 
     expect(store.findOrder(outletId, order.id)!.total, 1000);
     expect(queue.findEvent(event.eventId), isNotNull);
-    expect(queue.findEvent(event.eventId)!.status, FirefaSyncStatus.pending);
+    expect(queue.findEvent(event.eventId)!.status, FirefaSyncStatus.conflict);
 
     await queue.removeEvent(event.eventId);
     await store.waitForPendingSave();

@@ -5,7 +5,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited]
     branches: [main, development]
   push:
-    branches: [main, development]
+    branches: [main, development, 'validation/**']
 
 permissions:
   contents: read

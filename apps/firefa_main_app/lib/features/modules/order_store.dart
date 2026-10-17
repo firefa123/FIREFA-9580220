@@ -160,8 +160,23 @@ class FirefaOrderStore extends ChangeNotifier {
         .toList();
     final orderIds = <String>{};
     for (final order in orders) {
-      if (order.id.trim().isEmpty || order.outletId.trim().isEmpty ||
-          order.items.isEmpty || order.total < 0 ||
+      final itemSubtotal = order.items.fold<int>(0, (sum, item) => sum + item.total);
+      final hasInvalidItem = order.items.any((item) =>
+          item.productName.trim().isEmpty ||
+          item.quantity <= 0 ||
+          item.unitPrice < 0);
+      if (order.id.trim().isEmpty ||
+          order.outletId.trim().isEmpty ||
+          order.items.isEmpty ||
+          order.total < 0 ||
+          order.subtotal < 0 ||
+          order.discount < 0 ||
+          order.tax < 0 ||
+          order.service < 0 ||
+          order.discount > order.subtotal ||
+          order.subtotal - order.discount + order.tax + order.service != order.total ||
+          hasInvalidItem ||
+          itemSubtotal != order.subtotal ||
           !orderIds.add('${order.outletId}:${order.id}')) {
         throw const FormatException('Data pesanan pada backup tidak valid.');
       }
@@ -291,6 +306,14 @@ class FirefaOrderStore extends ChangeNotifier {
     if (items.isEmpty || total < 0) {
       throw ArgumentError('Pesanan tidak valid.');
     }
+    final itemSubtotal = items.fold<int>(0, (sum, item) => sum + item.total);
+    final hasInvalidItem = items.any((item) =>
+        item.productName.trim().isEmpty ||
+        item.quantity <= 0 ||
+        item.unitPrice < 0);
+    if (hasInvalidItem || itemSubtotal != subtotal) {
+      throw ArgumentError('Rincian item tidak cocok dengan subtotal pesanan.');
+    }
 
     if (orderType == 'Dine In' && (tableId == null || tableId.isEmpty)) {
       throw ArgumentError('Nomor meja wajib dipilih.');
@@ -365,14 +388,15 @@ class FirefaOrderStore extends ChangeNotifier {
 
     final previousOrder = _orders[index];
     final queue = FirefaOfflineSyncQueue.instance;
-    final matchingEvent = queue.entriesForOutlet(outletId).where(
-      (entry) => entry.eventId == eventId && entry.orderId == orderId,
-    );
-    final hasConflictedEvent = matchingEvent.isNotEmpty;
-    if (!hasConflictedEvent &&
-        queue.entriesForOutlet(outletId).any((entry) => entry.eventId == eventId)) {
-      throw StateError('Event konflik ditemukan pada order yang berbeda.');
+    final event = queue.findEvent(eventId);
+    if (event != null &&
+        (event.outletId != outletId || event.orderId != orderId)) {
+      throw StateError('Event konflik ditemukan pada order atau outlet yang berbeda.');
     }
+    if (event != null && event.status != FirefaSyncStatus.conflict) {
+      throw StateError('Event harus berada pada status conflict sebelum direkonsiliasi.');
+    }
+    final hasConflictedEvent = event != null;
 
     // Idempotency: a prior attempt may have persisted the order but failed
     // before the inbox/audit update. Allow retry when the event is already gone.
