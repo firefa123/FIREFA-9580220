@@ -236,9 +236,7 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
   String _safeMessage(Map<String, dynamic>? body, String fallback) {
     final message = body?['message'] ?? body?['error'];
     if (message is! String || message.trim().isEmpty) return fallback;
-    return message.replaceAll(RegExp(r'[\r\n]'), ' ').substring(
-      0,
-      message.length > 180 ? 180 : message.length,
-    );
+    final safe = message.replaceAll(RegExp(r'[\r\n]'), ' ');
+    return safe.substring(0, safe.length > 180 ? 180 : safe.length);
   }
 }
