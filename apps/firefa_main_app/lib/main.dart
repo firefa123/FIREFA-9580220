@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'core/theme/app_theme.dart';
@@ -9,6 +11,7 @@ import 'features/modules/conflict_resolution_store.dart';
 import 'features/modules/persistent_cart_store.dart';
 import 'features/modules/table_store.dart';
 import 'features/modules/fnb_operations_store.dart';
+import 'features/modules/firefa_sync_worker.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +30,8 @@ Future<void> main() async {
   // Tahap 7H-B: Memuat keranjang per outlet.
   await FirefaPersistentCartStore.instance.initialize();
 
+  // Sync pending events automatically when configured; failures never block POS.
+  unawaited(FirefaSyncWorker.instance.start());
   runApp(const FirefaApp());
 }
 
