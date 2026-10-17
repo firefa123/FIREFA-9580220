@@ -252,7 +252,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       final itemsByKey = <String, FirefaInventoryItem>{};
       var maximumItemSequence = 0;
       for (final item in items) {
-        final match = RegExp(r'^inventory-(\\d+)$').firstMatch(item.id);
+        final match = RegExp(r'^inventory-(\d+)$').firstMatch(item.id);
         final sequence = int.tryParse(match?.group(1) ?? '');
         if (item.id.trim().isEmpty ||
             item.outletId.trim().isEmpty ||
@@ -282,7 +282,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       var maximumMovementSequence = 0;
       final movementIds = <String>{};
       for (final movement in movements) {
-        final match = RegExp(r'^movement-(\\d+)$').firstMatch(movement.id);
+        final match = RegExp(r'^movement-(\d+)$').firstMatch(movement.id);
         final sequence = int.tryParse(match?.group(1) ?? '');
         final item = itemsByKey['${movement.outletId}::${movement.itemId}'];
         final directionIsValid = switch (movement.type) {
@@ -319,7 +319,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       var maximumOpnameSequence = 0;
       final opnameIds = <String>{};
       for (final opname in opnames) {
-        final match = RegExp(r'^opname-(\\d+)$').firstMatch(opname.id);
+        final match = RegExp(r'^opname-(\d+)$').firstMatch(opname.id);
         final sequence = int.tryParse(match?.group(1) ?? '');
         if (sequence == null || sequence < 1 ||
             !opnameIds.add(opname.id) ||
