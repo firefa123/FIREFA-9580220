@@ -26,6 +26,7 @@ class _StaffAttendancePageState extends State<StaffAttendancePage> {
   String? _error;
   List<Map<String, dynamic>> _staff = [];
   List<Map<String, dynamic>> _performance = [];
+  List<Map<String, dynamic>> _attendance = [];
 
   @override
   void initState() {
@@ -86,16 +87,80 @@ class _StaffAttendancePageState extends State<StaffAttendancePage> {
       final staffResponse = await _request('GET', '/staff');
       final performanceResponse = await _request('GET', '/staff/performance');
       final radiusResponse = await _request('GET', '/staff/geofence-radius');
+      final attendanceResponse = await _request('GET', '/attendance');
       if (!mounted) return;
       setState(() {
         _staff = (staffResponse['staff'] as List<dynamic>).map((row) => Map<String, dynamic>.from(row as Map)).toList();
         _performance = (performanceResponse['performance'] as List<dynamic>).map((row) => Map<String, dynamic>.from(row as Map)).toList();
+        _attendance = (attendanceResponse['attendance'] as List<dynamic>).map((row) => Map<String, dynamic>.from(row as Map)).toList();
         _radius.text = '${radiusResponse['geofence']['radiusMeters']}';
       });
     } catch (error) {
       if (mounted) setState(() => _error = error.toString().replaceFirst('FormatException: ', ''));
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+
+  Future<void> _showAttendancePhoto(Map<String, dynamic> row) async {
+    if (row['hasCheckInPhoto'] != true) {
+      _message('Catatan absensi ini tidak memiliki foto check-in.');
+      return;
+    }
+    try {
+      final attendanceId = row['id'];
+      if (attendanceId is! String || attendanceId.isEmpty) {
+        throw const FormatException('ID absensi tidak valid.');
+      }
+      final token = await FirefaBackendClient.instance.accessToken();
+      if (token == null) {
+        throw const FormatException('Sesi backend habis. Login kembali.');
+      }
+      final response = await http.get(
+        Uri.parse('${FirefaBackendClient.instance.baseUrl}/api/v1/attendance/$attendanceId/photo'),
+        headers: {'authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) {
+        throw FormatException('Foto tidak dapat dimuat (HTTP ${response.statusCode}).');
+      }
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => Dialog(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560, maxHeight: 680),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Foto check-in • ${row['displayName']}', style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: Image.memory(
+                      response.bodyBytes,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Center(child: Text('File foto tidak dapat ditampilkan.')),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      child: const Text('Tutup'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) _message(error.toString().replaceFirst('FormatException: ', ''));
     }
   }
 
@@ -216,6 +281,34 @@ class _StaffAttendancePageState extends State<StaffAttendancePage> {
               title: Text('${row['displayName']}'),
               subtitle: Text('Hadir ${row['attendanceDays']} hari • Terlambat ${row['lateDays']} hari dari ${row['evaluatedDays']} hari dinilai'),
               trailing: Text(row['punctualityPercent'] == null ? '—' : '${row['punctualityPercent']}%'),
+            ),
+          ]),
+        )),
+
+        Card(child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Riwayat absensi & foto check-in', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            const Text('Riwayat terbaru dari server. Foto hanya dapat dibuka oleh Owner yang berwenang pada outlet tersebut.'),
+            const SizedBox(height: 8),
+            if (_attendance.isEmpty) const Text('Belum ada riwayat absensi pada outlet ini.'),
+            for (final row in _attendance) ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.access_time),
+              title: Text('${row['displayName']} • ${row['workDate']}'),
+              subtitle: Text(
+                'Masuk: ${row['checkInAt'] == null ? '—' : DateTime.tryParse('${row['checkInAt']}')?.toLocal().toString() ?? row['checkInAt']}'
+                ' • Pulang: ${row['checkOutAt'] == null ? 'Belum check-out' : DateTime.tryParse('${row['checkOutAt']}')?.toLocal().toString() ?? row['checkOutAt']}'
+                ' • Terlambat: ${row['lateMinutes'] ?? 0} menit',
+              ),
+              trailing: row['hasCheckInPhoto'] == true
+                  ? IconButton(
+                      tooltip: 'Lihat foto check-in',
+                      onPressed: () => _showAttendancePhoto(row),
+                      icon: const Icon(Icons.photo_camera_outlined),
+                    )
+                  : const Tooltip(message: 'Foto tidak tersedia', child: Icon(Icons.no_photography_outlined)),
             ),
           ]),
         )),
