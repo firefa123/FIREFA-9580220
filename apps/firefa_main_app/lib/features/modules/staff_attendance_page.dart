@@ -142,7 +142,7 @@ class _StaffAttendancePageState extends State<StaffAttendancePage> {
                     child: Image.memory(
                       response.bodyBytes,
                       fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const Center(child: Text('File foto tidak dapat ditampilkan.')),
+                      errorBuilder: (context, error, stackTrace) => const Center(child: Text('File foto tidak dapat ditampilkan.')),
                     ),
                   ),
                   const SizedBox(height: 12),

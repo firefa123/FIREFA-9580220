@@ -1463,6 +1463,11 @@ authSuite("authentication endpoints", () => {
     expect(ownerPhoto.headers["content-type"]).toContain("image/jpeg");
     expect(ownerPhoto.rawPayload).toEqual(Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
 
+    const unauthenticatedHistory = await ownerApp.inject({
+      method: "GET", url: "/api/v1/attendance?outletId=" + outletId,
+    });
+    expect(unauthenticatedHistory.statusCode).toBe(401);
+
     const ownerHistory = await ownerApp.inject({
       method: "GET", url: "/api/v1/attendance?outletId=" + outletId,
       headers: ownerHeaders,
