@@ -163,7 +163,7 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
         final serverVersion = body['serverVersion'] as int;
         final saved = await prefs.setInt(versionKey, serverVersion);
         final globalOrderSaved = await prefs.setString(
-          '${versionKey}:global-order-id',
+          '$versionKey:global-order-id',
           body['globalOrderId'] as String,
         );
         if (!saved || !globalOrderSaved) {
