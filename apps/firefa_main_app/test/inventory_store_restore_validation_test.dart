@@ -38,7 +38,7 @@ void main() {
       }),
     );
 
-    final store = FirefaInventoryStore.createForTesting();
+    final store = FirefaInventoryStore.forTesting();
     await expectLater(store.initialize(), throwsFormatException);
 
     await prefs.setString(
@@ -129,7 +129,7 @@ void main() {
         },
       ];
 
-    final store = FirefaInventoryStore.createForTesting();
+    final store = FirefaInventoryStore.forTesting();
     for (final invalid in [
       snapshot(type: 'unknown', before: 2, after: 3),
       snapshot(type: 'in', before: 5, after: 3),
