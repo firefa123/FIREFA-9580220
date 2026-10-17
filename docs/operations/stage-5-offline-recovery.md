@@ -2,18 +2,22 @@
 
 ## Current deployment boundary
 
-The Main App is offline-first. Inventory balances and the movement ledger are stored locally in SharedPreferences. Inventory synchronization is opt-in and requires a deployed authenticated backend. Do not interpret a passing CI run as a production deployment. Until a production host exists, use the local persistence and CI checks below; defer the production-only checklist.
+The Main App is offline-first. Orders and the sync outbox use a combined local snapshot plus a separately persisted outbox. The queue merge prefers the dedicated outbox state and recovers events present only in the combined snapshot. A checkout stock-intent journal is saved before an order is created; startup replays the exact captured ingredient quantities if the process stops before the stock deduction completes. Cancellation recovery remains idempotent.
 
-The local preference store is not a transactional database. Await waitForPendingSave() or the awaited adjustment methods before reporting a stock movement as durably saved. This protects normal app restart/reopen flows, but is not a guarantee against device loss, storage corruption, or power failure during a preference write.
+The authenticated order HTTP adapter targets POST /api/v1/sync/events. A foreground worker retries order events and inventory movements on startup, app resume, outbox changes, and a 30-second poll while the app is open. It validates the full order receipt, persists server versions for optimistic concurrency, uses the same event ID on retries, and routes verifiable 409 snapshots to conflict review. Inventory movements are retried with stable idempotency keys; reconciliation reports differences without overwriting local balances. The backend base URL, outlet mapping, item mapping, authenticated session, and live server endpoint must all be configured for cloud transport to run.
+
+The local preference store is not a transactional database. These journals protect ordinary process-stop/reopen recovery and uncertain network acknowledgements, but they are not a guarantee against device loss, storage corruption, or abrupt power failure during a preference write. A transactional local database and cross-device tests remain necessary before making stronger durability claims.
+
+**Deployment boundary:** this repository currently has no verifiable deployed backend host or credentials available to this task. Therefore client-side sync implementation and CI can be validated here, but live authenticated cloud sync, PostgreSQL idempotency, multi-device conflict behavior, and production reconciliation cannot honestly be marked passed until a real staging backend is available.
 
 ## Offline → restart → reconnect acceptance test
 
-1. Start Main App with backend sync disabled or the device offline.
+1. Start Main App with the device offline; keep cloud sync configured but unavailable.
 2. As Owner, create a test inventory item with a known stock balance.
 3. Record two stock movements and wait for the UI action to finish.
 4. Force-close and reopen the app. Verify the balance and both movement history rows are unchanged and in order.
-5. Re-enable connectivity. Until the backend is configured and authenticated, movements must remain in the local ledger; never clear local history because a request was skipped or failed.
-6. Once connected to a test backend, send the oldest unsent movement first. Mark it sent only after validating the server's event/idempotency key, outlet, inventory item, and non-negative resulting balance.
+5. Force-close the app between order creation and stock consumption in a test build. On restart, verify the persisted stock intent consumes the captured ingredient quantities exactly once; an abandoned intent with no durable order must be discarded.
+6. Restore connectivity while the app is foregrounded or resume the app. The worker should retry automatically; send the oldest unsent movement first. Mark it sent only after validating the server's event/idempotency key, outlet, inventory item, and non-negative resulting balance.
 7. Simulate a timeout after the server commits. Retry using the exact same idempotency key. Confirm one ledger row and one stock delta on the server.
 8. If an earlier movement fails, later movements for the same item must remain queued behind it.
 9. Run reconciliation. Every unmapped item, missing server item, or quantity mismatch must be reported for review; never overwrite stock balances automatically.
@@ -31,7 +35,7 @@ flutter analyze
 flutter test
 ~~~
 
-Backend CI uses a disposable PostgreSQL 16 database and verifies typecheck/build, migrations, integration tests, migration idempotency, required tables, API readiness, and Docker build. It does not touch production.
+Do not report a backend CI result unless the backend workflow and its actual run are visible. Client Flutter CI does not prove that a cloud endpoint is deployed or that server transactions are durable.
 
 ## Production deployment, when a host is available
 
