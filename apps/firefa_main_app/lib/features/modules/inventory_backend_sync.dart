@@ -95,7 +95,7 @@ class FirefaInventoryBackendSync {
     await store.initialize();
     final client = FirefaBackendClient.instance;
     final session = await client.restoreSession();
-    if (session == null || session.role != FirefaRole.owner) {
+    if (session == null) {
       return const FirefaInventorySyncResult(attempted: 0, acknowledged: 0, failed: 0);
     }
 
