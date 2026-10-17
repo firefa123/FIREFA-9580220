@@ -141,7 +141,7 @@ class _InventoryPageState extends State<InventoryPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
-                  value: sourceItemId,
+                  initialValue: sourceItemId,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Barang sumber'),
                   items: sourceItems.map((item) => DropdownMenuItem(
@@ -154,7 +154,7 @@ class _InventoryPageState extends State<InventoryPage> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: targetOutletId,
+                  initialValue: targetOutletId,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Outlet tujuan'),
                   items: targets.map((target) => DropdownMenuItem(
@@ -205,7 +205,9 @@ class _InventoryPageState extends State<InventoryPage> {
     noteController.dispose();
     if (!mounted || result == null || !allowed ||
         sourceOutlet != outlet.selectedOutletId ||
-        !outlet.canAccessOutlet(result.targetOutletId)) return;
+        !outlet.canAccessOutlet(result.targetOutletId)) {
+      return;
+    }
 
     final source = sourceItems.where((item) => item.id == result.sourceItemId).firstOrNull;
     if (source == null) return;
@@ -246,7 +248,9 @@ class _InventoryPageState extends State<InventoryPage> {
   Future<void> retryInventoryMovement(FirefaStockMovement movement) async {
     if (!allowed || !FirefaBackendConfig.isConfigured ||
         outlet.role != FirefaRole.owner ||
-        movement.outletId != outlet.selectedOutletId) return;
+        movement.outletId != outlet.selectedOutletId) {
+      return;
+    }
     try {
       await FirefaInventoryBackendSync.instance.retryBlockedMovement(
         localOutletId: movement.outletId,
@@ -758,6 +762,7 @@ class _InventoryPageState extends State<InventoryPage> {
         sourceOutlet != outlet.selectedOutletId) { return; }
     final ok = await store.resolveOpname(outletId: sourceOutlet,
       opnameId: record.id, approve: approve);
+    if (!mounted) return;
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
       content: Text('Keputusan gagal. Stok mungkin sudah berubah; buat opname baru.'),
