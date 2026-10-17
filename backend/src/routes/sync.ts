@@ -28,7 +28,8 @@ const snapshotSchema = z.object({
   tableId: z.string().max(128).nullable().optional(),
   createdAt: z.string().datetime({ offset: true }),
   items: z.array(z.object({
-    productId: z.string().uuid().nullable().optional(),
+    // Local POS items can also reference non-stock-tracked bundles or legacy IDs.
+    productId: z.string().trim().min(1).max(128).nullable().optional(),
     productName: z.string().trim().min(1).max(200),
     quantity: z.number().int().positive().max(100000),
     unitPrice: money,
@@ -236,10 +237,18 @@ async function insertOrderItems(
   snapshot: z.infer<typeof snapshotSchema>,
 ): Promise<void> {
   for (const item of snapshot.items) {
+    let catalogProductId: string | null = null;
+    if (item.productId && z.string().uuid().safeParse(item.productId).success) {
+      const linkedProduct = await client.query(
+        "SELECT id FROM products WHERE id = $1 AND tenant_id = $2 AND outlet_id = $3",
+        [item.productId, tenantId, outletId],
+      );
+      if (linkedProduct.rowCount) catalogProductId = item.productId;
+    }
     await client.query(
       "INSERT INTO order_items (tenant_id, outlet_id, order_id, product_id, product_name, quantity, unit_price, line_total, details) " +
         "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-      [tenantId, outletId, orderId, item.productId ?? null, item.productName, item.quantity, item.unitPrice,
+      [tenantId, outletId, orderId, catalogProductId, item.productName, item.quantity, item.unitPrice,
        item.quantity * item.unitPrice, item.details],
     );
   }
@@ -269,7 +278,7 @@ async function deductInventoryForCompletedOrder(
 ): Promise<void> {
   const quantities = new Map<string, number>();
   for (const item of snapshot.items) {
-    if (item.productId) {
+    if (item.productId && z.string().uuid().safeParse(item.productId).success) {
       quantities.set(item.productId, (quantities.get(item.productId) ?? 0) + item.quantity);
     }
   }
