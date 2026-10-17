@@ -130,6 +130,7 @@ class FirefaInventoryStore extends ChangeNotifier {
   final Map<String, int> _preparedYields = {};
   final Set<String> _processedOrderIds = {};
   final Set<String> _reversedOrderIds = {};
+  final Set<String> _processedTransferIds = {};
   int _nextOpnameId = 1;
   Future<void> _pendingSave = Future<void>.value();
   Future<void>? _initializing;
@@ -155,6 +156,7 @@ class FirefaInventoryStore extends ChangeNotifier {
         'preparedYields': <String, dynamic>{},
         'processedOrderIds': <dynamic>[],
         'reversedOrderIds': <dynamic>[],
+        'processedTransferIds': <dynamic>[],
       };
       if (raw != null && raw.isNotEmpty) {
         snapshot = Map<String, dynamic>.from(jsonDecode(raw) as Map);
@@ -190,6 +192,8 @@ class FirefaInventoryStore extends ChangeNotifier {
           (snapshot['processedOrderIds'] as List<dynamic>? ?? []).cast<String>();
       final reversedOrderIds =
           (snapshot['reversedOrderIds'] as List<dynamic>? ?? []).cast<String>();
+      final processedTransferIds =
+          (snapshot['processedTransferIds'] as List<dynamic>? ?? []).cast<String>();
 
       _items..clear()..addAll(items);
       _movements..clear()..addAll(movements);
@@ -199,6 +203,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       _preparedYields..clear()..addAll(preparedYields);
       _processedOrderIds..clear()..addAll(processedOrderIds);
       _reversedOrderIds..clear()..addAll(reversedOrderIds);
+      _processedTransferIds..clear()..addAll(processedTransferIds);
       _nextId = snapshot['nextId'] as int;
       _nextMovementId = (snapshot['nextMovementId'] as int?) ?? 1;
       _nextOpnameId = (snapshot['nextOpnameId'] as int?) ?? 1;
@@ -213,6 +218,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       _preparedYields.clear();
       _processedOrderIds.clear();
       _reversedOrderIds.clear();
+      _processedTransferIds.clear();
       _nextId = 1;
       _nextMovementId = 1;
       _nextOpnameId = 1;
@@ -392,8 +398,11 @@ class FirefaInventoryStore extends ChangeNotifier {
 
       final processedValues = snapshot['processedOrderIds'] as List? ?? const [];
       final reversedValues = snapshot['reversedOrderIds'] as List? ?? const [];
+      final transferValues = snapshot['processedTransferIds'] as List? ?? const [];
       if (processedValues.any((value) => value is! String || value.trim().isEmpty) ||
           reversedValues.any((value) => value is! String || value.trim().isEmpty) ||
+          transferValues.any((value) => value is! String || value.trim().isEmpty) ||
+          transferValues.toSet().length != transferValues.length ||
           !processedValues.toSet().containsAll(reversedValues)) {
         throw const FormatException('Riwayat konsumsi stok tidak valid.');
       }
@@ -648,40 +657,75 @@ class FirefaInventoryStore extends ChangeNotifier {
     return true;
   }
 
-  Future<bool> consumeOrderStock({required String orderId, required String outletId, required List<({String menuId, int quantity})> menuLines}) async {
-    if (orderId.trim().isEmpty) throw ArgumentError('ID order wajib diisi.');
-    if (_containsOrderMarker(
-      _processedOrderIds,
-      outletId,
-      orderId,
-      legacyNote: 'POS order $orderId',
-    )) {
-      return false;
+  Future<bool> consumeOrderStock({
+    required String orderId,
+    required String outletId,
+    required List<({String menuId, int quantity})> menuLines,
+  }) async {
+    if (!_initialized) throw StateError('Inventory belum diinisialisasi');
+    if (orderId.trim().isEmpty || outletId.trim().isEmpty) {
+      throw ArgumentError('ID order dan outlet wajib diisi.');
     }
+    if (_containsOrderMarker(_processedOrderIds, outletId, orderId,
+        legacyNote: 'POS order $orderId')) return false;
     if (!validateOrderStock(outletId: outletId, menuLines: menuLines)) return false;
+
     final requiredQuantities = <String, int>{};
     final recipes = _recipes.where((line) => line.outletId == outletId).toList();
     for (final menu in menuLines) {
       for (final line in recipes.where((line) => line.menuId == menu.menuId)) {
-        requiredQuantities[line.ingredientId] = (requiredQuantities[line.ingredientId] ?? 0) + line.quantity * menu.quantity;
+        final needed = line.quantity * menu.quantity;
+        final current = requiredQuantities[line.ingredientId] ?? 0;
+        if (current > 999999999 - needed) {
+          throw StateError('Total kebutuhan bahan melebihi batas.');
+        }
+        requiredQuantities[line.ingredientId] = current + needed;
       }
     }
     for (final entry in requiredQuantities.entries) {
       final index = _index(outletId, entry.key);
-      if (index < 0 || _items[index].stock < entry.value) throw StateError('Stok berubah sebelum pesanan diproses. Silakan coba lagi.');
+      if (index < 0 || _items[index].stock < entry.value) {
+        throw StateError('Stok berubah sebelum pesanan diproses. Silakan coba lagi.');
+      }
     }
-    for (final entry in requiredQuantities.entries) {
-      final index = _index(outletId, entry.key);
-      final old = _items[index];
-      final after = old.stock - entry.value;
-      _items[index] = FirefaInventoryItem(id: old.id, outletId: old.outletId, name: old.name, unit: old.unit, stock: after, minimumStock: old.minimumStock, unitCost: old.unitCost, isPreparedIngredient: old.isPreparedIngredient);
-      _movements.add(FirefaStockMovement(id: 'movement-${_nextMovementId++}', outletId: outletId, itemId: old.id, itemName: old.name, type: 'out', before: old.stock, after: after, note: 'POS order $orderId', timestamp: DateTime.now().toIso8601String()));
+
+    final oldItems = List<FirefaInventoryItem>.from(_items);
+    final oldMovements = List<FirefaStockMovement>.from(_movements);
+    final oldProcessed = Set<String>.from(_processedOrderIds);
+    final oldNextMovementId = _nextMovementId;
+    try {
+      final timestamp = DateTime.now().toIso8601String();
+      for (final entry in requiredQuantities.entries) {
+        final index = _index(outletId, entry.key);
+        final old = _items[index];
+        final after = old.stock - entry.value;
+        _items[index] = FirefaInventoryItem(
+          id: old.id, outletId: old.outletId, name: old.name,
+          unit: old.unit, stock: after, minimumStock: old.minimumStock,
+          unitCost: old.unitCost, isPreparedIngredient: old.isPreparedIngredient,
+        );
+        _movements.add(FirefaStockMovement(
+          id: 'movement-${_nextMovementId++}', outletId: outletId,
+          itemId: old.id, itemName: old.name, type: 'out',
+          before: old.stock, after: after,
+          note: 'POS order $orderId', timestamp: timestamp,
+        ));
+      }
+      _processedOrderIds.add(_orderStockKey(outletId, orderId));
+      notifyListeners();
+      _save();
+      await waitForPendingSave();
+      return true;
+    } catch (_) {
+      _items..clear()..addAll(oldItems);
+      _movements..clear()..addAll(oldMovements);
+      _processedOrderIds..clear()..addAll(oldProcessed);
+      _nextMovementId = oldNextMovementId;
+      notifyListeners();
+      _save();
+      await waitForPendingSave();
+      rethrow;
     }
-    _processedOrderIds.add(_orderStockKey(outletId, orderId));
-    notifyListeners();
-    _save();
-    await waitForPendingSave();
-    return true;
   }
 
   /// Restores the exact quantities consumed by a cancelled POS order.
@@ -695,79 +739,67 @@ class FirefaInventoryStore extends ChangeNotifier {
     if (orderId.trim().isEmpty || outletId.trim().isEmpty) {
       throw ArgumentError('Order dan outlet wajib diisi.');
     }
-    if (_containsOrderMarker(
-      _reversedOrderIds,
-      outletId,
-      orderId,
-      legacyNote: 'Pembatalan POS order $orderId',
-    )) {
-      return false;
-    }
-    final processedForOutlet = _containsOrderMarker(
-      _processedOrderIds,
-      outletId,
-      orderId,
-      legacyNote: 'POS order $orderId',
-    );
+    if (_containsOrderMarker(_reversedOrderIds, outletId, orderId,
+        legacyNote: 'Pembatalan POS order $orderId')) return false;
+    final processedForOutlet = _containsOrderMarker(_processedOrderIds, outletId,
+        orderId, legacyNote: 'POS order $orderId');
     if (!processedForOutlet) {
       final processedElsewhere = _processedOrderIds.contains(orderId) ||
           _hasScopedMarkerForOrder(_processedOrderIds, orderId);
-      if (processedElsewhere) {
-        throw StateError('Stok order $orderId diproses di outlet lain.');
-      }
+      if (processedElsewhere) throw StateError('Stok order $orderId diproses di outlet lain.');
       return false;
     }
-
     final sourceMovements = _movements.where((movement) =>
-      movement.outletId == outletId &&
-      movement.type == 'out' &&
-      movement.note == 'POS order $orderId'
-    ).toList();
+      movement.outletId == outletId && movement.type == 'out' &&
+      movement.note == 'POS order $orderId').toList();
     if (sourceMovements.isEmpty) {
       throw StateError('Riwayat pemakaian stok untuk order $orderId tidak ditemukan.');
     }
-
     final restorations = <({int index, int quantity})>[];
     for (final movement in sourceMovements) {
       final index = _index(outletId, movement.itemId);
       final quantity = movement.before - movement.after;
-      if (index < 0 || quantity <= 0 ||
-          _items[index].stock > 999999999 - quantity) {
+      if (index < 0 || quantity <= 0 || _items[index].stock > 999999999 - quantity) {
         throw StateError('Stok tidak dapat dipulihkan dengan aman untuk ${movement.itemName}.');
       }
       restorations.add((index: index, quantity: quantity));
     }
-
-    for (final restoration in restorations) {
-      final old = _items[restoration.index];
-      final after = old.stock + restoration.quantity;
-      _items[restoration.index] = FirefaInventoryItem(
-        id: old.id,
-        outletId: old.outletId,
-        name: old.name,
-        unit: old.unit,
-        stock: after,
-        minimumStock: old.minimumStock,
-        unitCost: old.unitCost,
-        isPreparedIngredient: old.isPreparedIngredient,
-      );
-      _movements.add(FirefaStockMovement(
-        id: 'movement-${_nextMovementId++}',
-        outletId: outletId,
-        itemId: old.id,
-        itemName: old.name,
-        type: 'in',
-        before: old.stock,
-        after: after,
-        note: 'Pembatalan POS order $orderId',
-        timestamp: DateTime.now().toIso8601String(),
-      ));
+    final oldItems = List<FirefaInventoryItem>.from(_items);
+    final oldMovements = List<FirefaStockMovement>.from(_movements);
+    final oldReversed = Set<String>.from(_reversedOrderIds);
+    final oldNextMovementId = _nextMovementId;
+    try {
+      final timestamp = DateTime.now().toIso8601String();
+      for (final restoration in restorations) {
+        final old = _items[restoration.index];
+        final after = old.stock + restoration.quantity;
+        _items[restoration.index] = FirefaInventoryItem(
+          id: old.id, outletId: old.outletId, name: old.name,
+          unit: old.unit, stock: after, minimumStock: old.minimumStock,
+          unitCost: old.unitCost, isPreparedIngredient: old.isPreparedIngredient,
+        );
+        _movements.add(FirefaStockMovement(
+          id: 'movement-${_nextMovementId++}', outletId: outletId,
+          itemId: old.id, itemName: old.name, type: 'in',
+          before: old.stock, after: after,
+          note: 'Pembatalan POS order $orderId', timestamp: timestamp,
+        ));
+      }
+      _reversedOrderIds.add(_orderStockKey(outletId, orderId));
+      notifyListeners();
+      _save();
+      await waitForPendingSave();
+      return true;
+    } catch (_) {
+      _items..clear()..addAll(oldItems);
+      _movements..clear()..addAll(oldMovements);
+      _reversedOrderIds..clear()..addAll(oldReversed);
+      _nextMovementId = oldNextMovementId;
+      notifyListeners();
+      _save();
+      await waitForPendingSave();
+      rethrow;
     }
-    _reversedOrderIds.add(_orderStockKey(outletId, orderId));
-    notifyListeners();
-    _save();
-    await waitForPendingSave();
-    return true;
   }
 
   String _orderStockKey(String outletId, String orderId) =>
@@ -867,6 +899,88 @@ class FirefaInventoryStore extends ChangeNotifier {
     return true;
   }
 
+  /// Transfers stock between outlets as one local transaction.
+  /// Reusing a transfer ID never applies the stock delta twice.
+  Future<bool> transferStock({
+    required String transferId,
+    required String sourceOutletId,
+    required String sourceItemId,
+    required String targetOutletId,
+    required String targetItemId,
+    required int quantity,
+    String note = '',
+  }) async {
+    if (!_initialized) throw StateError('Inventory belum diinisialisasi');
+    if (transferId.trim().isEmpty || sourceOutletId.trim().isEmpty ||
+        targetOutletId.trim().isEmpty || sourceOutletId == targetOutletId ||
+        quantity <= 0 || quantity > 999999999 || note.trim().length > 160) {
+      throw ArgumentError('Permintaan transfer stok tidak valid.');
+    }
+    if (_processedTransferIds.contains(transferId)) return false;
+    final sourceIndex = _index(sourceOutletId, sourceItemId);
+    final targetIndex = _index(targetOutletId, targetItemId);
+    if (sourceIndex < 0 || targetIndex < 0) {
+      throw StateError('Barang sumber atau tujuan tidak ditemukan.');
+    }
+    final source = _items[sourceIndex];
+    final target = _items[targetIndex];
+    if (source.unit != target.unit) {
+      throw StateError('Satuan barang sumber dan tujuan harus sama.');
+    }
+    if (source.stock < quantity) throw StateError('Stok sumber tidak cukup.');
+    if (target.stock > 999999999 - quantity) {
+      throw StateError('Stok tujuan melebihi batas yang didukung.');
+    }
+
+    final oldItems = List<FirefaInventoryItem>.from(_items);
+    final oldMovements = List<FirefaStockMovement>.from(_movements);
+    final oldTransfers = Set<String>.from(_processedTransferIds);
+    final oldNextMovementId = _nextMovementId;
+    try {
+      final now = DateTime.now().toIso8601String();
+      _items[sourceIndex] = FirefaInventoryItem(
+        id: source.id, outletId: source.outletId, name: source.name,
+        unit: source.unit, stock: source.stock - quantity,
+        minimumStock: source.minimumStock, unitCost: source.unitCost,
+        isPreparedIngredient: source.isPreparedIngredient,
+      );
+      _items[targetIndex] = FirefaInventoryItem(
+        id: target.id, outletId: target.outletId, name: target.name,
+        unit: target.unit, stock: target.stock + quantity,
+        minimumStock: target.minimumStock, unitCost: source.unitCost,
+        isPreparedIngredient: target.isPreparedIngredient,
+      );
+      final suffix = note.trim().isEmpty ? '' : ': ${note.trim()}';
+      _movements
+        ..add(FirefaStockMovement(
+          id: 'movement-${_nextMovementId++}', outletId: sourceOutletId,
+          itemId: source.id, itemName: source.name, type: 'out',
+          before: source.stock, after: source.stock - quantity,
+          note: 'Transfer $transferId ke $targetOutletId$suffix', timestamp: now,
+        ))
+        ..add(FirefaStockMovement(
+          id: 'movement-${_nextMovementId++}', outletId: targetOutletId,
+          itemId: target.id, itemName: target.name, type: 'in',
+          before: target.stock, after: target.stock + quantity,
+          note: 'Transfer $transferId dari $sourceOutletId$suffix', timestamp: now,
+        ));
+      _processedTransferIds.add(transferId);
+      notifyListeners();
+      _save();
+      await waitForPendingSave();
+      return true;
+    } catch (_) {
+      _items..clear()..addAll(oldItems);
+      _movements..clear()..addAll(oldMovements);
+      _processedTransferIds..clear()..addAll(oldTransfers);
+      _nextMovementId = oldNextMovementId;
+      notifyListeners();
+      _save();
+      await waitForPendingSave();
+      rethrow;
+    }
+  }
+
   List<FirefaStockOpname> opnamesForOutlet(String outletId) {
     if (!_initialized) throw StateError('Inventory belum diinisialisasi');
     return List.unmodifiable(_opnames.where((record) => record.outletId == outletId).toList().reversed);
@@ -894,10 +1008,11 @@ class FirefaInventoryStore extends ChangeNotifier {
     return true;
   }
 
-  bool resolveOpname({
-    required String outletId, required String opnameId,
+  Future<bool> resolveOpname({
+    required String outletId,
+    required String opnameId,
     required bool approve,
-  }) {
+  }) async {
     if (!_initialized) return false;
     final recordIndex = _opnames.indexWhere((record) =>
         record.id == opnameId && record.outletId == outletId &&
@@ -906,26 +1021,51 @@ class FirefaInventoryStore extends ChangeNotifier {
     final record = _opnames[recordIndex];
     final itemIndex = _index(outletId, record.itemId);
     if (approve && (itemIndex < 0 ||
-        _items[itemIndex].stock != record.systemStock)) { return false; }
-    if (approve && record.difference != 0) {
-      final success = adjust(
-        outletId: outletId, id: record.itemId, type: 'correction',
-        amount: record.physicalStock,
-        note: 'Stock opname ${record.id}: ${record.note}',
+        _items[itemIndex].stock != record.systemStock)) return false;
+
+    final oldItems = List<FirefaInventoryItem>.from(_items);
+    final oldMovements = List<FirefaStockMovement>.from(_movements);
+    final oldOpnames = List<FirefaStockOpname>.from(_opnames);
+    final oldNextMovementId = _nextMovementId;
+    try {
+      if (approve && record.difference != 0) {
+        final old = _items[itemIndex];
+        _items[itemIndex] = FirefaInventoryItem(
+          id: old.id, outletId: old.outletId, name: old.name,
+          unit: old.unit, stock: record.physicalStock,
+          minimumStock: old.minimumStock, unitCost: old.unitCost,
+          isPreparedIngredient: old.isPreparedIngredient,
+        );
+        _movements.add(FirefaStockMovement(
+          id: 'movement-${_nextMovementId++}', outletId: outletId,
+          itemId: old.id, itemName: old.name, type: 'correction',
+          before: old.stock, after: record.physicalStock,
+          note: 'Stock opname ${record.id}: ${record.note}',
+          timestamp: DateTime.now().toIso8601String(),
+        ));
+      }
+      _opnames[recordIndex] = FirefaStockOpname(
+        id: record.id, outletId: record.outletId, itemId: record.itemId,
+        itemName: record.itemName, systemStock: record.systemStock,
+        physicalStock: record.physicalStock, note: record.note,
+        createdAt: record.createdAt,
+        status: approve ? 'approved' : 'rejected',
+        resolvedAt: DateTime.now().toIso8601String(),
       );
-      if (!success) return false;
+      notifyListeners();
+      _save();
+      await waitForPendingSave();
+      return true;
+    } catch (_) {
+      _items..clear()..addAll(oldItems);
+      _movements..clear()..addAll(oldMovements);
+      _opnames..clear()..addAll(oldOpnames);
+      _nextMovementId = oldNextMovementId;
+      notifyListeners();
+      _save();
+      await waitForPendingSave();
+      rethrow;
     }
-    _opnames[recordIndex] = FirefaStockOpname(
-      id: record.id, outletId: record.outletId, itemId: record.itemId,
-      itemName: record.itemName, systemStock: record.systemStock,
-      physicalStock: record.physicalStock, note: record.note,
-      createdAt: record.createdAt,
-      status: approve ? 'approved' : 'rejected',
-      resolvedAt: DateTime.now().toIso8601String(),
-    );
-    notifyListeners();
-    _save();
-    return true;
   }
 
   /// Explains why an inventory item cannot safely be deleted.
@@ -994,6 +1134,8 @@ class FirefaInventoryStore extends ChangeNotifier {
       'preparedYields': _preparedYields,
       'processedOrderIds': _processedOrderIds.toList(),
       'reversedOrderIds': _reversedOrderIds.toList(),
+      'processedTransferIds': _processedTransferIds.toList(),
+      'processedTransferIds': _processedTransferIds.toList(),
     });
     _pendingSave = _pendingSave.catchError((Object error) {
       debugPrint('Inventory save sebelumnya gagal: $error');
