@@ -242,7 +242,7 @@ class _StaffAttendancePageState extends State<StaffAttendancePage> {
             FilledButton(
               onPressed: () {
                 final target = start.text.trim();
-                final validTime = target.isEmpty || RegExp(r'^(?:[01]\\d|2[0-3]):[0-5]\\d$').hasMatch(target);
+                final validTime = target.isEmpty || RegExp(r'^(?:[01]\d|2[0-3]):[0-5]\d$').hasMatch(target);
                 final validPin = pin.text.isEmpty || (pin.text.length == 6 && int.tryParse(pin.text) != null);
                 if (name.text.trim().length < 2 || !validTime || !validPin) {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Periksa nama, jam HH:mm, dan PIN 6 digit.')));
