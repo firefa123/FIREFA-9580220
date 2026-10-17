@@ -96,19 +96,17 @@ class FirefaSyncWorker with WidgetsBindingObserver {
           if (orderResult.retryableFailures > 0 || orderResult.conflicts > 0) {
             debugPrint('FIREFA order sync $outletId: acknowledged=${orderResult.acknowledged}, retry=${orderResult.retryableFailures}, conflicts=${orderResult.conflicts}');
           }
-          if (session.role == FirefaRole.owner) {
-            final inventoryResult = await FirefaInventoryBackendSync.instance.syncOutlet(outletId);
-            if (inventoryResult.failed > 0) {
-              debugPrint('FIREFA inventory sync $outletId deferred: ${inventoryResult.errors.join('; ')}');
-            } else if (inventoryResult.attempted > 0) {
-              try {
-                final differences = await FirefaInventoryBackendSync.instance.reconcileOutlet(outletId);
-                if (differences.isNotEmpty) {
-                  debugPrint('FIREFA inventory reconciliation $outletId found ${differences.length} difference(s); local stock was not overwritten.');
-                }
-              } catch (error) {
-                debugPrint('FIREFA inventory reconciliation deferred safely: $error');
+          final inventoryResult = await FirefaInventoryBackendSync.instance.syncOutlet(outletId);
+          if (inventoryResult.failed > 0) {
+            debugPrint('FIREFA inventory sync $outletId deferred: ${inventoryResult.errors.join('; ')}');
+          } else if (session.role == FirefaRole.owner && inventoryResult.attempted > 0) {
+            try {
+              final differences = await FirefaInventoryBackendSync.instance.reconcileOutlet(outletId);
+              if (differences.isNotEmpty) {
+                debugPrint('FIREFA inventory reconciliation $outletId found ${differences.length} difference(s); local stock was not overwritten.');
               }
+            } catch (error) {
+              debugPrint('FIREFA inventory reconciliation deferred safely: $error');
             }
           }
         } catch (error) {
