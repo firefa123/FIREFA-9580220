@@ -20,7 +20,7 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
   static const _deviceKey = 'firefa_sync_device_id_v1';
   static const _versionPrefix = 'firefa_sync_server_version_v1';
 
-  Future<String> _deviceId() async {
+  static Future<String> installationDeviceId() async {
     final prefs = await SharedPreferences.getInstance();
     final existing = prefs.getString(_deviceKey);
     if (existing != null && FirefaBackendConfig.isUuid(existing)) return existing;
@@ -35,8 +35,20 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
     return id;
   }
 
-  String _versionKey(String tenantId, String outletId, String deviceId, String orderId) =>
+  Future<String> _deviceId() => installationDeviceId();
+
+  static String _versionKey(String tenantId, String outletId, String deviceId, String orderId) =>
       '$_versionPrefix:${tenantId.toLowerCase()}:${outletId.toLowerCase()}:${deviceId.toLowerCase()}:$orderId';
+
+  static Future<String?> serverOrderIdFor({
+    required String tenantId,
+    required String serverOutletId,
+    required String localOrderId,
+  }) async {
+    final deviceId = await installationDeviceId();
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('${_versionKey(tenantId, serverOutletId, deviceId, localOrderId)}:global-order-id');
+  }
 
   @override
   Future<FirefaSyncReceipt> send(FirefaSyncEnvelope event) async {
@@ -150,11 +162,15 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
         }
         final serverVersion = body['serverVersion'] as int;
         final saved = await prefs.setInt(versionKey, serverVersion);
-        if (!saved) {
+        final globalOrderSaved = await prefs.setString(
+          '${versionKey}:global-order-id',
+          body['globalOrderId'] as String,
+        );
+        if (!saved || !globalOrderSaved) {
           return FirefaSyncReceipt(
             eventId: event.eventId,
             outcome: FirefaSyncOutcome.retryableFailure,
-            message: 'Receipt diterima tetapi versi server tidak dapat disimpan lokal.',
+            message: 'Receipt diterima tetapi versi/identitas server tidak dapat disimpan lokal.',
           );
         }
         return FirefaSyncReceipt(
