@@ -93,11 +93,28 @@ class FirefaSyncWorker with WidgetsBindingObserver {
       );
       for (final outletId in localOutlets) {
         if (!_started) break;
+        // Retry stock movements first. This is important when a cancellation
+        // is pending: a previously-applied sale with a lost response must be
+        // replayed idempotently before the cancellation event can reach server.
+        try {
+          final beforeOrders = await FirefaInventoryBackendSync.instance.syncOutlet(outletId);
+          if (beforeOrders.failed > 0) {
+            debugPrint('FIREFA inventory pre-sync $outletId deferred: ${beforeOrders.errors.join('; ')}');
+          }
+        } catch (error) {
+          debugPrint('FIREFA inventory pre-sync deferred safely: $error');
+        }
+
         try {
           final orderResult = await coordinator.syncOutlet(outletId);
           if (orderResult.retryableFailures > 0 || orderResult.conflicts > 0) {
             debugPrint('FIREFA order sync $outletId: acknowledged=${orderResult.acknowledged}, retry=${orderResult.retryableFailures}, conflicts=${orderResult.conflicts}');
           }
+        } catch (error) {
+          debugPrint('FIREFA order sync failed safely for $outletId: $error');
+        }
+
+        try {
           final inventoryResult = await FirefaInventoryBackendSync.instance.syncOutlet(outletId);
           if (inventoryResult.failed > 0) {
             debugPrint('FIREFA inventory sync $outletId deferred: ${inventoryResult.errors.join('; ')}');
@@ -112,7 +129,7 @@ class FirefaSyncWorker with WidgetsBindingObserver {
             }
           }
         } catch (error) {
-          debugPrint('FIREFA sync outlet failed safely: $error');
+          debugPrint('FIREFA inventory sync failed safely for $outletId: $error');
         }
       }
     } catch (error) {
