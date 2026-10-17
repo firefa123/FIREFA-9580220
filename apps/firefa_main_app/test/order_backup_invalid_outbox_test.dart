@@ -40,8 +40,8 @@ void main() {
     entries.add(entries.first);
     outbox['entries'] = entries;
 
-    await expectLater(
-      store.restoreLocalSnapshotDurably({...snapshot, 'outbox': outbox}),
+    expect(
+      () => store.restoreLocalSnapshot({...snapshot, 'outbox': outbox}),
       throwsFormatException,
     );
 
