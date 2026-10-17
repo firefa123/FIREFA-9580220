@@ -6,6 +6,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'order_models.dart';
+
 class FirefaInventoryItem {
   const FirefaInventoryItem({
     required this.id,
@@ -131,6 +133,7 @@ class FirefaInventoryStore extends ChangeNotifier {
   final Set<String> _processedOrderIds = {};
   final Set<String> _reversedOrderIds = {};
   final Set<String> _processedTransferIds = {};
+  final Map<String, Map<String, dynamic>> _pendingOrderConsumptions = {};
   int _nextOpnameId = 1;
   Future<void> _pendingSave = Future<void>.value();
   Future<void>? _initializing;
@@ -157,6 +160,7 @@ class FirefaInventoryStore extends ChangeNotifier {
         'processedOrderIds': <dynamic>[],
         'reversedOrderIds': <dynamic>[],
         'processedTransferIds': <dynamic>[],
+        'pendingOrderConsumptions': <String, dynamic>{},
       };
       if (raw != null && raw.isNotEmpty) {
         snapshot = Map<String, dynamic>.from(jsonDecode(raw) as Map);
@@ -194,6 +198,11 @@ class FirefaInventoryStore extends ChangeNotifier {
           (snapshot['reversedOrderIds'] as List<dynamic>? ?? []).cast<String>();
       final processedTransferIds =
           (snapshot['processedTransferIds'] as List<dynamic>? ?? []).cast<String>();
+      final pendingOrderConsumptions = Map<String, Map<String, dynamic>>.from(
+        Map<String, dynamic>.from(snapshot['pendingOrderConsumptions'] as Map? ?? const {}).map(
+          (key, value) => MapEntry(key, Map<String, dynamic>.from(value as Map)),
+        ),
+      );
 
       _items..clear()..addAll(items);
       _movements..clear()..addAll(movements);
@@ -204,6 +213,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       _processedOrderIds..clear()..addAll(processedOrderIds);
       _reversedOrderIds..clear()..addAll(reversedOrderIds);
       _processedTransferIds..clear()..addAll(processedTransferIds);
+      _pendingOrderConsumptions..clear()..addAll(pendingOrderConsumptions);
       _nextId = snapshot['nextId'] as int;
       _nextMovementId = (snapshot['nextMovementId'] as int?) ?? 1;
       _nextOpnameId = (snapshot['nextOpnameId'] as int?) ?? 1;
@@ -219,6 +229,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       _processedOrderIds.clear();
       _reversedOrderIds.clear();
       _processedTransferIds.clear();
+      _pendingOrderConsumptions.clear();
       _nextId = 1;
       _nextMovementId = 1;
       _nextOpnameId = 1;
@@ -246,7 +257,9 @@ class FirefaInventoryStore extends ChangeNotifier {
         (snapshot['prepRecipes'] != null && snapshot['prepRecipes'] is! List) ||
         (snapshot['preparedYields'] != null && snapshot['preparedYields'] is! Map) ||
         (snapshot['processedOrderIds'] != null && snapshot['processedOrderIds'] is! List) ||
-        (snapshot['reversedOrderIds'] != null && snapshot['reversedOrderIds'] is! List)) {
+        (snapshot['reversedOrderIds'] != null && snapshot['reversedOrderIds'] is! List) ||
+        (snapshot['processedTransferIds'] != null && snapshot['processedTransferIds'] is! List) ||
+        (snapshot['pendingOrderConsumptions'] != null && snapshot['pendingOrderConsumptions'] is! Map)) {
       throw const FormatException('Struktur snapshot inventory tidak valid.');
     }
 
@@ -657,6 +670,107 @@ class FirefaInventoryStore extends ChangeNotifier {
     return true;
   }
 
+  /// Persist the exact recipe quantities before a POS order is created.
+  /// Startup recovery uses this journal if the app stops before stock deduction.
+  Future<bool> prepareOrderStockConsumption({
+    required String orderId,
+    required String outletId,
+    required List<({String menuId, int quantity})> menuLines,
+  }) async {
+    if (!_initialized) throw StateError('Inventory belum diinisialisasi');
+    if (orderId.trim().isEmpty || outletId.trim().isEmpty || menuLines.isEmpty ||
+        menuLines.any((line) => line.menuId.trim().isEmpty || line.quantity <= 0)) {
+      throw ArgumentError('Intent pemakaian stok tidak valid.');
+    }
+    final key = _orderStockKey(outletId, orderId);
+    if (_containsOrderMarker(_processedOrderIds, outletId, orderId,
+        legacyNote: 'POS order $orderId')) return false;
+    if (!validateOrderStock(outletId: outletId, menuLines: menuLines)) return false;
+    final serializedLines = menuLines.map((line) => <String, dynamic>{
+      'menuId': line.menuId,
+      'quantity': line.quantity,
+    }).toList();
+    final existing = _pendingOrderConsumptions[key];
+    if (existing != null) {
+      if (jsonEncode(existing['menuLines']) != jsonEncode(serializedLines)) {
+        throw StateError('Intent pemakaian stok order memiliki payload berbeda.');
+      }
+      return true;
+    }
+    _pendingOrderConsumptions[key] = {
+      'orderId': orderId,
+      'outletId': outletId,
+      'menuLines': serializedLines,
+    };
+    notifyListeners();
+    _save();
+    await waitForPendingSave();
+    return true;
+  }
+
+  /// Remove an intent only when checkout was abandoned before an order existed.
+  Future<void> discardOrderStockIntent({
+    required String orderId,
+    required String outletId,
+  }) async {
+    if (!_initialized) throw StateError('Inventory belum diinisialisasi');
+    if (_pendingOrderConsumptions.remove(_orderStockKey(outletId, orderId)) != null) {
+      notifyListeners();
+      _save();
+      await waitForPendingSave();
+    }
+  }
+
+  /// Resume interrupted checkouts from their durable journal. Orders which
+  /// were never committed or were cancelled discard the intent; active orders
+  /// consume the exact recipe lines captured before order creation.
+  Future<int> recoverPendingOrderStock(Iterable<FirefaOrder> orders) async {
+    if (!_initialized) throw StateError('Inventory belum diinisialisasi');
+    final ordersByKey = <String, FirefaOrder>{
+      for (final order in orders) _orderStockKey(order.outletId, order.id): order,
+    };
+    var recovered = 0;
+    final intents = Map<String, Map<String, dynamic>>.from(_pendingOrderConsumptions);
+    for (final entry in intents.entries) {
+      final intent = entry.value;
+      final outletId = intent['outletId'] as String;
+      final orderId = intent['orderId'] as String;
+      final order = ordersByKey[entry.key];
+      if (order == null || order.status == FirefaOrderStatus.cancelled ||
+          _containsOrderMarker(_processedOrderIds, outletId, orderId,
+              legacyNote: 'POS order $orderId')) {
+        _pendingOrderConsumptions.remove(entry.key);
+        continue;
+      }
+      final rawLines = intent['menuLines'];
+      if (rawLines is! List) {
+        throw const FormatException('Jurnal pemakaian stok tidak valid.');
+      }
+      final lines = rawLines.map((value) {
+        final line = Map<String, dynamic>.from(value as Map);
+        return (menuId: line['menuId'] as String, quantity: line['quantity'] as int);
+      }).toList();
+      try {
+        if (await consumeOrderStock(
+          orderId: orderId, outletId: outletId, menuLines: lines,
+        )) {
+          recovered++;
+        } else if (_containsOrderMarker(_processedOrderIds, outletId, orderId,
+            legacyNote: 'POS order $orderId')) {
+          _pendingOrderConsumptions.remove(entry.key);
+        }
+      } catch (error) {
+        debugPrint('FIREFA: pemulihan pemakaian stok order $orderId tertunda: $error');
+      }
+    }
+    if (intents.isNotEmpty) {
+      notifyListeners();
+      _save();
+      await waitForPendingSave();
+    }
+    return recovered;
+  }
+
   Future<bool> consumeOrderStock({
     required String orderId,
     required String outletId,
@@ -669,6 +783,20 @@ class FirefaInventoryStore extends ChangeNotifier {
     if (_containsOrderMarker(_processedOrderIds, outletId, orderId,
         legacyNote: 'POS order $orderId')) return false;
     if (!validateOrderStock(outletId: outletId, menuLines: menuLines)) return false;
+    final intentKey = _orderStockKey(outletId, orderId);
+    final preparedIntent = _pendingOrderConsumptions[intentKey];
+    if (preparedIntent != null) {
+      final expectedLines = (preparedIntent['menuLines'] as List).map((value) => {
+        'menuId': (value as Map)['menuId'],
+        'quantity': value['quantity'],
+      }).toList();
+      final suppliedLines = menuLines.map((line) => {
+        'menuId': line.menuId, 'quantity': line.quantity,
+      }).toList();
+      if (jsonEncode(expectedLines) != jsonEncode(suppliedLines)) {
+        throw StateError('Kuantitas checkout berbeda dari intent stok yang tersimpan.');
+      }
+    }
 
     final requiredQuantities = <String, int>{};
     final recipes = _recipes.where((line) => line.outletId == outletId).toList();
@@ -692,6 +820,7 @@ class FirefaInventoryStore extends ChangeNotifier {
     final oldItems = List<FirefaInventoryItem>.from(_items);
     final oldMovements = List<FirefaStockMovement>.from(_movements);
     final oldProcessed = Set<String>.from(_processedOrderIds);
+    final oldPendingIntents = Map<String, Map<String, dynamic>>.from(_pendingOrderConsumptions);
     final oldNextMovementId = _nextMovementId;
     try {
       final timestamp = DateTime.now().toIso8601String();
@@ -712,6 +841,7 @@ class FirefaInventoryStore extends ChangeNotifier {
         ));
       }
       _processedOrderIds.add(_orderStockKey(outletId, orderId));
+      _pendingOrderConsumptions.remove(intentKey);
       notifyListeners();
       _save();
       await waitForPendingSave();
@@ -720,6 +850,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       _items..clear()..addAll(oldItems);
       _movements..clear()..addAll(oldMovements);
       _processedOrderIds..clear()..addAll(oldProcessed);
+      _pendingOrderConsumptions..clear()..addAll(oldPendingIntents);
       _nextMovementId = oldNextMovementId;
       notifyListeners();
       _save();
@@ -1136,7 +1267,7 @@ class FirefaInventoryStore extends ChangeNotifier {
       'processedOrderIds': _processedOrderIds.toList(),
       'reversedOrderIds': _reversedOrderIds.toList(),
       'processedTransferIds': _processedTransferIds.toList(),
-      'processedTransferIds': _processedTransferIds.toList(),
+      'pendingOrderConsumptions': _pendingOrderConsumptions,
     });
     _pendingSave = _pendingSave.catchError((Object error) {
       debugPrint('Inventory save sebelumnya gagal: $error');
@@ -1167,6 +1298,8 @@ class FirefaInventoryStore extends ChangeNotifier {
       'preparedYields': _preparedYields,
       'processedOrderIds': _processedOrderIds.toList(),
       'reversedOrderIds': _reversedOrderIds.toList(),
+      'processedTransferIds': _processedTransferIds.toList(),
+      'pendingOrderConsumptions': _pendingOrderConsumptions,
     };
   }
 
@@ -1192,6 +1325,11 @@ class FirefaInventoryStore extends ChangeNotifier {
     _processedOrderIds..clear()..addAll((snapshot['processedOrderIds'] as List? ?? []).cast<String>());
     _reversedOrderIds..clear()..addAll((snapshot['reversedOrderIds'] as List? ?? []).cast<String>());
     _processedTransferIds..clear()..addAll((snapshot['processedTransferIds'] as List? ?? []).cast<String>());
+    _pendingOrderConsumptions..clear()..addAll(Map<String, Map<String, dynamic>>.from(
+      Map<String, dynamic>.from(snapshot['pendingOrderConsumptions'] as Map? ?? const {}).map(
+        (key, value) => MapEntry(key, Map<String, dynamic>.from(value as Map)),
+      ),
+    ));
     _nextId = snapshot['nextId'] as int;
     _nextMovementId = snapshot['nextMovementId'] as int? ?? 1;
     _nextOpnameId = snapshot['nextOpnameId'] as int? ?? 1;
