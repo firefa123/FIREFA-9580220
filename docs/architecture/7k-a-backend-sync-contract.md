@@ -1,6 +1,6 @@
 # FIREFA 7K-A — Backend Sync Contract (Draft v1)
 
-Status: **PARTIALLY IMPLEMENTED — Stage 4 client/server path exists; deployment and crash-durability guarantees remain environment-dependent.** The authenticated API, PostgreSQL transaction/idempotency receipt, local outbox, HTTP adapter, retry coordinator, and conflict inbox are implemented in the repository. A live deployment is not implied by this document.
+Status: **CLIENT TRANSPORT IMPLEMENTED; SERVER AND LIVE DEPLOYMENT UNVERIFIED.** The repository contains the authenticated client session, durable local outbox, HTTP adapter for `POST /api/v1/sync/events`, foreground retry worker, and conflict inbox. A server implementation with transactional PostgreSQL idempotency receipts and a provisioned staging/production endpoint could not be located or verified in this repository during this task. Do not claim end-to-end cloud sync is complete until that server exists and the acceptance tests below pass against it.
 
 ## Scope and invariants
 
@@ -111,11 +111,11 @@ Existing client order IDs are display/local IDs, not global IDs. Before multi-de
 
 ## Planned implementation boundaries
 
-1. 7K-A: agree on contract and threat model (**this document only**).
-2. 7K-B: backend skeleton, migrations, auth, scoped endpoint, transactional idempotency, integration tests.
-3. 7K-C: client global identity migration, real authenticated adapter behind disabled-by-default configuration.
-4. 7K-D: persistent retry worker, jitter, reconnect handling, status transitions after validated receipts.
-5. 7K-E: cross-device, crash/restart, conflict, payment and tenant-isolation tests.
+1. 7K-A: contract and threat model documented.
+2. 7K-B: **outstanding** — implement and deploy backend auth, migrations, scoped endpoint, transactional idempotency receipts, and integration tests.
+3. 7K-C: client HTTP adapter and outlet mapping are implemented; live endpoint and cross-device identity behavior remain unverified.
+4. 7K-D: foreground retry worker, jittered order-event retry, app-resume recovery, and manual retry controls are implemented; background execution when the app is terminated is not guaranteed.
+5. 7K-E: **outstanding** — run cross-device, crash/restart, conflict, payment, and tenant-isolation tests against a real staging backend.
 
 ## Acceptance criteria before enabling cloud
 
