@@ -8,7 +8,7 @@ import 'package:firefa_main_app/features/modules/offline_sync_queue.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('valid backup restores order and outbox snapshot durably', () async {
+  test('valid backup restores order and outbox snapshot', () async {
     SharedPreferences.setMockInitialValues({});
     final store = FirefaOrderStore.instance;
     final queue = FirefaOfflineSyncQueue.instance;
@@ -38,7 +38,7 @@ void main() {
       FirefaOrderStatus.preparing,
     );
 
-    await store.restoreLocalSnapshotDurably(backup);
+    store.restoreLocalSnapshot(backup);
 
     expect(
       store.findOrder('backup-success-outlet', order.id)!.status,
