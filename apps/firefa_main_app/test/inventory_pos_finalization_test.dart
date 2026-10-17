@@ -67,6 +67,17 @@ void main() {
       orderId: orderId, outletId: 'outlet-recovery',
       menuLines: [(menuId: 'recovery-bread', quantity: 2)],
     ), isTrue);
+    // A recipe edit after the intent was journaled must not change the
+    // quantities that recovery applies for this already-created checkout.
+    expect(inventory.removeRecipeLine(
+      outletId: 'outlet-recovery', menuId: 'recovery-bread',
+      ingredientId: ingredient.id,
+    ), isTrue);
+    expect(inventory.addRecipeLine(
+      outletId: 'outlet-recovery', menuId: 'recovery-bread',
+      ingredientId: ingredient.id, quantity: 30,
+    ), isTrue);
+    await inventory.waitForPendingSave();
 
     final order = FirefaOrder(
       id: orderId,
