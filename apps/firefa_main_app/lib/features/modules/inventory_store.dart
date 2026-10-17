@@ -911,12 +911,13 @@ class FirefaInventoryStore extends ChangeNotifier {
     String note = '',
   }) async {
     if (!_initialized) throw StateError('Inventory belum diinisialisasi');
-    if (transferId.trim().isEmpty || sourceOutletId.trim().isEmpty ||
+    final normalizedTransferId = transferId.trim();
+    if (normalizedTransferId.isEmpty || normalizedTransferId.length > 120 || sourceOutletId.trim().isEmpty ||
         targetOutletId.trim().isEmpty || sourceOutletId == targetOutletId ||
         quantity <= 0 || quantity > 999999999 || note.trim().length > 160) {
       throw ArgumentError('Permintaan transfer stok tidak valid.');
     }
-    if (_processedTransferIds.contains(transferId)) return false;
+    if (_processedTransferIds.contains(normalizedTransferId)) return false;
     final sourceIndex = _index(sourceOutletId, sourceItemId);
     final targetIndex = _index(targetOutletId, targetItemId);
     if (sourceIndex < 0 || targetIndex < 0) {
@@ -956,15 +957,15 @@ class FirefaInventoryStore extends ChangeNotifier {
           id: 'movement-${_nextMovementId++}', outletId: sourceOutletId,
           itemId: source.id, itemName: source.name, type: 'out',
           before: source.stock, after: source.stock - quantity,
-          note: 'Transfer $transferId ke $targetOutletId$suffix', timestamp: now,
+          note: 'Transfer $normalizedTransferId ke $targetOutletId$suffix', timestamp: now,
         ))
         ..add(FirefaStockMovement(
           id: 'movement-${_nextMovementId++}', outletId: targetOutletId,
           itemId: target.id, itemName: target.name, type: 'in',
           before: target.stock, after: target.stock + quantity,
-          note: 'Transfer $transferId dari $sourceOutletId$suffix', timestamp: now,
+          note: 'Transfer $normalizedTransferId dari $sourceOutletId$suffix', timestamp: now,
         ));
-      _processedTransferIds.add(transferId);
+      _processedTransferIds.add(normalizedTransferId);
       notifyListeners();
       _save();
       await waitForPendingSave();
