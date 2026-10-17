@@ -72,6 +72,39 @@ class FirefaInventoryBackendSync {
   String _sentKey(String tenantId, String outletId, String deviceId) =>
       '$_sentPrefix:${tenantId.toLowerCase()}:${outletId.toLowerCase()}:${deviceId.toLowerCase()}';
 
+  /// True while a POS sale movement has not received a durable server receipt.
+  /// Cancellation events must wait for this to become false, because a timed
+  /// out response may mean the server applied the sale even when the client
+  /// did not receive the acknowledgement.
+  Future<bool> hasUnsentPosSaleForOrder({
+    required String localOutletId,
+    required String orderId,
+  }) async {
+    try {
+      if (!FirefaBackendConfig.isConfigured) return true;
+      await store.initialize();
+      final saleMovements = store.historyForOutlet(localOutletId)
+          .where((movement) => movement.note == 'POS order $orderId')
+          .toList();
+      if (saleMovements.isEmpty) return false;
+      final session = await FirefaBackendClient.instance.restoreSession();
+      if (session == null) return true;
+      final serverOutletId = FirefaBackendConfig.resolveServerOutletId(
+        localOutletId: localOutletId,
+        mapping: FirefaBackendConfig.validatedOutletMap,
+        authorizedServerOutletIds: session.outletIds,
+      );
+      final deviceId = await _deviceId();
+      final prefs = await SharedPreferences.getInstance();
+      final sentKey = '$_sentPrefix:${session.tenantId.toLowerCase()}:${serverOutletId.toLowerCase()}:${deviceId.toLowerCase()}';
+      final sent = (prefs.getStringList(sentKey) ?? <String>[]).toSet();
+      return saleMovements.any((movement) => !sent.contains(movement.id));
+    } catch (_) {
+      // Uncertainty means defer cancellation, never assume a sale was absent.
+      return true;
+    }
+  }
+
   Future<void> retryBlockedMovement({
     required String localOutletId,
     required String movementId,
