@@ -226,6 +226,34 @@ void main() {
     await queue.waitForPendingSave();
   });
 
+  test('stale combined snapshot cannot revert a durable server acknowledgement', () async {
+    final event = queue.enqueueOrder(
+      makeOrder('COMBINED-STALE-ACK', 'combined-stale-test-outlet'),
+      'order.created',
+    );
+    await queue.waitForPendingSave();
+    final staleCombined = queue.exportSnapshot();
+
+    await queue.markSyncing(event.eventId);
+    await queue.markSynced(event.eventId);
+    await queue.waitForPendingSave();
+
+    queue.restoreCombinedSnapshot(staleCombined);
+    await queue.waitForPendingSave();
+    expect(queue.findEvent(event.eventId)!.status, FirefaSyncStatus.synced);
+
+    final prefs = await SharedPreferences.getInstance();
+    final stored = Map<String, dynamic>.from(
+      jsonDecode(prefs.getString('firefa_sync_outbox_v1')!) as Map,
+    );
+    final storedEntry = (stored['entries'] as List)
+        .map((value) => Map<String, dynamic>.from(value as Map))
+        .singleWhere((value) => value['eventId'] == event.eventId);
+    expect(storedEntry['status'], FirefaSyncStatus.synced.name);
+    await queue.removeEvent(event.eventId);
+    await queue.waitForPendingSave();
+  });
+
   test('batch validates limits and outlet', () {
     expect(() => engine.pendingBatch(queue: queue, outletId: ''), throwsArgumentError);
     expect(() => engine.pendingBatch(queue: queue, outletId: 'test-outlet-A', limit: 0), throwsRangeError);
