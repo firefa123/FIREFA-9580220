@@ -108,7 +108,7 @@ class InventoryStore extends ChangeNotifier {
         final movementIds = <String>{};
         var maxMovementSequence = 0;
         for (final movement in movements) {
-          final match = RegExp(r'^INV-(\\d+)$').firstMatch(movement.id);
+          final match = RegExp(r'^INV-(\d+)$').firstMatch(movement.id);
           final sequence = int.tryParse(match?.group(1) ?? '');
           final validType = const {
             'stock_in', 'stock_out', 'transfer_in', 'transfer_out',
