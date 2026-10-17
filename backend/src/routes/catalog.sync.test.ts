@@ -20,7 +20,7 @@ type Options = {
 };
 
 function makePool(options: Options = {}) {
-  const clientQuery = vi.fn(async (sql: string) => {
+  const clientQuery = vi.fn(async (sql: string, _values?: unknown[]) => {
     if (sql.includes("SELECT tm.role FROM tenant_memberships")) {
       return { rows: [{ role: options.role ?? "cashier" }], rowCount: 1 };
     }
