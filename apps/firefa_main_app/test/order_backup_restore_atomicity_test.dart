@@ -40,8 +40,8 @@ void main() {
       'orders': orders,
     };
 
-    await expectLater(
-      store.restoreLocalSnapshotDurably(invalid),
+    expect(
+      () => store.restoreLocalSnapshot(invalid),
       throwsFormatException,
     );
 
