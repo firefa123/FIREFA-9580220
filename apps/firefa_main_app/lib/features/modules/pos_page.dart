@@ -1021,12 +1021,12 @@ class _PosPageState extends State<PosPage> {
       checkoutOrderStore = store;
       reservedStockOrderId = await store.reserveOrderIdAndPersist();
       final stockIntentPrepared = await inventory.prepareOrderStockConsumption(
-        orderId: reservedStockOrderId!,
+        orderId: reservedStockOrderId,
         outletId: sourceOutlet,
         menuLines: stockLines,
       );
       if (!stockIntentPrepared) {
-        store.releaseReservedOrderId(reservedStockOrderId!);
+        store.releaseReservedOrderId(reservedStockOrderId);
         throw StateError('Jurnal pemakaian stok tidak dapat disimpan. Checkout dibatalkan.');
       }
       final order = store.createOrder(
@@ -1126,10 +1126,10 @@ class _PosPageState extends State<PosPage> {
       final order = createdOrder;
       final store = checkoutOrderStore;
       if (order == null && reservedStockOrderId != null && store != null) {
-        store.releaseReservedOrderId(reservedStockOrderId!);
+        store.releaseReservedOrderId(reservedStockOrderId);
         try {
           await FirefaInventoryStore.instance.discardOrderStockIntent(
-            orderId: reservedStockOrderId!,
+            orderId: reservedStockOrderId,
             outletId: sourceOutlet,
           );
         } catch (intentError) {
