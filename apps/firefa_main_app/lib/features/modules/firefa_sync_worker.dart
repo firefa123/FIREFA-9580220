@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../core/outlet/active_outlet_store.dart';
+import '../../core/auth/role_permissions.dart';
+
 import 'backend_client.dart';
 import 'conflict_store.dart';
 import 'firefa_http_sync_adapter.dart';
