@@ -725,7 +725,7 @@ class FirefaInventoryStore extends ChangeNotifier {
   /// were never committed or were cancelled discard the intent; active orders
   /// consume the exact recipe lines captured before order creation.
   Future<int> recoverPendingOrderStock(Iterable<FirefaOrder> orders) async {
-    if (!_initialized) throw StateError('Inventory belum diinisialisasi');
+    if (!_initialized) await initialize();
     final ordersByKey = <String, FirefaOrder>{
       for (final order in orders) _orderStockKey(order.outletId, order.id): order,
     };
