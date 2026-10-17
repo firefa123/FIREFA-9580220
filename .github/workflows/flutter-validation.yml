@@ -2,13 +2,13 @@ name: Flutter validation
 
 on:
   pull_request:
-    types: [ready_for_review]
-    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited]
+    branches: [main, development]
     paths:
       - 'apps/firefa_main_app/**'
       - '.github/workflows/flutter-validation.yml'
   push:
-    branches: [main]
+    branches: [main, development, 'fix/conflict-reconciliation']
     paths:
       - 'apps/firefa_main_app/**'
       - '.github/workflows/flutter-validation.yml'
