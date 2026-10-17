@@ -179,6 +179,7 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
     final items = rawItems.map((item) {
       final value = Map<String, dynamic>.from(item as Map);
       return {
+        if (value['productId'] != null) 'productId': value['productId'],
         'productName': value['productName'],
         'quantity': value['quantity'],
         'unitPrice': value['unitPrice'],
