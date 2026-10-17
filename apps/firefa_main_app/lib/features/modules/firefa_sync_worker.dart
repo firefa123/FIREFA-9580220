@@ -11,6 +11,7 @@ import 'firefa_http_sync_adapter.dart';
 import 'inventory_backend_sync.dart';
 import 'hybrid_sync_conflict_bridge.dart';
 import 'offline_sync_queue.dart';
+import 'order_store.dart';
 import 'sync_coordinator.dart';
 
 /// Foreground recovery worker. It retries durable pending events at startup,
@@ -74,6 +75,8 @@ class FirefaSyncWorker with WidgetsBindingObserver {
       final backend = FirefaBackendClient.instance;
       final session = await backend.restoreSession();
       if (session == null) return;
+      // Never send an event before its combined order/outbox snapshot is durable.
+      await FirefaOrderStore.instance.waitForPendingSave();
       final mapping = FirefaBackendConfig.validatedOutletMap;
       final authorized = session.outletIds.map((id) => id.toLowerCase()).toSet();
       final localOutlets = mapping.entries
