@@ -77,10 +77,16 @@ class FirefaOrderStore extends ChangeNotifier {
     _registerTableOrderChecker();
     // Resume any checkout whose order was durable but whose stock deduction
     // had not completed before the app stopped.
-    final recoveredStock = await FirefaInventoryStore.instance
-        .recoverPendingOrderStock(_orders);
-    if (recoveredStock > 0) {
-      debugPrint('FIREFA: recovered stock for $recoveredStock interrupted checkout(s).');
+    try {
+      final recoveredStock = await FirefaInventoryStore.instance
+          .recoverPendingOrderStock(_orders);
+      if (recoveredStock > 0) {
+        debugPrint('FIREFA: recovered stock for $recoveredStock interrupted checkout(s).');
+      }
+    } catch (error) {
+      // Preserve access to local orders even if inventory recovery needs
+      // operator attention; the pending intent remains durable for retry.
+      debugPrint('FIREFA: interrupted checkout recovery remains pending: $error');
     }
     // Recover stock reversals if the app was interrupted after a cancelled
     // order became durable but before its inventory restoration completed.
