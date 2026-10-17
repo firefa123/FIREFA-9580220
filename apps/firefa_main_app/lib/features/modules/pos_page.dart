@@ -954,6 +954,7 @@ class _PosPageState extends State<PosPage> {
     setState(() => _checkoutBusy = true);
     FirefaOrder? createdOrder;
     FirefaOrderStore? checkoutOrderStore;
+    String? reservedStockOrderId;
     try {
       final inventory = FirefaInventoryStore.instance;
       await inventory.initialize();
@@ -1018,7 +1019,18 @@ class _PosPageState extends State<PosPage> {
       }
       final store = FirefaOrderStore.instance;
       checkoutOrderStore = store;
+      reservedStockOrderId = await store.reserveOrderIdAndPersist();
+      final stockIntentPrepared = await inventory.prepareOrderStockConsumption(
+        orderId: reservedStockOrderId!,
+        outletId: sourceOutlet,
+        menuLines: stockLines,
+      );
+      if (!stockIntentPrepared) {
+        store.releaseReservedOrderId(reservedStockOrderId!);
+        throw StateError('Jurnal pemakaian stok tidak dapat disimpan. Checkout dibatalkan.');
+      }
       final order = store.createOrder(
+        reservedOrderId: reservedStockOrderId,
         outletId: sourceOutlet,
         orderType: checkoutOrderType,
         tableId: checkoutOrderType == 'Dine In' ? checkoutTable : null,
@@ -1110,6 +1122,17 @@ class _PosPageState extends State<PosPage> {
       var rollbackMessage = '';
       final order = createdOrder;
       final store = checkoutOrderStore;
+      if (order == null && reservedStockOrderId != null && store != null) {
+        store.releaseReservedOrderId(reservedStockOrderId!);
+        try {
+          await FirefaInventoryStore.instance.discardOrderStockIntent(
+            orderId: reservedStockOrderId!,
+            outletId: sourceOutlet,
+          );
+        } catch (intentError) {
+          rollbackMessage = ' Jurnal pemakaian stok perlu dipulihkan saat aplikasi dibuka kembali: $intentError';
+        }
+      }
       if (order != null && store != null) {
         final current = store.findOrder(sourceOutlet, order.id);
         if (current != null &&
