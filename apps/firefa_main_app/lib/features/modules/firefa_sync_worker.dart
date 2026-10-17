@@ -7,6 +7,7 @@ import '../../core/outlet/active_outlet_store.dart';
 import 'backend_client.dart';
 import 'conflict_store.dart';
 import 'firefa_http_sync_adapter.dart';
+import 'inventory_backend_sync.dart';
 import 'hybrid_sync_conflict_bridge.dart';
 import 'offline_sync_queue.dart';
 import 'sync_coordinator.dart';
@@ -39,15 +40,19 @@ class FirefaSyncWorker with WidgetsBindingObserver {
 
   void _onQueueChanged() {
     if (!_started || !FirefaBackendConfig.isConfigured) return;
-    final now = DateTime.now().toUtc();
-    for (final outletId in FirefaBackendConfig.validatedOutletMap.keys) {
-      if (_queue.entriesForOutlet(outletId).any((entry) =>
-          entry.status == FirefaSyncStatus.pending &&
-          (entry.nextAttemptAt == null ||
-              !entry.nextAttemptAt!.toUtc().isAfter(now)))) {
-        unawaited(syncNow());
-        return;
+    try {
+      final now = DateTime.now().toUtc();
+      for (final outletId in FirefaBackendConfig.validatedOutletMap.keys) {
+        if (_queue.entriesForOutlet(outletId).any((entry) =>
+            entry.status == FirefaSyncStatus.pending &&
+            (entry.nextAttemptAt == null ||
+                !entry.nextAttemptAt!.toUtc().isAfter(now)))) {
+          unawaited(syncNow());
+          return;
+        }
       }
+    } catch (error) {
+      debugPrint('FIREFA sync mapping is not ready: $error');
     }
   }
 
@@ -85,7 +90,25 @@ class FirefaSyncWorker with WidgetsBindingObserver {
       for (final outletId in localOutlets) {
         if (!_started) break;
         try {
-          await coordinator.syncOutlet(outletId);
+          final orderResult = await coordinator.syncOutlet(outletId);
+          if (orderResult.retryableFailures > 0 || orderResult.conflicts > 0) {
+            debugPrint('FIREFA order sync $outletId: acknowledged=${orderResult.acknowledged}, retry=${orderResult.retryableFailures}, conflicts=${orderResult.conflicts}');
+          }
+          if (session.role == FirefaRole.owner) {
+            final inventoryResult = await FirefaInventoryBackendSync.instance.syncOutlet(outletId);
+            if (inventoryResult.failed > 0) {
+              debugPrint('FIREFA inventory sync $outletId deferred: ${inventoryResult.errors.join('; ')}');
+            } else if (inventoryResult.attempted > 0) {
+              try {
+                final differences = await FirefaInventoryBackendSync.instance.reconcileOutlet(outletId);
+                if (differences.isNotEmpty) {
+                  debugPrint('FIREFA inventory reconciliation $outletId found ${differences.length} difference(s); local stock was not overwritten.');
+                }
+              } catch (error) {
+                debugPrint('FIREFA inventory reconciliation deferred safely: $error');
+              }
+            }
+          }
         } catch (error) {
           debugPrint('FIREFA sync outlet failed safely: $error');
         }
