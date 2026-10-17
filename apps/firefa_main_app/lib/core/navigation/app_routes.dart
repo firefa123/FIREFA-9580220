@@ -136,7 +136,7 @@ class FirefaNavigation {
     ),
     FirefaModule(
       id: 'staff-attendance',
-      title: 'Staff & Absensi',
+      title: 'Pengaturan Staff',
       description: 'Kelola staff, radius geofence, absensi, dan ketepatan waktu.',
       icon: Icons.badge_outlined,
       permission: FirefaPermission.staffManage,
