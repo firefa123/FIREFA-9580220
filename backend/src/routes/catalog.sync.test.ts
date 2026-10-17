@@ -175,6 +175,25 @@ describe("cashier POS inventory sync", () => {
     )).toBe(false);
   });
 
+  it("rejects a different sale delta for an already-recorded order/item", async () => {
+    const mocks = makePool({
+      priorBusiness: {
+        id: "7d2dfb7e-9b3f-46a1-8f45-5f19a7cb8a3e",
+        quantity_delta: "-3",
+        movement_type: "sale",
+      },
+    });
+    app = await makeApp(mocks.pool);
+    const key = "inventory:device:mismatched-order-delta";
+    const response = await postMovement(app, salePayload(key), key);
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ error: "pos_inventory_delta_mismatch" });
+    expect(mocks.clientQuery.mock.calls.some(([sql]) =>
+      sql.startsWith("UPDATE inventory_items SET quantity_on_hand"),
+    )).toBe(false);
+  });
+
   it("rejects a POS sale when the linked server order is cancelled", async () => {
     const mocks = makePool({ orderStatus: "cancelled" });
     app = await makeApp(mocks.pool);
