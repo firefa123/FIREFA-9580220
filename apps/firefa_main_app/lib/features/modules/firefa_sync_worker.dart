@@ -23,6 +23,7 @@ class FirefaSyncWorker with WidgetsBindingObserver {
   static const Duration _pollInterval = Duration(seconds: 30);
 
   final FirefaOfflineSyncQueue _queue = FirefaOfflineSyncQueue.instance;
+  final FirefaHttpSyncAdapter _adapter = FirefaHttpSyncAdapter();
   Timer? _timer;
   bool _started = false;
   bool _running = false;
@@ -83,7 +84,7 @@ class FirefaSyncWorker with WidgetsBindingObserver {
 
       final coordinator = FirefaSyncCoordinator(
         queue: _queue,
-        adapter: FirefaHttpSyncAdapter(),
+        adapter: _adapter,
         conflictBridge: FirefaHybridSyncConflictBridge(
           store: FirefaConflictStore.instance,
         ),
