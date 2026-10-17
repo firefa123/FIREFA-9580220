@@ -93,7 +93,7 @@ async function postMovement(
   payload: Record<string, unknown>,
   idempotencyKey: string,
 ) {
-  const token = app.jwt.sign({ sub: userId, tenantId });
+  const token = app.jwt.sign({ sub: userId, tenantId, role: 'cashier', outletIds: [outletId] });
   return app.inject({
     method: "POST",
     url: "/api/v1/inventory/movements",
