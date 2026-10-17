@@ -113,6 +113,136 @@ class _InventoryPageState extends State<InventoryPage> {
     }
   }
 
+  Future<void> transferStock() async {
+    if (!allowed || outlet.role != FirefaRole.owner) return;
+    final sourceOutlet = outlet.selectedOutletId;
+    final sourceItems = store.forOutlet(sourceOutlet);
+    final targets = outlet.accessibleOutlets
+        .where((candidate) => candidate.id != sourceOutlet).toList();
+    if (sourceItems.isEmpty || targets.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Transfer membutuhkan barang sumber dan akses ke outlet tujuan.'),
+      ));
+      return;
+    }
+
+    final quantityController = TextEditingController();
+    final noteController = TextEditingController();
+    var sourceItemId = sourceItems.first.id;
+    var targetOutletId = targets.first.id;
+    final result = await showDialog<({String sourceItemId, String targetOutletId, int quantity, String note})>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Transfer stok antar-outlet'),
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: sourceItemId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Barang sumber'),
+                  items: sourceItems.map((item) => DropdownMenuItem(
+                    value: item.id,
+                    child: Text('${item.name} — ${item.stock} ${item.unit}'),
+                  )).toList(),
+                  onChanged: (value) {
+                    if (value != null) setDialogState(() => sourceItemId = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: targetOutletId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Outlet tujuan'),
+                  items: targets.map((target) => DropdownMenuItem(
+                    value: target.id, child: Text(target.name),
+                  )).toList(),
+                  onChanged: (value) {
+                    if (value != null) setDialogState(() => targetOutletId = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: quantityController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(9)],
+                  decoration: const InputDecoration(labelText: 'Jumlah transfer', helperText: 'Gunakan satuan stok barang sumber.'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: noteController,
+                  maxLength: 160,
+                  decoration: const InputDecoration(labelText: 'Catatan (opsional)'),
+                ),
+                const SizedBox(height: 4),
+                const Text('Barang dengan nama dan satuan yang sama harus sudah tersedia di outlet tujuan.', style: TextStyle(fontSize: 12, color: muted)),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Batal')),
+            FilledButton(
+              onPressed: () {
+                final quantity = int.tryParse(quantityController.text);
+                if (quantity == null || quantity <= 0) return;
+                Navigator.pop(dialogContext, (
+                  sourceItemId: sourceItemId,
+                  targetOutletId: targetOutletId,
+                  quantity: quantity,
+                  note: noteController.text.trim(),
+                ));
+              },
+              child: const Text('Transfer'),
+            ),
+          ],
+        ),
+      ),
+    );
+    quantityController.dispose();
+    noteController.dispose();
+    if (!mounted || result == null || !allowed ||
+        sourceOutlet != outlet.selectedOutletId ||
+        !outlet.canAccessOutlet(result.targetOutletId)) return;
+
+    final source = sourceItems.where((item) => item.id == result.sourceItemId).firstOrNull;
+    if (source == null) return;
+    final destination = store.forOutlet(result.targetOutletId).where((item) =>
+      item.name.toLowerCase() == source.name.toLowerCase() &&
+      item.unit == source.unit).firstOrNull;
+    if (destination == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Barang "${source.name}" dengan satuan ${source.unit} belum tersedia di outlet tujuan.'),
+      ));
+      return;
+    }
+    final transferId = 'TRF-${DateTime.now().microsecondsSinceEpoch}';
+    try {
+      final saved = await store.transferStock(
+        transferId: transferId,
+        sourceOutletId: sourceOutlet,
+        sourceItemId: source.id,
+        targetOutletId: result.targetOutletId,
+        targetItemId: destination.id,
+        quantity: result.quantity,
+        note: result.note,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(saved
+          ? 'Transfer $transferId tersimpan: ${result.quantity} ${source.unit} ke ${outlet.accessibleOutlets.where((o) => o.id == result.targetOutletId).map((o) => o.name).firstOrNull ?? result.targetOutletId}.'
+          : 'Transfer sudah pernah diproses dan tidak diulang.'),
+      ));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Transfer gagal; stok tidak dianggap berhasil dipindahkan. $error'),
+      ));
+    }
+  }
+
   Future<void> setItemCost(FirefaInventoryItem item) async {
     if (!allowed || item.outletId != outlet.selectedOutletId) return;
     final controller = TextEditingController(text: item.unitCost.toStringAsFixed(0));
@@ -674,6 +804,8 @@ class _InventoryPageState extends State<InventoryPage> {
                         label: const Text('Sinkron & Rekonsiliasi'),
                       ),
                     OutlinedButton.icon(onPressed: allowed ? producePrepared : null, icon: const Icon(Icons.inventory_2_outlined), label: const Text('Produksi Olahan')),
+                    if (outlet.role == FirefaRole.owner && outlet.accessibleOutlets.length > 1)
+                      OutlinedButton.icon(onPressed: allowed ? transferStock : null, icon: const Icon(Icons.swap_horiz), label: const Text('Transfer Stok')),
                     FilledButton.icon(
                       onPressed: allowed ? addItem : null,
                       style: FilledButton.styleFrom(backgroundColor: primary),
