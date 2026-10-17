@@ -62,8 +62,6 @@ void main() {
       await queue.waitForPendingSave();
       await tester.pumpWidget(const SizedBox.shrink());
     },
-    skip: FirefaBackendConfig.isConfigured
-        ? 'Requires the CI environment with no provisioned cloud endpoint.'
-        : false,
+    skip: FirefaBackendConfig.isConfigured,
   );
 }
