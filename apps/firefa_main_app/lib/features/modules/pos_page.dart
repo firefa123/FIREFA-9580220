@@ -1048,6 +1048,9 @@ class _PosPageState extends State<PosPage> {
         total: checkoutGrandTotal,
       );
       createdOrder = order;
+      // The order and its outbox event must be durable before the inventory
+      // deduction can commit. The pre-written stock intent covers recovery.
+      await store.waitForPendingSave();
       // Reserve the table before the first inventory await. If stock processing
       // fails, the existing rollback cancels the order and releases the table.
       if (checkoutOrderType == 'Dine In') {
