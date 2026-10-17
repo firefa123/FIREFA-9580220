@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/auth/role_permissions.dart';
 import 'backend_client.dart';
 import 'conflict_management.dart';
 import 'sync_adapter.dart';
@@ -62,6 +63,13 @@ class FirefaHttpSyncAdapter extends FirefaSyncAdapter {
           eventId: event.eventId,
           outcome: FirefaSyncOutcome.retryableFailure,
           message: 'Login backend diperlukan untuk melanjutkan sinkronisasi.',
+        );
+      }
+      if (event.eventType == 'order.recovered' && session.role != FirefaRole.owner) {
+        return FirefaSyncReceipt(
+          eventId: event.eventId,
+          outcome: FirefaSyncOutcome.permanentFailure,
+          message: 'Pemulihan snapshot pesanan memerlukan akun Owner.',
         );
       }
       final mapping = FirefaBackendConfig.validatedOutletMap;
