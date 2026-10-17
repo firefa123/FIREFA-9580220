@@ -1404,4 +1404,63 @@ authSuite("authentication endpoints", () => {
     expect(order.rows[0]!.payment_status).toBe("unpaid");
   });
 
+
+  it("requires and stores a camera photo for staff check-in and limits photo access to the Owner", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const outletId = owner.outletIds[0];
+    const ownerHeaders = { authorization: "Bearer " + owner.accessToken };
+
+    const staffResponse = await ownerApp.inject({
+      method: "POST", url: "/api/v1/staff", headers: ownerHeaders,
+      payload: { outletId, staffCode: "PHOTO-STAFF", displayName: "Photo Staff", pin: "123456" },
+    });
+    expect(staffResponse.statusCode).toBe(201);
+
+    const login = await ownerApp.inject({
+      method: "POST", url: "/api/v1/staff/login",
+      payload: { outletId, staffCode: "PHOTO-STAFF", pin: "123456" },
+    });
+    expect(login.statusCode).toBe(200);
+    const staffToken = login.json().accessToken as string;
+    const checkInPayload = { outletId, latitude: -6.2, longitude: 106.8 };
+
+    const missingPhoto = await ownerApp.inject({
+      method: "POST", url: "/api/v1/attendance/check-in",
+      headers: { authorization: "Bearer " + staffToken }, payload: checkInPayload,
+    });
+    expect(missingPhoto.statusCode).toBe(400);
+
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString("base64");
+    const checkIn = await ownerApp.inject({
+      method: "POST", url: "/api/v1/attendance/check-in",
+      headers: { authorization: "Bearer " + staffToken },
+      payload: { ...checkInPayload, checkInPhotoBase64: jpeg },
+    });
+    expect(checkIn.statusCode).toBe(201);
+    expect(checkIn.json().attendance.checkInPhotoCaptured).toBe(true);
+    const attendanceId = checkIn.json().attendance.id as string;
+
+    const stored = await adminPool.query(
+      "SELECT octet_length(check_in_photo)::int AS photo_size, check_in_photo_mime_type AS mime_type " +
+      "FROM staff_attendance WHERE id = $1",
+      [attendanceId],
+    );
+    expect(stored.rows).toEqual([{ photo_size: 4, mime_type: "image/jpeg" }]);
+
+    const ownerPhoto = await ownerApp.inject({
+      method: "GET", url: "/api/v1/attendance/" + attendanceId + "/photo",
+      headers: ownerHeaders,
+    });
+    expect(ownerPhoto.statusCode).toBe(200);
+    expect(ownerPhoto.headers["content-type"]).toContain("image/jpeg");
+    expect(ownerPhoto.rawPayload).toEqual(Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+
+    const staffPhoto = await ownerApp.inject({
+      method: "GET", url: "/api/v1/attendance/" + attendanceId + "/photo",
+      headers: { authorization: "Bearer " + staffToken },
+    });
+    expect(staffPhoto.statusCode).toBe(403);
+  });
+
 });
