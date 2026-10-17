@@ -1,5 +1,12 @@
--- Operational tables required by the authenticated POS sync and inventory APIs.
+-- Operational tables required by authenticated POS sync and inventory APIs.
 -- Applied transactionally by backend/src/db/migrate.ts.
+
+ALTER TABLE refresh_tokens
+  ADD COLUMN tenant_id uuid REFERENCES tenants(id) ON DELETE RESTRICT;
+
+CREATE INDEX refresh_tokens_tenant_active_idx
+  ON refresh_tokens (tenant_id, expires_at)
+  WHERE revoked_at IS NULL;
 
 CREATE TABLE products (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -122,8 +129,11 @@ CREATE TABLE payments (
   method text NOT NULL CHECK (length(trim(method)) > 0),
   amount numeric(14, 2) NOT NULL CHECK (amount >= 0),
   status text NOT NULL DEFAULT 'reported',
+  provider text,
+  provider_reference text,
   idempotency_key text NOT NULL CHECK (length(trim(idempotency_key)) >= 8),
   actor_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   verified_by uuid REFERENCES users(id) ON DELETE SET NULL,
   verified_at timestamptz,
   reference text,
@@ -138,12 +148,35 @@ CREATE TABLE payments (
 
 CREATE INDEX payments_order_status_idx ON payments (tenant_id, order_id, status);
 
+CREATE TABLE refunds (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  outlet_id uuid NOT NULL,
+  order_id uuid NOT NULL,
+  amount numeric(14, 2) NOT NULL CHECK (amount > 0),
+  method text NOT NULL,
+  reason text NOT NULL CHECK (length(trim(reason)) > 0),
+  status text NOT NULL DEFAULT 'reported',
+  idempotency_key text NOT NULL CHECK (length(trim(idempotency_key)) >= 8),
+  actor_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  verified_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  verified_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  FOREIGN KEY (outlet_id, tenant_id) REFERENCES outlets(id, tenant_id) ON DELETE RESTRICT,
+  FOREIGN KEY (order_id, tenant_id, outlet_id)
+    REFERENCES orders(id, tenant_id, outlet_id) ON DELETE RESTRICT,
+  UNIQUE (tenant_id, idempotency_key)
+);
+
+CREATE INDEX refunds_order_status_idx ON refunds (tenant_id, order_id, status);
+
 CREATE TABLE payment_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   outlet_id uuid NOT NULL,
   order_id uuid NOT NULL,
-  payment_id uuid NOT NULL REFERENCES payments(id) ON DELETE RESTRICT,
+  payment_id uuid REFERENCES payments(id) ON DELETE RESTRICT,
+  refund_id uuid REFERENCES refunds(id) ON DELETE RESTRICT,
   event_type text NOT NULL,
   status text NOT NULL,
   amount numeric(14, 2) NOT NULL CHECK (amount >= 0),
@@ -167,6 +200,7 @@ CREATE TABLE accounts_receivable (
   customer_name text,
   original_amount numeric(14, 2) NOT NULL CHECK (original_amount >= 0),
   outstanding_amount numeric(14, 2) NOT NULL CHECK (outstanding_amount >= 0),
+  idempotency_key text,
   status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'partially_paid', 'paid', 'cancelled')),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -178,3 +212,7 @@ CREATE TABLE accounts_receivable (
 
 CREATE INDEX accounts_receivable_outlet_status_idx
   ON accounts_receivable (tenant_id, outlet_id, status);
+
+CREATE UNIQUE INDEX accounts_receivable_idempotency_unique
+  ON accounts_receivable (tenant_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
