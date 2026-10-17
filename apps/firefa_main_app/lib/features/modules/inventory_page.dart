@@ -243,6 +243,38 @@ class _InventoryPageState extends State<InventoryPage> {
     }
   }
 
+  Future<void> retryInventoryMovement(FirefaStockMovement movement) async {
+    if (!allowed || !FirefaBackendConfig.isConfigured ||
+        outlet.role != FirefaRole.owner ||
+        movement.outletId != outlet.selectedOutletId) return;
+    try {
+      await FirefaInventoryBackendSync.instance.retryBlockedMovement(
+        localOutletId: movement.outletId,
+        movementId: movement.id,
+      );
+      final result = await FirefaInventoryBackendSync.instance.syncOutlet(movement.outletId);
+      if (!mounted) return;
+      if (result.failed > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Sinkronisasi stok masih tertunda: ${result.errors.join('; ')}'),
+        ));
+        return;
+      }
+      final differences = await FirefaInventoryBackendSync.instance.reconcileOutlet(movement.outletId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(differences.isEmpty
+          ? 'Pergerakan stok diterima dan saldo cocok.'
+          : 'Pergerakan diterima; masih ada ${differences.length} selisih yang perlu ditinjau. Saldo lokal tidak ditimpa.'),
+      ));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Retry pergerakan stok gagal: $error'),
+      ));
+    }
+  }
+
   Future<void> setItemCost(FirefaInventoryItem item) async {
     if (!allowed || item.outletId != outlet.selectedOutletId) return;
     final controller = TextEditingController(text: item.unitCost.toStringAsFixed(0));
@@ -1042,7 +1074,19 @@ class _InventoryPageState extends State<InventoryPage> {
                   Card(child: ListTile(
                     title: Text('${movement.itemName} • ${movement.type == 'in' ? 'Tambah' : movement.type == 'out' ? 'Kurangi' : 'Koreksi'}'),
                     subtitle: Text('${movement.timestamp} • ${movement.before} → ${movement.after} • ${movement.note.isEmpty ? 'Tanpa keterangan' : movement.note}'),
-                    trailing: Text('${movement.change > 0 ? '+' : ''}${movement.change}'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('${movement.change > 0 ? '+' : ''}${movement.change}'),
+                        if (allowed && outlet.role == FirefaRole.owner &&
+                            FirefaBackendConfig.isConfigured)
+                          IconButton(
+                            tooltip: 'Coba sinkronkan pergerakan ini',
+                            icon: const Icon(Icons.cloud_upload_outlined),
+                            onPressed: () => retryInventoryMovement(movement),
+                          ),
+                      ],
+                    ),
                   )),
               ],
               ),
