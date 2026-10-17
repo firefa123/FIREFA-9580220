@@ -77,7 +77,7 @@ void main() {
         authorizedServerOutletIds: const [serverOutletId],
         expectedServerVersion: 0,
       ),
-      throwsArgumentError,
+      throwsFormatException,
     );
   });
 
