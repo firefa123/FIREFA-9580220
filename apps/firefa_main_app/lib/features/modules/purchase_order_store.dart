@@ -154,20 +154,127 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(storageKey);
+      var nextId = 1;
+      var records = <FirefaPurchaseOrder>[];
       if (raw != null && raw.isNotEmpty) {
-        final decoded = jsonDecode(raw) as Map<String, dynamic>;
-        final records = (decoded['orders'] as List<dynamic>)
-            .map((e) => FirefaPurchaseOrder.fromJson(
-                Map<String, dynamic>.from(e as Map)))
+        final decoded = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+        if (decoded['version'] != 1 ||
+            decoded['nextId'] is! int ||
+            (decoded['nextId'] as int) < 1 ||
+            decoded['orders'] is! List) {
+          throw const FormatException('Struktur purchase order tidak valid.');
+        }
+        nextId = decoded['nextId'] as int;
+        records = (decoded['orders'] as List<dynamic>)
+            .map((value) => FirefaPurchaseOrder.fromJson(
+                Map<String, dynamic>.from(value as Map)))
             .toList();
-        _orders..clear()..addAll(records);
-        _nextId = decoded['nextId'] as int;
+        _validateRecords(records, nextId);
       }
+      _orders..clear()..addAll(records);
+      _nextId = nextId;
       _initialized = true;
       notifyListeners();
-    } catch (_) {
+    } catch (error) {
+      _orders.clear();
+      _nextId = 1;
+      _initialized = false;
       _initializing = null;
-      rethrow;
+      if (error is FormatException) rethrow;
+      throw FormatException('Snapshot purchase order tidak valid: $error');
+    }
+  }
+
+  void _validateRecords(List<FirefaPurchaseOrder> records, int nextId) {
+    final orderIds = <String>{};
+    var maximumSequence = 0;
+
+    bool validTimestamp(String? value, {bool required = false}) {
+      if (value == null) return !required;
+      final match = RegExp(r'^(\\d{4})-(\\d{2})-(\\d{2})T').firstMatch(value);
+      final parsed = DateTime.tryParse(value);
+      if (match == null || parsed == null) return false;
+      final year = int.parse(match.group(1)!);
+      final month = int.parse(match.group(2)!);
+      final day = int.parse(match.group(3)!);
+      final date = DateTime.utc(year, month, day);
+      return date.year == year && date.month == month && date.day == day;
+    }
+
+    bool validDateOnly(String? value) {
+      if (value == null) return true;
+      final match = RegExp(r'^(\\d{4})-(\\d{2})-(\\d{2})$').firstMatch(value);
+      if (match == null) return false;
+      final year = int.parse(match.group(1)!);
+      final month = int.parse(match.group(2)!);
+      final day = int.parse(match.group(3)!);
+      final date = DateTime.utc(year, month, day);
+      return date.year == year && date.month == month && date.day == day;
+    }
+
+    for (final order in records) {
+      final match = RegExp(r'^po-(\\d+)$').firstMatch(order.id);
+      final sequence = int.tryParse(match?.group(1) ?? '');
+      final receiptIds = <String>{};
+      var receiptTotal = 0;
+      var receiptsValid = true;
+      for (final receipt in order.receipts) {
+        if (receipt.id.trim().isEmpty ||
+            !receiptIds.add(receipt.id) ||
+            receipt.quantity <= 0 ||
+            receipt.quantity > 999999999 ||
+            !validTimestamp(receipt.receivedAt, required: true)) {
+          receiptsValid = false;
+          break;
+        }
+        receiptTotal += receipt.quantity;
+      }
+
+      final statusValid = switch (order.status) {
+        'ordered' => order.receivedQuantity == 0 &&
+            order.receipts.isEmpty &&
+            order.receivedAt == null &&
+            order.cancelledAt == null,
+        'partial' => order.receivedQuantity > 0 &&
+            order.receivedQuantity < order.quantity &&
+            order.receivedAt != null &&
+            order.cancelledAt == null,
+        'received' => order.receivedQuantity == order.quantity &&
+            order.receivedAt != null &&
+            order.cancelledAt == null,
+        'cancelled' => order.cancelledAt != null,
+        _ => false,
+      };
+
+      if (sequence == null || sequence < 1 ||
+          !orderIds.add(order.id) ||
+          order.outletId.trim().isEmpty ||
+          order.supplierId.trim().isEmpty ||
+          order.supplierName.trim().isEmpty ||
+          order.itemId.trim().isEmpty ||
+          order.itemName.trim().isEmpty ||
+          order.unit.trim().isEmpty ||
+          order.quantity <= 0 || order.quantity > 999999999 ||
+          order.unitCost < 0 || order.unitCost > 999999999 ||
+          order.note.trim().length > 200 ||
+          order.followUpNote.trim().length > 200 ||
+          order.receivedQuantity < 0 ||
+          order.receivedQuantity > order.quantity ||
+          !validTimestamp(order.createdAt, required: true) ||
+          !validTimestamp(order.receivedAt) ||
+          !validTimestamp(order.cancelledAt) ||
+          !validTimestamp(order.followUpContactedAt) ||
+          !validDateOnly(order.followUpDate) ||
+          !receiptsValid ||
+          receiptTotal != order.receivedQuantity ||
+          !statusValid) {
+        throw const FormatException('Data purchase order tersimpan tidak valid.');
+      }
+      if (sequence > maximumSequence) maximumSequence = sequence;
+    }
+
+    if (nextId <= maximumSequence) {
+      throw const FormatException('Counter purchase order akan menggunakan ulang ID.');
     }
   }
 
