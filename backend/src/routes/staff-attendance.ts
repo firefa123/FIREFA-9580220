@@ -454,9 +454,12 @@ export const staffAttendanceRoutes: FastifyPluginAsync<StaffAttendanceOptions> =
         [params.data.attendanceId, request.user.tenantId],
       );
       const attendance = result.rows[0];
-      if (!attendance?.photo || !attendance.mime_type) return reply.code(404).send({ error: "attendance_photo_not_found" });
+      if (!attendance) return reply.code(404).send({ error: "attendance_photo_not_found" });
       const role = await outletRole(client, request.user.sub, request.user.tenantId, attendance.outlet_id);
       if (role !== "owner") return reply.code(403).send({ error: "owner_required" });
+      if (!attendance.photo || !attendance.mime_type) {
+        return reply.code(404).send({ error: "attendance_photo_not_found" });
+      }
       return reply.header("cache-control", "no-store").type(attendance.mime_type).send(attendance.photo);
     } finally { client.release(); }
   });
