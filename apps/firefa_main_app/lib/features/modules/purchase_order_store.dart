@@ -191,7 +191,7 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
 
     bool validTimestamp(String? value, {bool required = false}) {
       if (value == null) return !required;
-      final match = RegExp(r'^(\\d{4})-(\\d{2})-(\\d{2})T').firstMatch(value);
+      final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})T').firstMatch(value);
       final parsed = DateTime.tryParse(value);
       if (match == null || parsed == null) return false;
       final year = int.parse(match.group(1)!);
@@ -203,7 +203,7 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
 
     bool validDateOnly(String? value) {
       if (value == null) return true;
-      final match = RegExp(r'^(\\d{4})-(\\d{2})-(\\d{2})$').firstMatch(value);
+      final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value);
       if (match == null) return false;
       final year = int.parse(match.group(1)!);
       final month = int.parse(match.group(2)!);
@@ -213,7 +213,7 @@ class FirefaPurchaseOrderStore extends ChangeNotifier {
     }
 
     for (final order in records) {
-      final match = RegExp(r'^po-(\\d+)$').firstMatch(order.id);
+      final match = RegExp(r'^po-(\d+)$').firstMatch(order.id);
       final sequence = int.tryParse(match?.group(1) ?? '');
       final receiptIds = <String>{};
       var receiptTotal = 0;
