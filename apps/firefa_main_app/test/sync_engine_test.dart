@@ -254,6 +254,35 @@ void main() {
     await queue.waitForPendingSave();
   });
 
+  test('later order events cannot pass an unresolved earlier event', () async {
+    final order = makeOrder('ORDER-SEQUENCE-GUARD', 'order-sequence-outlet');
+    final created = queue.enqueueOrder(order, 'order.created');
+    order.advanceStatus();
+    final updated = queue.enqueueOrder(order, 'order.updated');
+    await queue.waitForPendingSave();
+
+    await queue.markSyncing(created.eventId);
+    await queue.markFailed(created.eventId);
+    expect(engine.pendingBatch(
+      queue: queue, outletId: order.outletId,
+    ), isEmpty);
+
+    expect(await queue.retryFailedForOutlet(order.outletId), 1);
+    expect(engine.pendingBatch(
+      queue: queue, outletId: order.outletId,
+    ).map((event) => event.eventId), [created.eventId]);
+
+    await queue.markSyncing(created.eventId);
+    await queue.markSynced(created.eventId);
+    expect(engine.pendingBatch(
+      queue: queue, outletId: order.outletId,
+    ).map((event) => event.eventId), [updated.eventId]);
+
+    await queue.removeEvent(created.eventId);
+    await queue.removeEvent(updated.eventId);
+    await queue.waitForPendingSave();
+  });
+
   test('batch validates limits and outlet', () {
     expect(() => engine.pendingBatch(queue: queue, outletId: ''), throwsArgumentError);
     expect(() => engine.pendingBatch(queue: queue, outletId: 'test-outlet-A', limit: 0), throwsRangeError);
