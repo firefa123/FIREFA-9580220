@@ -21,18 +21,26 @@ class FirefaSyncEngine {
       throw RangeError.range(limit, 1, 100, 'limit');
     }
     final currentTime = (now ?? DateTime.now()).toUtc();
-    final entries = queue.entriesForOutlet(outletId)
-        .where((entry) =>
-            entry.status == FirefaSyncStatus.pending &&
-            (entry.nextAttemptAt == null ||
-                !entry.nextAttemptAt!.toUtc().isAfter(currentTime)))
-        .toList()
+    final entries = queue.entriesForOutlet(outletId).toList()
       ..sort((a, b) {
         final byTime = a.createdAt.compareTo(b.createdAt);
         return byTime != 0 ? byTime : a.eventId.compareTo(b.eventId);
       });
+    // Preserve event order for each order, not just for the outlet. A pending
+    // update must not pass an earlier retry, failed event, or conflict.
+    final blockedOrderIds = <String>{};
+    final ready = <FirefaSyncEntry>[];
+    for (final entry in entries) {
+      if (entry.status == FirefaSyncStatus.synced) continue;
+      if (!blockedOrderIds.add(entry.orderId)) continue;
+      if (entry.status == FirefaSyncStatus.pending &&
+          (entry.nextAttemptAt == null ||
+              !entry.nextAttemptAt!.toUtc().isAfter(currentTime))) {
+        ready.add(entry);
+      }
+    }
     return List.unmodifiable(
-      entries.take(limit).map(FirefaSyncEnvelope.fromEntry),
+      ready.take(limit).map(FirefaSyncEnvelope.fromEntry),
     );
   }
 
