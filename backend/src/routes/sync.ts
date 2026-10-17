@@ -262,6 +262,13 @@ class InventoryStockError extends Error {
   }
 }
 
+class OrderInventoryDeltaMismatchError extends Error {
+  constructor() {
+    super("order_inventory_delta_mismatch");
+    this.name = "OrderInventoryDeltaMismatchError";
+  }
+}
+
 /**
  * Deduct only explicitly catalog-linked items. The order, stock update, ledger
  * movement and sync receipt share one PostgreSQL transaction, so failed/retried
@@ -296,6 +303,22 @@ async function deductInventoryForCompletedOrder(
     // A catalog product may intentionally be non-stock-tracked. Only linked
     // inventory_items participate in stock enforcement.
     if (!stock) continue;
+
+    // A local POS movement may arrive before or after this order reaches
+    // completed. Both paths use the same business identity, so never deduct
+    // the same order/item twice.
+    const priorSale = await client.query<{ quantity_delta: string }>(
+      "SELECT quantity_delta::text FROM inventory_movements " +
+        "WHERE tenant_id = $1 AND outlet_id = $2 AND inventory_item_id = $3 " +
+        "AND source_type = 'order' AND source_id = $4 AND movement_type = 'sale' FOR UPDATE",
+      [tenantId, outletId, stock.id, globalOrderId],
+    );
+    if (priorSale.rows[0]) {
+      if (Number(priorSale.rows[0].quantity_delta) !== -quantity) {
+        throw new OrderInventoryDeltaMismatchError();
+      }
+      continue;
+    }
 
     const updated = await client.query(
       "UPDATE inventory_items SET quantity_on_hand = quantity_on_hand - $1, updated_at = now() " +
@@ -737,6 +760,9 @@ export const syncRoutes: FastifyPluginAsync<SyncRouteOptions> = async (app, opti
       if (inTransaction) await client.query("ROLLBACK").catch(() => undefined);
       if (error instanceof InventoryStockError) {
         return reply.code(409).send({ error: "insufficient_stock" });
+      }
+      if (error instanceof OrderInventoryDeltaMismatchError) {
+        return reply.code(409).send({ error: "order_inventory_delta_mismatch" });
       }
       app.log.error({ err: error }, "Sync event rejected by server");
       return reply.code(500).send({ error: "internal_error" });
