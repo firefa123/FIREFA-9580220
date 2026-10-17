@@ -214,6 +214,14 @@ class _StaffAttendancePageState extends State<StaffAttendancePage> {
     }
   }
 
+  String _formatTimestamp(dynamic value) {
+    if (value == null) return '—';
+    if (value is! String) return value.toString();
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) return value;
+    return parsed.toLocal().toString().split('.').first;
+  }
+
   void _message(String value) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value)));
   }
@@ -298,8 +306,8 @@ class _StaffAttendancePageState extends State<StaffAttendancePage> {
               leading: const Icon(Icons.access_time),
               title: Text('${row['displayName']} • ${row['workDate']}'),
               subtitle: Text(
-                'Masuk: ${row['checkInAt'] == null ? '—' : DateTime.tryParse('${row['checkInAt']}')?.toLocal().toString() ?? row['checkInAt']}'
-                ' • Pulang: ${row['checkOutAt'] == null ? 'Belum check-out' : DateTime.tryParse('${row['checkOutAt']}')?.toLocal().toString() ?? row['checkOutAt']}'
+                'Masuk: ${_formatTimestamp(row['checkInAt'])}'
+                ' • Pulang: ${row['checkOutAt'] == null ? 'Belum check-out' : _formatTimestamp(row['checkOutAt'])}'
                 ' • Terlambat: ${row['lateMinutes'] ?? 0} menit',
               ),
               trailing: row['hasCheckInPhoto'] == true
