@@ -908,6 +908,100 @@ authSuite("authentication endpoints", () => {
     });
   });
 
+  it("runs the cashier offline-sync POS flow end to end and keeps stock reconciled after reconnect retries", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const outletId = owner.outletIds[0];
+    const ownerHeaders = { authorization: "Bearer " + owner.accessToken };
+    const cashier = await createCashierSession(ownerApp, owner);
+
+    const product = await ownerApp.inject({
+      method: "POST", url: "/api/v1/products", headers: ownerHeaders,
+      payload: { outletId, sku: "E2E-OFFLINE-001", name: "Offline Coffee", unitPrice: 10000 },
+    });
+    expect(product.statusCode).toBe(201);
+    const productId = product.json().id;
+    const inventory = await ownerApp.inject({
+      method: "POST", url: "/api/v1/inventory/items", headers: ownerHeaders,
+      payload: {
+        outletId, productId, sku: "E2E-OFFLINE-001", name: "Offline Coffee",
+        unit: "cup", initialQuantity: 8, averageUnitCost: 2500,
+      },
+    });
+    expect(inventory.statusCode).toBe(201);
+    const inventoryItemId = inventory.json().id;
+
+    // Cashier reconnects and submits the completed offline POS order.
+    const event = makeSyncEvent(outletId, "11111111-1111-4111-8111-111111111111", "e2e-offline-pos-001");
+    event.orderSnapshot.status = "completed";
+    event.orderSnapshot.paymentStatus = "paid";
+    event.orderSnapshot.paymentMethod = "cash";
+    event.orderSnapshot.cashPaidAmount = 20000;
+    event.orderSnapshot.items[0]!.productId = productId;
+    event.orderSnapshot.items[0]!.quantity = 2;
+    event.orderSnapshot.items[0]!.unitPrice = 10000;
+    event.orderSnapshot.subtotal = 20000;
+    event.orderSnapshot.total = 20000;
+
+    const synced = await postSyncEvent(ownerApp, cashier.accessToken, event);
+    expect(synced.statusCode).toBe(201);
+
+    // Simulate a lost acknowledgement: the client resends the same event.
+    const replay = await postSyncEvent(ownerApp, cashier.accessToken, event);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().eventId).toBe(event.eventId);
+
+    // A newly queued event for the already-completed order must not deduct again.
+    const reconnectUpdate = makeSyncEvent(
+      outletId, event.deviceId, "e2e-offline-pos-002", "order.updated", 1,
+    );
+    reconnectUpdate.orderId = event.orderId;
+    reconnectUpdate.orderSnapshot.id = event.orderId;
+    reconnectUpdate.orderSnapshot.status = "completed";
+    reconnectUpdate.orderSnapshot.paymentStatus = "paid";
+    reconnectUpdate.orderSnapshot.paymentMethod = "cash";
+    reconnectUpdate.orderSnapshot.cashPaidAmount = 20000;
+    reconnectUpdate.orderSnapshot.items[0]!.productId = productId;
+    reconnectUpdate.orderSnapshot.items[0]!.quantity = 2;
+    reconnectUpdate.orderSnapshot.items[0]!.unitPrice = 10000;
+    reconnectUpdate.orderSnapshot.subtotal = 20000;
+    reconnectUpdate.orderSnapshot.total = 20000;
+    const reconnected = await postSyncEvent(ownerApp, cashier.accessToken, reconnectUpdate);
+    expect(reconnected.statusCode).toBe(201);
+
+    // Cashiers can sell/sync, but inventory reconciliation remains Owner-only.
+    const cashierReconcile = await ownerApp.inject({
+      method: "GET", url: "/api/v1/inventory/reconcile?outletId=" + outletId,
+      headers: { authorization: "Bearer " + cashier.accessToken },
+    });
+    expect(cashierReconcile.statusCode).toBe(403);
+
+    const stock = await adminPool.query(
+      "SELECT quantity_on_hand::float8 AS quantity FROM inventory_items WHERE id = $1",
+      [inventoryItemId],
+    );
+    expect(stock.rows[0]!.quantity).toBe(6);
+    const movements = await adminPool.query(
+      "SELECT movement_type, quantity_delta::float8 AS delta FROM inventory_movements " +
+        "WHERE tenant_id = $1 AND outlet_id = $2 AND inventory_item_id = $3 ORDER BY created_at, id",
+      [owner.tenantId, outletId, inventoryItemId],
+    );
+    expect(movements.rows).toEqual([
+      expect.objectContaining({ movement_type: "receipt", delta: 8 }),
+      expect.objectContaining({ movement_type: "sale", delta: -2 }),
+    ]);
+
+    const reconciliation = await ownerApp.inject({
+      method: "GET", url: "/api/v1/inventory/reconcile?outletId=" + outletId,
+      headers: ownerHeaders,
+    });
+    expect(reconciliation.statusCode).toBe(200);
+    expect(reconciliation.json().items[0]).toMatchObject({
+      id: inventoryItemId, productId, quantityOnHand: 6,
+      movementTotal: 6, ledgerMatches: true, unexplainedDelta: 0,
+    });
+  });
+
   it("rejects POS completion when linked stock is insufficient without persisting the order", async () => {
     const ownerApp = createTestApp();
     const owner = (await bootstrap(ownerApp)).json();
