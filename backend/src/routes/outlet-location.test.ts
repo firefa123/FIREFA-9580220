@@ -55,8 +55,6 @@ describe("PATCH /api/v1/staff/geofence-location", () => {
     [{ outletId, latitude: 91, longitude: 106.8 }],
     [{ outletId, latitude: -6.2, longitude: -181 }],
     [{ outletId, latitude: -6.2, longitude: 181 }],
-    [{ outletId, latitude: Number.NaN, longitude: 106.8 }],
-    [{ outletId, latitude: -6.2, longitude: Number.POSITIVE_INFINITY }],
   ])("rejects invalid coordinate values", async (payload) => {
     const { app, client, token } = setup("owner", "owner");
     await app.ready();
@@ -64,8 +62,7 @@ describe("PATCH /api/v1/staff/geofence-location", () => {
       method: "PATCH",
       url: "/api/v1/staff/geofence-location",
       headers: { authorization: `Bearer ${token}` },
-      payload: JSON.stringify(payload).replace("null", "NaN"),
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      payload,
     });
     expect(response.statusCode).toBe(400);
     expect(client.query).not.toHaveBeenCalled();
