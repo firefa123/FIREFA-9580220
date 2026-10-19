@@ -54,6 +54,31 @@ describe("platform admin isolation", () => {
     expect(response.statusCode).toBe(403);
   });
 
+  it("does not permit tenant roles to create global tenants", async () => {
+    const app = await makeApp();
+    const token = app.jwt.sign({sub:"tenant-owner",tenantId:"tenant-a",role:"owner",outletIds:["outlet-a"]});
+    const response = await app.inject({
+      method:"POST",
+      url:"/api/v1/platform-admin/tenants",
+      headers:{authorization:"Bearer "+token},
+      payload:{name:"Unauthorized tenant"},
+    });
+    expect(response.statusCode).toBe(403);
+    expect(pool.connect).not.toHaveBeenCalled();
+  });
+
+  it("rejects bootstrap requests without the dedicated platform secret", async () => {
+    const app = await makeApp();
+    const response = await app.inject({
+      method:"POST",
+      url:"/api/v1/platform-admin/auth/bootstrap",
+      headers:{"x-platform-bootstrap-token":"wrong-secret"},
+      payload:{email:"admin@example.test",password:"strong-password-123",displayName:"Admin"},
+    });
+    expect(response.statusCode).toBe(401);
+    expect(pool.connect).not.toHaveBeenCalled();
+  });
+
   it("returns global overview only to an active platform administrator", async () => {
     const app = await makeApp();
     const token = app.jwt.sign({sub:"active-admin",scope:"platform_admin"} as never);
