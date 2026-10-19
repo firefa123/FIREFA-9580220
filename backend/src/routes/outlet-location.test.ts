@@ -9,10 +9,10 @@ const outletId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const userId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const jwtSecret = "test-secret-that-is-long-enough-for-firefa";
 
-async function setup(role: "owner" | "cashier" | "staff", outletRole: string | undefined = role) {
+async function setup(role: "owner" | "cashier" | "staff", outletRole: string | null = role) {
   const client = {
     query: vi.fn()
-      .mockResolvedValueOnce({ rows: outletRole ? [{ role: outletRole }] : [], rowCount: outletRole ? 1 : 0 })
+      .mockResolvedValueOnce({ rows: outletRole !== null ? [{ role: outletRole }] : [], rowCount: outletRole !== null ? 1 : 0 })
       .mockResolvedValueOnce({
         rows: [{ outletId, latitude: -6.2, longitude: 106.8, radiusMeters: 100 }],
         rowCount: 1,
@@ -83,7 +83,7 @@ describe("PATCH /api/v1/staff/geofence-location", () => {
   });
 
   it("denies an Owner who is not a member of the outlet", async () => {
-    const { app, client, token } = await setup("owner", undefined);
+    const { app, client, token } = await setup("owner", null);
     const response = await app.inject({
       method: "PATCH",
       url: "/api/v1/staff/geofence-location",
