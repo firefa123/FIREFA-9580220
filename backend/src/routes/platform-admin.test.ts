@@ -67,6 +67,26 @@ describe("platform admin isolation", () => {
     expect(pool.connect).not.toHaveBeenCalled();
   });
 
+  it("rejects invalid outlet geofence radius before touching the database", async () => {
+    const app = await makeApp();
+    const token = app.jwt.sign({sub:"active-admin",scope:"platform_admin"} as never);
+    const response = await app.inject({
+      method:"POST",
+      url:"/api/v1/platform-admin/outlets",
+      headers:{authorization:"Bearer "+token},
+      payload:{
+        tenantId:"11111111-1111-4111-8111-111111111111",
+        code:"OUTLET-1",
+        name:"Outlet Test",
+        latitude:-6.2,
+        longitude:106.8,
+        geofenceRadiusM:2001,
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(pool.connect).not.toHaveBeenCalled();
+  });
+
   it("rejects bootstrap requests without the dedicated platform secret", async () => {
     const app = await makeApp();
     const response = await app.inject({
