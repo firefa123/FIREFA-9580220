@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#008f83"><title>FIREFA • Menu Meja</title>
+<style>
+:root{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#172b4d;background:#f5f7fa;--green:#008f83;--muted:#64748b}
+*{box-sizing:border-box}body{margin:0}header{background:#fff;border-bottom:1px solid #e2e8f0;padding:18px max(20px,calc((100vw - 1080px)/2));display:flex;align-items:center;justify-content:space-between;gap:16px;position:sticky;top:0;z-index:2}
+.brand{color:var(--green);font-weight:900;letter-spacing:3px}.shell{max-width:1080px;margin:auto;padding:24px 18px 100px}.hero{background:#e5f6f3;border-radius:18px;padding:22px}.hero h1{margin:0 0 8px;font-size:clamp(24px,4vw,34px)}p{line-height:1.5}.muted{color:var(--muted)}.meta{display:flex;gap:8px;flex-wrap:wrap}.pill{border-radius:999px;background:white;padding:7px 12px;font-size:13px}
+#status{margin:16px 0;padding:13px;border-radius:10px;background:#fff7ed;color:#9a3412;font-size:14px}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:22px 0}.toolbar input{flex:1;min-width:200px;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font:inherit}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.card{background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;display:flex;flex-direction:column}.photo{height:150px;background:#e2e8f0;display:grid;place-items:center;color:#64748b;font-size:40px}.photo img{width:100%;height:100%;object-fit:cover}.body{padding:14px;display:flex;flex-direction:column;gap:8px;flex:1}.body h3{margin:0;font-size:17px}.price{font-weight:800;color:var(--green)}.body p{margin:0;font-size:13px;color:var(--muted);flex:1}button{border:0;border-radius:10px;padding:11px 14px;background:var(--green);color:white;font:inherit;font-weight:700;cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}.secondary{background:#e2e8f0;color:#172b4d}.qty{display:flex;align-items:center;gap:10px}.qty button{padding:6px 11px}.cart{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #e2e8f0;padding:12px 18px;display:flex;justify-content:center;gap:14px;align-items:center;z-index:3}.cart-inner{width:min(100%,1080px);display:flex;align-items:center;justify-content:space-between;gap:12px}.empty{background:#fff;padding:28px;border-radius:14px;color:var(--muted)}dialog{border:0;border-radius:18px;max-width:520px;width:calc(100% - 28px);padding:22px;box-shadow:0 20px 70px #0003}dialog::backdrop{background:#172b4d80}textarea,input{font:inherit}label{display:block;font-size:13px;color:var(--muted);margin:12px 0 5px}dialog input,dialog textarea{width:100%;padding:11px;border:1px solid #cbd5e1;border-radius:9px}.line{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #e2e8f0}
+</style>
+</head>
+<body>
+<header><div class="brand">FIREFA</div><strong>Menu Digital</strong></header>
+<main class="shell">
+<section class="hero"><h1>Pesan dari meja Anda</h1><p class="muted">Pilih menu, atur jumlah, lalu kirim pesanan ke tim outlet.</p><div class="meta"><span class="pill" id="outletTag">Outlet: —</span><span class="pill" id="tableTag">Meja: —</span></div></section>
+<div id="status" role="status">Memeriksa identitas meja dan koneksi layanan…</div>
+<div class="toolbar"><input id="search" placeholder="Cari menu…" aria-label="Cari menu"><button class="secondary" id="refresh">Muat ulang menu</button></div>
+<section id="menu" class="grid"><div class="empty">Menu akan tampil setelah layanan FIREFA tersambung.</div></section>
+</main>
+<div class="cart"><div class="cart-inner"><div><strong id="cartCount">0 item</strong><div class="muted" id="cartTotal">Rp 0</div></div><button id="checkout" disabled>Lihat pesanan</button></div></div>
+<dialog id="checkoutDialog"><h2>Konfirmasi pesanan</h2><div id="cartLines"></div><label for="customerName">Nama (opsional)</label><input id="customerName" maxlength="100" placeholder="Nama Anda"><label for="notes">Catatan (opsional)</label><textarea id="notes" rows="2" maxlength="500" placeholder="Contoh: tidak pedas"></textarea><p class="muted" id="checkoutHint">Pesanan dikirim ke outlet yang tertera di QR.</p><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="secondary" id="closeDialog">Kembali</button><button id="submitOrder" disabled>Kirim pesanan</button></div></dialog>
+<script>
+(function(){
+'use strict';
+const params=new URLSearchParams(location.search);
+const outletId=params.get('outletId')||'', tableId=params.get('tableId')||'', tableName=params.get('tableName')||'';
+const $=id=>document.getElementById(id);
+const state={menu:[],cart:new Map(),apiBase:(params.get('api')||'').replace(/\/$/,'')};
+$('outletTag').textContent='Outlet: '+(outletId||'tidak valid');
+$('tableTag').textContent='Meja: '+(tableName||'tidak valid');
+const valid=Boolean(outletId&&tableId&&tableName);
+function rupiah(n){return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(n)}
+function setStatus(msg){$('status').textContent=msg}
+function safeText(el,txt){el.textContent=txt==null?'':String(txt)}
+function render(){
+ const q=$('search').value.trim().toLowerCase();
+ const items=state.menu.filter(p=>p.name.toLowerCase().includes(q)||(p.description||'').toLowerCase().includes(q));
+ const root=$('menu');root.replaceChildren();
+ if(!items.length){const e=document.createElement('div');e.className='empty';e.textContent=state.menu.length?'Menu tidak ditemukan.':'Menu belum tersedia dari server.';root.append(e)}
+ for(const p of items){
+  const card=document.createElement('article');card.className='card';
+  const photo=document.createElement('div');photo.className='photo';
+  if(p.imageUrl){const img=document.createElement('img');img.src=p.imageUrl;img.alt=p.name;img.loading='lazy';img.onerror=()=>{photo.replaceChildren(document.createTextNode('🍽'))};photo.append(img)}else photo.textContent='🍽';
+  const body=document.createElement('div');body.className='body';
+  const title=document.createElement('h3');safeText(title,p.name);
+  const desc=document.createElement('p');safeText(desc,p.description||'Menu pilihan outlet');
+  const price=document.createElement('div');price.className='price';price.textContent=rupiah(p.unitPrice);
+  const action=document.createElement('button');action.textContent=state.cart.has(p.id)?'Tambah lagi':'Tambah ke pesanan';action.onclick=()=>{const cur=state.cart.get(p.id)||{product:p,quantity:0};cur.quantity++;state.cart.set(p.id,cur);renderCart();render()};
+  body.append(title,desc,price,action);card.append(photo,body);root.append(card);
+ }
+}
+function renderCart(){
+ let count=0,total=0;for(const x of state.cart.values()){count+=x.quantity;total+=x.quantity*x.product.unitPrice}
+ $('cartCount').textContent=count+' item';$('cartTotal').textContent=rupiah(total);$('checkout').disabled=count===0||!valid||!state.apiBase;
+ $('submitOrder').disabled=count===0||!valid||!state.apiBase||!state.menu.length;
+}
+async function loadMenu(){
+ if(!valid){setStatus('QR tidak valid: outlet atau meja tidak lengkap. Pindai ulang QR dari meja.');return}
+ if(!state.apiBase){setStatus('Identitas QR valid. Layanan API belum dikonfigurasi, jadi menu dan pengiriman pesanan belum aktif.');renderCart();return}
+ setStatus('Mengambil menu outlet…');
+ try{
+  const r=await fetch(state.apiBase+'/api/v1/public/menu?outletId='+encodeURIComponent(outletId),{headers:{Accept:'application/json'}});
+  if(!r.ok)throw new Error(r.status===404?'Layanan menu belum tersedia.':'Gagal memuat menu ('+r.status+').');
+  const data=await r.json();state.menu=Array.isArray(data.products)?data.products.filter(p=>p.isActive!==false&&p.id&&p.name&&Number.isFinite(Number(p.unitPrice))).map(p=>({...p,unitPrice:Number(p.unitPrice)})):[];
+  setStatus(state.menu.length?'Menu berhasil dimuat. Periksa meja sebelum mengirim pesanan.':'Belum ada menu aktif untuk outlet ini.');render();renderCart();
+ }catch(e){setStatus((e&&e.message)||'Tidak dapat terhubung ke layanan FIREFA.');renderCart()}
+}
+$('checkout').onclick=()=>{
+ const root=$('cartLines');root.replaceChildren();let total=0;
+ for(const x of state.cart.values()){const line=document.createElement('div');line.className='line';const name=document.createElement('span');name.textContent=x.quantity+' × '+x.product.name;const price=document.createElement('strong');price.textContent=rupiah(x.quantity*x.product.unitPrice);line.append(name,price);root.append(line);total+=x.quantity*x.product.unitPrice}
+ const line=document.createElement('div');line.className='line';line.innerHTML='<strong>Total</strong><strong>'+rupiah(total)+'</strong>';root.append(line);$('checkoutDialog').showModal();
+};
+$('closeDialog').onclick=()=>$('checkoutDialog').close();
+$('submitOrder').onclick=async()=>{
+ if(!valid||!state.apiBase||!state.cart.size)return;
+ $('submitOrder').disabled=true;setStatus('Mengirim pesanan…');
+ try{
+  const payload={outletId,tableId,tableName,customerName:$('customerName').value.trim(),notes:$('notes').value.trim(),items:[...state.cart.values()].map(x=>({productId:x.product.id,quantity:x.quantity}))};
+  const r=await fetch(state.apiBase+'/api/v1/public/orders',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json','Idempotency-Key':crypto.randomUUID()},body:JSON.stringify(payload)});
+  const data=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(data.message||data.error||'Pesanan gagal dikirim ('+r.status+').');
+  state.cart.clear();renderCart();$('checkoutDialog').close();setStatus('Pesanan terkirim. Nomor pesanan: '+(data.orderId||data.id||'diterima')+'. Tunjukkan nomor ini kepada kasir.'); 
+ }catch(e){setStatus((e&&e.message)||'Pengiriman gagal. Periksa koneksi lalu coba lagi.');renderCart()}
+};
+$('search').addEventListener('input',render);$('refresh').onclick=loadMenu;
+if(!valid)setStatus('QR tidak valid: outlet atau meja tidak lengkap.');else loadMenu();
+})();
+</script>
+</body></html>
