@@ -76,23 +76,31 @@ export const platformAdminRoutes: FastifyPluginAsync<Options> = async (app, opti
     );
     return {overview:result.rows[0]};
   });
-  app.get("/tenants", { preHandler: guard }, async (request) => {
-    const q = z.object({limit:z.coerce.number().int().min(1).max(100).default(50),offset:z.coerce.number().int().min(0).max(100000).default(0)}).parse(request.query);
+  app.get("/tenants", { preHandler: guard }, async (request, reply) => {
+    const parsed = z.object({limit:z.coerce.number().int().min(1).max(100).default(50),offset:z.coerce.number().int().min(0).max(100000).default(0)}).safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({error:"invalid_request"});
+    const q = parsed.data;
     const rows = await options.pool.query("SELECT t.id::text AS id,t.name,t.status,t.created_at,(SELECT count(*)::int FROM outlets o WHERE o.tenant_id=t.id) AS outlet_count FROM tenants t ORDER BY t.created_at DESC LIMIT $1 OFFSET $2",[q.limit,q.offset]);
     return {tenants:rows.rows,limit:q.limit,offset:q.offset};
   });
-  app.get("/outlets", { preHandler: guard }, async (request) => {
-    const q = z.object({tenantId:z.string().uuid().optional(),limit:z.coerce.number().int().min(1).max(100).default(50),offset:z.coerce.number().int().min(0).max(100000).default(0)}).parse(request.query);
+  app.get("/outlets", { preHandler: guard }, async (request, reply) => {
+    const parsed = z.object({tenantId:z.string().uuid().optional(),limit:z.coerce.number().int().min(1).max(100).default(50),offset:z.coerce.number().int().min(0).max(100000).default(0)}).safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({error:"invalid_request"});
+    const q = parsed.data;
     const rows = await options.pool.query("SELECT o.id::text AS id,o.tenant_id::text AS tenant_id,t.name AS tenant_name,o.code,o.name,o.status,o.latitude::float8 AS latitude,o.longitude::float8 AS longitude,o.geofence_radius_m,o.created_at FROM outlets o JOIN tenants t ON t.id=o.tenant_id WHERE ($1::uuid IS NULL OR o.tenant_id=$1) ORDER BY o.created_at DESC LIMIT $2 OFFSET $3",[q.tenantId ?? null,q.limit,q.offset]);
     return {outlets:rows.rows,limit:q.limit,offset:q.offset};
   });
-  app.get("/audit-logs", { preHandler: guard }, async (request) => {
-    const q = z.object({tenantId:z.string().uuid().optional(),limit:z.coerce.number().int().min(1).max(100).default(50),offset:z.coerce.number().int().min(0).max(100000).default(0)}).parse(request.query);
+  app.get("/audit-logs", { preHandler: guard }, async (request, reply) => {
+    const parsed = z.object({tenantId:z.string().uuid().optional(),limit:z.coerce.number().int().min(1).max(100).default(50),offset:z.coerce.number().int().min(0).max(100000).default(0)}).safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({error:"invalid_request"});
+    const q = parsed.data;
     const rows = await options.pool.query("SELECT id::text AS id,tenant_id::text AS tenant_id,outlet_id::text AS outlet_id,actor_user_id::text AS actor_user_id,action,resource_type,resource_id,changes,created_at FROM audit_logs WHERE ($1::uuid IS NULL OR tenant_id=$1) ORDER BY created_at DESC LIMIT $2 OFFSET $3",[q.tenantId ?? null,q.limit,q.offset]);
     return {auditLogs:rows.rows,limit:q.limit,offset:q.offset};
   });
-  app.get("/sync-status", { preHandler: guard }, async (request) => {
-    const q = z.object({tenantId:z.string().uuid().optional(),limit:z.coerce.number().int().min(1).max(100).default(50)}).parse(request.query);
+  app.get("/sync-status", { preHandler: guard }, async (request, reply) => {
+    const parsed = z.object({tenantId:z.string().uuid().optional(),limit:z.coerce.number().int().min(1).max(100).default(50)}).safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({error:"invalid_request"});
+    const q = parsed.data;
     const [receipts,devices] = await Promise.all([
       options.pool.query("SELECT tenant_id::text AS tenant_id,count(*)::int AS events,count(*) FILTER (WHERE created_at >= now()-interval '1 hour')::int AS events_last_hour,max(created_at) AS last_event_at FROM sync_receipts WHERE ($1::uuid IS NULL OR tenant_id=$1) GROUP BY tenant_id ORDER BY max(created_at) DESC LIMIT $2",[q.tenantId ?? null,q.limit]),
       options.pool.query("SELECT tenant_id::text AS tenant_id,count(*)::int AS registered_devices FROM sync_devices WHERE ($1::uuid IS NULL OR tenant_id=$1) GROUP BY tenant_id LIMIT $2",[q.tenantId ?? null,q.limit])
