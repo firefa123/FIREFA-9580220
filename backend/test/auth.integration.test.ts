@@ -1536,6 +1536,14 @@ authSuite("authentication endpoints", () => {
     expect(invalidPhoto.statusCode).toBe(400);
 
     const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString("base64");
+    const outsideGeofence = await ownerApp.inject({
+      method: "POST", url: "/api/v1/attendance/check-in",
+      headers: { authorization: "Bearer " + staffToken },
+      payload: { ...checkInPayload, latitude: -6.4, checkInPhotoBase64: jpeg },
+    });
+    expect(outsideGeofence.statusCode).toBe(403);
+    expect(outsideGeofence.json().error).toBe("outside_geofence");
+
     const checkIn = await ownerApp.inject({
       method: "POST", url: "/api/v1/attendance/check-in",
       headers: { authorization: "Bearer " + staffToken },
@@ -1544,6 +1552,35 @@ authSuite("authentication endpoints", () => {
     expect(checkIn.statusCode).toBe(201);
     expect(checkIn.json().attendance.checkInPhotoCaptured).toBe(true);
     const attendanceId = checkIn.json().attendance.id as string;
+
+    const duplicateCheckIn = await ownerApp.inject({
+      method: "POST", url: "/api/v1/attendance/check-in",
+      headers: { authorization: "Bearer " + staffToken },
+      payload: { ...checkInPayload, checkInPhotoBase64: jpeg },
+    });
+    expect(duplicateCheckIn.statusCode).toBe(409);
+    expect(duplicateCheckIn.json().error).toBe("already_checked_in_today");
+
+    const checkOut = await ownerApp.inject({
+      method: "POST", url: "/api/v1/attendance/check-out",
+      headers: { authorization: "Bearer " + staffToken },
+      payload: checkInPayload,
+    });
+    expect(checkOut.statusCode).toBe(200);
+    expect(checkOut.json().attendance.id).toBe(attendanceId);
+
+    const duplicateCheckOut = await ownerApp.inject({
+      method: "POST", url: "/api/v1/attendance/check-out",
+      headers: { authorization: "Bearer " + staffToken },
+      payload: checkInPayload,
+    });
+    expect(duplicateCheckOut.statusCode).toBe(409);
+    expect(duplicateCheckOut.json().error).toBe("no_open_attendance");
+
+    const storedCheckout = await adminPool.query(
+      "SELECT check_out_at FROM staff_attendance WHERE id = $1", [attendanceId],
+    );
+    expect(storedCheckout.rows[0]!.check_out_at).not.toBeNull();
 
     const stored = await adminPool.query(
       "SELECT octet_length(check_in_photo)::int AS photo_size, check_in_photo_mime_type AS mime_type " +
