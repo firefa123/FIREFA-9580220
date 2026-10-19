@@ -21,11 +21,18 @@ class FirefaSyncEngine {
       throw RangeError.range(limit, 1, 100, 'limit');
     }
     final currentTime = (now ?? DateTime.now()).toUtc();
-    final entries = queue.entriesForOutlet(outletId).toList()
+    // Keep insertion order as the final tie-breaker. Events created in the
+    // same clock tick can share createdAt; random event IDs are not a safe
+    // ordering key for create/update events belonging to the same order.
+    final indexedEntries = queue.entriesForOutlet(outletId)
+        .asMap()
+        .entries
+        .toList()
       ..sort((a, b) {
-        final byTime = a.createdAt.compareTo(b.createdAt);
-        return byTime != 0 ? byTime : a.eventId.compareTo(b.eventId);
+        final byTime = a.value.createdAt.compareTo(b.value.createdAt);
+        return byTime != 0 ? byTime : a.key.compareTo(b.key);
       });
+    final entries = indexedEntries.map((entry) => entry.value).toList();
     // Preserve event order for each order, not just for the outlet. A pending
     // update must not pass an earlier retry, failed event, or conflict.
     final blockedOrderIds = <String>{};
