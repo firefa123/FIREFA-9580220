@@ -60,7 +60,7 @@ export function buildApp(dependencies: AppDependencies = {}): FastifyInstance {
     );
     reply.header(
       "Access-Control-Allow-Headers",
-      "Content-Type, Authorization, X-Bootstrap-Token, Idempotency-Key, If-Match",
+      "Content-Type, Authorization, X-Bootstrap-Token, X-Platform-Bootstrap-Token, Idempotency-Key, If-Match",
     );
 
     if (request.method === "OPTIONS") {
@@ -108,6 +108,11 @@ export function buildApp(dependencies: AppDependencies = {}): FastifyInstance {
   app.register(publicOrderRoutes, {
     prefix: "/api/v1/public",
     pool,
+  });
+  app.register(platformAdminRoutes, {
+    prefix: "/api/v1/platform-admin",
+    pool,
+    bootstrapToken: platformAdminBootstrapToken!,
   });
 
   app.get("/health/live", async () => ({
