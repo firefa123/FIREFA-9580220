@@ -35,7 +35,7 @@ authSuite("authentication endpoints", () => {
 
   beforeEach(async () => {
     await adminPool.query(
-      "TRUNCATE TABLE order_events, sync_receipts, orders, refresh_tokens, " +
+      "TRUNCATE TABLE staff_attendance, staff_members, order_events, sync_receipts, orders, refresh_tokens, " +
         "outlet_memberships, tenant_memberships, users, outlets, tenants RESTART IDENTITY CASCADE",
     );
   });
@@ -1405,6 +1405,103 @@ authSuite("authentication endpoints", () => {
   });
 
 
+
+  it("allows only the Owner to update outlet coordinates and preserves the radius", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const outletId = owner.outletIds[0];
+    const headers = { authorization: "Bearer " + owner.accessToken };
+
+    const before = await ownerApp.inject({
+      method: "GET", url: "/api/v1/staff/geofence-radius?outletId=" + outletId, headers,
+    });
+    expect(before.statusCode).toBe(200);
+    expect(before.json().geofence.radiusMeters).toBe(150);
+
+    const updated = await ownerApp.inject({
+      method: "PATCH", url: "/api/v1/staff/geofence-location", headers,
+      payload: { outletId, latitude: -6.21, longitude: 106.81 },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().geofence).toMatchObject({
+      outletId, latitude: -6.21, longitude: 106.81, radiusMeters: 150,
+    });
+
+    for (const payload of [
+      { outletId, latitude: -90.01, longitude: 106.81 },
+      { outletId, latitude: 90.01, longitude: 106.81 },
+      { outletId, latitude: -6.21, longitude: -180.01 },
+      { outletId, latitude: -6.21, longitude: 180.01 },
+    ]) {
+      const invalid = await ownerApp.inject({
+        method: "PATCH", url: "/api/v1/staff/geofence-location", headers, payload,
+      });
+      expect(invalid.statusCode).toBe(400);
+    }
+
+    const cashier = await createCashierSession(ownerApp, owner);
+    const cashierUpdate = await ownerApp.inject({
+      method: "PATCH", url: "/api/v1/staff/geofence-location",
+      headers: { authorization: "Bearer " + cashier.accessToken },
+      payload: { outletId, latitude: -6.22, longitude: 106.82 },
+    });
+    expect(cashierUpdate.statusCode).toBe(403);
+
+    const staffCreated = await ownerApp.inject({
+      method: "POST", url: "/api/v1/staff", headers,
+      payload: { outletId, staffCode: "LOC-STAFF", displayName: "Location Staff", pin: "123456" },
+    });
+    expect(staffCreated.statusCode).toBe(201);
+    const staffLogin = await ownerApp.inject({
+      method: "POST", url: "/api/v1/staff/login",
+      payload: { outletId, staffCode: "LOC-STAFF", pin: "123456" },
+    });
+    expect(staffLogin.statusCode).toBe(200);
+    const staffUpdate = await ownerApp.inject({
+      method: "PATCH", url: "/api/v1/staff/geofence-location",
+      headers: { authorization: "Bearer " + staffLogin.json().accessToken },
+      payload: { outletId, latitude: -6.23, longitude: 106.83 },
+    });
+    expect(staffUpdate.statusCode).toBe(403);
+
+    const after = await ownerApp.inject({
+      method: "GET", url: "/api/v1/staff/geofence-radius?outletId=" + outletId, headers,
+    });
+    expect(after.statusCode).toBe(200);
+    expect(after.json().geofence).toMatchObject({
+      latitude: -6.21, longitude: 106.81, radiusMeters: 150,
+    });
+  });
+
+  it("enforces inclusive geofence radius bounds of 25 through 2000 meters", async () => {
+    const ownerApp = createTestApp();
+    const owner = (await bootstrap(ownerApp)).json();
+    const outletId = owner.outletIds[0];
+    const headers = { authorization: "Bearer " + owner.accessToken };
+
+    for (const radiusMeters of [24, 2001]) {
+      const invalid = await ownerApp.inject({
+        method: "PATCH", url: "/api/v1/staff/geofence-radius",
+        headers, payload: { outletId, radiusMeters },
+      });
+      expect(invalid.statusCode).toBe(400);
+    }
+
+    for (const radiusMeters of [25, 2000]) {
+      const valid = await ownerApp.inject({
+        method: "PATCH", url: "/api/v1/staff/geofence-radius",
+        headers, payload: { outletId, radiusMeters },
+      });
+      expect(valid.statusCode).toBe(200);
+      expect(valid.json().geofence.radiusMeters).toBe(radiusMeters);
+    }
+
+    const stored = await adminPool.query(
+      "SELECT geofence_radius_m FROM outlets WHERE id = $1", [outletId],
+    );
+    expect(stored.rows[0]!.geofence_radius_m).toBe(2000);
+  });
+
   it("requires and stores a camera photo for staff check-in and limits photo access to the Owner", async () => {
     const ownerApp = createTestApp();
     const owner = (await bootstrap(ownerApp)).json();
@@ -1439,6 +1536,14 @@ authSuite("authentication endpoints", () => {
     expect(invalidPhoto.statusCode).toBe(400);
 
     const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString("base64");
+    const outsideGeofence = await ownerApp.inject({
+      method: "POST", url: "/api/v1/attendance/check-in",
+      headers: { authorization: "Bearer " + staffToken },
+      payload: { ...checkInPayload, latitude: -6.4, checkInPhotoBase64: jpeg },
+    });
+    expect(outsideGeofence.statusCode).toBe(403);
+    expect(outsideGeofence.json().error).toBe("outside_geofence");
+
     const checkIn = await ownerApp.inject({
       method: "POST", url: "/api/v1/attendance/check-in",
       headers: { authorization: "Bearer " + staffToken },
@@ -1447,6 +1552,35 @@ authSuite("authentication endpoints", () => {
     expect(checkIn.statusCode).toBe(201);
     expect(checkIn.json().attendance.checkInPhotoCaptured).toBe(true);
     const attendanceId = checkIn.json().attendance.id as string;
+
+    const duplicateCheckIn = await ownerApp.inject({
+      method: "POST", url: "/api/v1/attendance/check-in",
+      headers: { authorization: "Bearer " + staffToken },
+      payload: { ...checkInPayload, checkInPhotoBase64: jpeg },
+    });
+    expect(duplicateCheckIn.statusCode).toBe(409);
+    expect(duplicateCheckIn.json().error).toBe("already_checked_in_today");
+
+    const checkOut = await ownerApp.inject({
+      method: "POST", url: "/api/v1/attendance/check-out",
+      headers: { authorization: "Bearer " + staffToken },
+      payload: checkInPayload,
+    });
+    expect(checkOut.statusCode).toBe(200);
+    expect(checkOut.json().attendance.id).toBe(attendanceId);
+
+    const duplicateCheckOut = await ownerApp.inject({
+      method: "POST", url: "/api/v1/attendance/check-out",
+      headers: { authorization: "Bearer " + staffToken },
+      payload: checkInPayload,
+    });
+    expect(duplicateCheckOut.statusCode).toBe(409);
+    expect(duplicateCheckOut.json().error).toBe("no_open_attendance");
+
+    const storedCheckout = await adminPool.query(
+      "SELECT check_out_at FROM staff_attendance WHERE id = $1", [attendanceId],
+    );
+    expect(storedCheckout.rows[0]!.check_out_at).not.toBeNull();
 
     const stored = await adminPool.query(
       "SELECT octet_length(check_in_photo)::int AS photo_size, check_in_photo_mime_type AS mime_type " +

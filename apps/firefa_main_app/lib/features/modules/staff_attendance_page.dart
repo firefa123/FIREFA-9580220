@@ -21,6 +21,8 @@ class _StaffAttendancePageState extends State<StaffAttendancePage> {
   final _pin = TextEditingController();
   final _startTime = TextEditingController();
   final _radius = TextEditingController(text: '100');
+  final _latitude = TextEditingController();
+  final _longitude = TextEditingController();
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -41,6 +43,8 @@ class _StaffAttendancePageState extends State<StaffAttendancePage> {
     _pin.dispose();
     _startTime.dispose();
     _radius.dispose();
+    _latitude.dispose();
+    _longitude.dispose();
     super.dispose();
   }
 
@@ -94,6 +98,10 @@ class _StaffAttendancePageState extends State<StaffAttendancePage> {
         _performance = (performanceResponse['performance'] as List<dynamic>).map((row) => Map<String, dynamic>.from(row as Map)).toList();
         _attendance = (attendanceResponse['attendance'] as List<dynamic>).map((row) => Map<String, dynamic>.from(row as Map)).toList();
         _radius.text = '${radiusResponse['geofence']['radiusMeters']}';
+        final latitude = radiusResponse['geofence']['latitude'];
+        final longitude = radiusResponse['geofence']['longitude'];
+        _latitude.text = latitude == null ? '' : '$latitude';
+        _longitude.text = longitude == null ? '' : '$longitude';
       });
     } catch (error) {
       if (mounted) setState(() => _error = error.toString().replaceFirst('FormatException: ', ''));
@@ -276,6 +284,41 @@ class _StaffAttendancePageState extends State<StaffAttendancePage> {
     }
   }
 
+  Future<void> _saveLocation() async {
+    final latitude = double.tryParse(_latitude.text.trim());
+    final longitude = double.tryParse(_longitude.text.trim());
+    if (latitude == null || !latitude.isFinite || latitude < -90 || latitude > 90) {
+      setState(() => _error = 'Latitude harus berupa angka antara -90 dan 90.');
+      return;
+    }
+    if (longitude == null || !longitude.isFinite || longitude < -180 || longitude > 180) {
+      setState(() => _error = 'Longitude harus berupa angka antara -180 dan 180.');
+      return;
+    }
+    if (_saving) return;
+    setState(() { _saving = true; _error = null; });
+    try {
+      final result = await _request('PATCH', '/staff/geofence-location', body: {
+        'latitude': latitude,
+        'longitude': longitude,
+      });
+      final geofence = Map<String, dynamic>.from(result['geofence'] as Map);
+      if (mounted) {
+        setState(() {
+          _latitude.text = '${geofence['latitude']}';
+          _longitude.text = '${geofence['longitude']}';
+          _radius.text = '${geofence['radiusMeters']}';
+        });
+        _message('Lokasi outlet disimpan. Radius geofence tetap ${geofence['radiusMeters']} meter.');
+      }
+      await _load();
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString().replaceFirst('FormatException: ', ''));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Future<void> _saveRadius() async {
     final radius = int.tryParse(_radius.text.trim());
     if (radius == null || radius < 25 || radius > 2000) {
@@ -315,6 +358,35 @@ class _StaffAttendancePageState extends State<StaffAttendancePage> {
     return ListView(
       padding: const EdgeInsets.all(4),
       children: [
+        Card(child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Lokasi outlet untuk geofence', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 6),
+            const Text('Hanya Owner dapat menyimpan koordinat pusat geofence. Gunakan koordinat lokasi outlet yang benar; jangan menebak. Mengubah lokasi tidak mengubah radius.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _latitude,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+              decoration: const InputDecoration(labelText: 'Latitude', hintText: '-6.200000', helperText: 'Rentang -90 sampai 90'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _longitude,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+              decoration: const InputDecoration(labelText: 'Longitude', hintText: '106.800000', helperText: 'Rentang -180 sampai 180'),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                onPressed: _saving ? null : _saveLocation,
+                icon: const Icon(Icons.location_on_outlined),
+                label: Text(_saving ? 'Menyimpan…' : 'Simpan lokasi'),
+              ),
+            ),
+          ]),
+        )),
         Card(child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
