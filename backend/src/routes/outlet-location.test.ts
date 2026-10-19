@@ -9,7 +9,7 @@ const outletId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const userId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const jwtSecret = "test-secret-that-is-long-enough-for-firefa";
 
-function setup(role: string, outletRole: string | undefined = role) {
+async function setup(role: string, outletRole: string | undefined = role) {
   const client = {
     query: vi.fn()
       .mockResolvedValueOnce({ rows: outletRole ? [{ role: outletRole }] : [], rowCount: outletRole ? 1 : 0 })
@@ -24,6 +24,7 @@ function setup(role: string, outletRole: string | undefined = role) {
   app.register(jwt, { secret: jwtSecret });
   app.register(outletLocationRoutes, { prefix: "/api/v1", pool });
 
+  await app.ready();
   const token = app.jwt.sign({ sub: userId, tenantId, role, outletIds: [outletId] });
   return { app, client, token };
 }
@@ -32,8 +33,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("PATCH /api/v1/staff/geofence-location", () => {
   it("allows Owner to set valid coordinates and preserves the configured radius", async () => {
-    const { app, client, token } = setup("owner", "owner");
-    await app.ready();
+    const { app, client, token } = await setup("owner", "owner");
     const response = await app.inject({
       method: "PATCH",
       url: "/api/v1/staff/geofence-location",
@@ -51,12 +51,12 @@ describe("PATCH /api/v1/staff/geofence-location", () => {
   });
 
   it.each([
-    [{ outletId, latitude: -91, longitude: 106.8 }],
-    [{ outletId, latitude: 91, longitude: 106.8 }],
-    [{ outletId, latitude: -6.2, longitude: -181 }],
-    [{ outletId, latitude: -6.2, longitude: 181 }],
+    { outletId, latitude: -91, longitude: 106.8 },
+    { outletId, latitude: 91, longitude: 106.8 },
+    { outletId, latitude: -6.2, longitude: -181 },
+    { outletId, latitude: -6.2, longitude: 181 },
   ])("rejects invalid coordinate values", async (payload) => {
-    const { app, client, token } = setup("owner", "owner");
+    const { app, client, token } = await setup("owner", "owner");
     await app.ready();
     const response = await app.inject({
       method: "PATCH",
@@ -70,7 +70,7 @@ describe("PATCH /api/v1/staff/geofence-location", () => {
   });
 
   it.each(["cashier", "staff"])("denies %s even with valid coordinates", async (role) => {
-    const { app, client, token } = setup(role, role);
+    const { app, client, token } = await setup(role, role);
     await app.ready();
     const response = await app.inject({
       method: "PATCH",
@@ -85,7 +85,7 @@ describe("PATCH /api/v1/staff/geofence-location", () => {
   });
 
   it("denies an Owner who is not a member of the outlet", async () => {
-    const { app, client, token } = setup("owner", undefined);
+    const { app, client, token } = await setup("owner", undefined);
     await app.ready();
     const response = await app.inject({
       method: "PATCH",
@@ -100,7 +100,7 @@ describe("PATCH /api/v1/staff/geofence-location", () => {
   });
 
   it("requires authentication", async () => {
-    const { app, client } = setup("owner", "owner");
+    const { app, client } = await setup("owner", "owner");
     await app.ready();
     const response = await app.inject({
       method: "PATCH",
