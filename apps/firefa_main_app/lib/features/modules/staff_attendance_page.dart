@@ -305,11 +305,11 @@ class _StaffAttendancePageState extends State<StaffAttendancePage> {
       final geofence = Map<String, dynamic>.from(result['geofence'] as Map);
       if (mounted) {
         setState(() {
-          _latitude.text = '\${geofence['latitude']}';
-          _longitude.text = '\${geofence['longitude']}';
-          _radius.text = '\${geofence['radiusMeters']}';
+          _latitude.text = '${geofence['latitude']}';
+          _longitude.text = '${geofence['longitude']}';
+          _radius.text = '${geofence['radiusMeters']}';
         });
-        _message('Lokasi outlet disimpan. Radius geofence tetap \${geofence['radiusMeters']} meter.');
+        _message('Lokasi outlet disimpan. Radius geofence tetap ${geofence['radiusMeters']} meter.');
       }
       await _load();
     } catch (error) {
