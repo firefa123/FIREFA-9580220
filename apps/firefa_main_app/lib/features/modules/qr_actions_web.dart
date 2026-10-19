@@ -16,7 +16,7 @@ class FirefaQrActions {
   static Future<void> print(String url, String tableName, String outletName) async {
     // Open the QR image in a dedicated tab. The browser's native print action
     // can print the image without relying on deprecated WindowBase.document APIs.
-    final opened = html.window.open(url, '_blank', 'noopener');
+    html.window.open(url, '_blank', 'noopener');
     // Browsers may block the new tab; the user can allow pop-ups if needed.
     // `window.open` is typed as non-null in dart:html.
   }
