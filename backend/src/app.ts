@@ -60,6 +60,8 @@ export function buildApp(dependencies: AppDependencies = {}): FastifyInstance {
     }
   });
 
+  app.options("/*", async (_request, reply) => reply.code(204).send());
+
   const checkDatabase =
     dependencies.checkDatabase ??
     (async () => {
