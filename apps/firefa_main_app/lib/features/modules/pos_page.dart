@@ -1,4 +1,5 @@
 // ignore_for_file: prefer_interpolation_to_compose_strings
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -244,6 +245,7 @@ class _PosPageState extends State<PosPage> {
   _Product _fromMenu(FirefaMenuItem item) => _Product(
     item.id, item.name, item.category, item.price,
     Icons.restaurant_menu, const Color(0xFFE0F2F1),
+    imageData: item.imageData,
   );
 
   _Product? _resolveSavedProduct(String id, FirefaCartItemData saved) {
@@ -1496,11 +1498,23 @@ class _PosPageState extends State<PosPage> {
                                       top: Radius.circular(15),
                                     ),
                                   ),
-                                  child: Icon(
-                                    product.icon,
-                                    size: 54,
-                                    color: ink,
-                                  ),
+                                  child: product.imageData != null && product.imageData!.isNotEmpty
+                                      ? Image.memory(
+                                          base64Decode(product.imageData!),
+                                          fit: BoxFit.cover,
+                                          width: double.infinity,
+                                          height: double.infinity,
+                                          errorBuilder: (_, __, ___) => Icon(
+                                            product.icon,
+                                            size: 54,
+                                            color: ink,
+                                          ),
+                                        )
+                                      : Icon(
+                                          product.icon,
+                                          size: 54,
+                                          color: ink,
+                                        ),
                                 ),
                                 if (count > 0)
                                   Positioned(
@@ -1928,6 +1942,7 @@ class _Product {
   final int price;
   final IconData icon;
   final Color color;
+  final String? imageData;
 
   const _Product(
     this.id,
@@ -1935,8 +1950,9 @@ class _Product {
     this.category,
     this.price,
     this.icon,
-    this.color,
-  );
+    this.color, {
+    this.imageData,
+  });
 }
 
 class _CartItem {
