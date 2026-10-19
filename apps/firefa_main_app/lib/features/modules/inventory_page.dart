@@ -30,6 +30,7 @@ class _InventoryPageState extends State<InventoryPage> {
   String itemQuery = '';
   String itemStatus = 'all';
   String itemUnit = 'all';
+  String itemKind = 'all';
   String movementQuery = '';
   String movementType = 'all';
   DateTime? movementDate;
@@ -457,7 +458,8 @@ class _InventoryPageState extends State<InventoryPage> {
     final stockController = TextEditingController(text: '0');
     final minimumController = TextEditingController(text: '0');
     var unit = FirefaInventoryStore.units.first;
-    final input = await showDialog<({String name, String unit, int stock, int minimum})>(
+    var isPreparedIngredient = false;
+    final input = await showDialog<({String name, String unit, int stock, int minimum, bool isPreparedIngredient})>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, update) => AlertDialog(
@@ -486,6 +488,19 @@ class _InventoryPageState extends State<InventoryPage> {
                         DropdownMenuItem(value: value, child: Text(value))).toList(),
                     onChanged: (value) {
                       if (value != null) update(() => unit = value);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<bool>(
+                    initialValue: isPreparedIngredient,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Jenis barang'),
+                    items: const [
+                      DropdownMenuItem(value: false, child: Text('Bahan Baku')),
+                      DropdownMenuItem(value: true, child: Text('Bahan Olahan')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) update(() => isPreparedIngredient = value);
                     },
                   ),
                   const SizedBox(height: 10),
@@ -530,6 +545,7 @@ class _InventoryPageState extends State<InventoryPage> {
                 unit: unit,
                 stock: int.tryParse(stockController.text) ?? -1,
                 minimum: int.tryParse(minimumController.text) ?? -1,
+                isPreparedIngredient: isPreparedIngredient,
               )),
               child: const Text('Simpan'),
             ),
@@ -548,6 +564,7 @@ class _InventoryPageState extends State<InventoryPage> {
       unit: input.unit,
       stock: input.stock,
       minimumStock: input.minimum,
+      isPreparedIngredient: input.isPreparedIngredient,
     )) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Periksa nama barang (unik per outlet), satuan, stok awal, dan batas minimum.'),
@@ -813,6 +830,8 @@ class _InventoryPageState extends State<InventoryPage> {
           if (itemStatus == 'empty' && !item.isOutOfStock) return false;
           if (itemStatus == 'low' && !item.isLowStock) return false;
           if (itemStatus == 'safe' && (item.isLowStock || item.isOutOfStock)) return false;
+          if (itemKind == 'raw' && item.isPreparedIngredient) return false;
+          if (itemKind == 'prepared' && !item.isPreparedIngredient) return false;
           return true;
         }).toList();
         return LayoutBuilder(
@@ -915,6 +934,17 @@ class _InventoryPageState extends State<InventoryPage> {
                     },
                   ),
                   DropdownButton<String>(
+                    value: itemKind,
+                    items: const [
+                      DropdownMenuItem(value: 'all', child: Text('Semua jenis barang')),
+                      DropdownMenuItem(value: 'raw', child: Text('Bahan Baku')),
+                      DropdownMenuItem(value: 'prepared', child: Text('Bahan Olahan')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) setState(() => itemKind = value);
+                    },
+                  ),
+                  DropdownButton<String>(
                     value: itemUnit,
                     items: [
                       const DropdownMenuItem(value: 'all', child: Text('Semua satuan')),
@@ -991,7 +1021,23 @@ class _InventoryPageState extends State<InventoryPage> {
                                 style: const TextStyle(
                                   fontSize: 16, color: ink, fontWeight: FontWeight.bold,
                                 )),
-                            const SizedBox(height: 9),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: item.isPreparedIngredient ? const Color(0xFFEDE9FE) : const Color(0xFFDCFCE7),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                item.isPreparedIngredient ? 'Bahan Olahan' : 'Bahan Baku',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: item.isPreparedIngredient ? const Color(0xFF6D28D9) : const Color(0xFF166534),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
                             Text('Stok: ${item.stock} ${item.unit}',
                                 style: const TextStyle(color: ink)),
                             Text('Minimum: ${item.minimumStock} ${item.unit}',
