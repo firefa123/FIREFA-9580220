@@ -6,6 +6,7 @@ import '../../core/outlet/active_outlet_store.dart';
 import 'table_store.dart';
 import 'order_models.dart';
 import 'order_store.dart';
+import 'qr_actions.dart';
 
 class TablesPage extends StatefulWidget {
   const TablesPage({super.key});
@@ -83,6 +84,107 @@ class _TablesPageState extends State<TablesPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text('CSV ${rows.length} meja disalin ke clipboard.'),
     ));
+  }
+
+  String _selfOrderUrl(FirefaTable table) {
+    final base = Uri.base.resolve('order.html');
+    return base.replace(queryParameters: {
+      'outletId': table.outletId,
+      'tableId': table.id,
+      'tableName': table.name,
+    }).toString();
+  }
+
+  Future<void> createTableQr(FirefaTable table) async {
+    if (!allowed || table.outletId != outlet.selectedOutletId) return;
+    final sourceOutletId = table.outletId;
+    final orderUrl = _selfOrderUrl(table);
+    final qrUrl = Uri.https('api.qrserver.com', '/v1/create-qr-code/', {
+      'size': '420x420',
+      'margin': '12',
+      'format': 'png',
+      'data': orderUrl,
+    }).toString();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('QR Pemesanan • ${table.name}'),
+        content: SizedBox(
+          width: 360,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(outlet.selectedOutletName,
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  color: Colors.white,
+                  child: Image.network(
+                    qrUrl,
+                    width: 260,
+                    height: 260,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const SizedBox(
+                      width: 260,
+                      height: 120,
+                      child: Center(child: Text(
+                        'QR tidak dapat dimuat. Periksa koneksi internet.',
+                        textAlign: TextAlign.center,
+                      )),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SelectableText(orderUrl,
+                    style: const TextStyle(fontSize: 11, color: muted)),
+                const SizedBox(height: 8),
+                const Text(
+                  'QR berisi ID outlet dan ID meja. Halaman pemesanan harus di-host pada alamat web FIREFA ini.',
+                  style: TextStyle(fontSize: 12, color: muted),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Tutup'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: orderUrl));
+              if (dialogContext.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Tautan pemesanan disalin.')),
+                );
+              }
+            },
+            icon: const Icon(Icons.copy),
+            label: const Text('Salin tautan'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () async {
+              if (!allowed || outlet.selectedOutletId != sourceOutletId) return;
+              await FirefaQrActions.download(qrUrl, 'firefa-${table.id}-qr.png');
+            },
+            icon: const Icon(Icons.download),
+            label: const Text('Unduh QR'),
+          ),
+          FilledButton.icon(
+            onPressed: () async {
+              if (!allowed || outlet.selectedOutletId != sourceOutletId) return;
+              await FirefaQrActions.print(qrUrl, table.name, outlet.selectedOutletName);
+            },
+            icon: const Icon(Icons.print),
+            label: const Text('Cetak'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> addTable() async {
@@ -278,7 +380,7 @@ class _TablesPageState extends State<TablesPage> {
                     itemCount: visible.length,
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: constraints.maxWidth >= 950 ? 4 : constraints.maxWidth >= 650 ? 3 : narrow ? 1 : 2,
-                      mainAxisExtent: 210,
+                      mainAxisExtent: 252,
                       crossAxisSpacing: 12,
                       mainAxisSpacing: 12,
                     ),
@@ -323,6 +425,14 @@ class _TablesPageState extends State<TablesPage> {
                             const Spacer(),
                             Row(
                               children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: allowed ? () => createTableQr(table) : null,
+                                    icon: const Icon(Icons.qr_code_2, size: 18),
+                                    label: const Text('Buat QR'),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
                                 Expanded(
                                   child: OutlinedButton(
                                     onPressed: allowed && activeOrder == null ? () => store.setOccupied(outlet.selectedOutletId, table.id, !table.occupied) : null,
