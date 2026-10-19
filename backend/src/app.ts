@@ -28,6 +28,38 @@ export function buildApp(dependencies: AppDependencies = {}): FastifyInstance {
   const app = Fastify({ logger: process.env.NODE_ENV !== "test" });
   const pool = dependencies.pool ?? new Pool({ connectionString: process.env.DATABASE_URL });
 
+  // Flutter Web runs on a different localhost port from the API. Allow local
+  // development origins and explicitly configured production web origins.
+  const configuredOrigins = new Set(
+    (process.env.CORS_ORIGINS ?? "")
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+  );
+
+  app.addHook("onRequest", async (request, reply) => {
+    const origin = request.headers.origin;
+    if (typeof origin !== "string") return;
+
+    const localOrigin = /^https?:\\/\\/(localhost|127\\.0\\.0\\.1)(:\\d+)?$/.test(origin);
+    if (!localOrigin && !configuredOrigins.has(origin)) return;
+
+    reply.header("Access-Control-Allow-Origin", origin);
+    reply.header("Vary", "Origin");
+    reply.header(
+      "Access-Control-Allow-Methods",
+      "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    );
+    reply.header(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization, X-Bootstrap-Token, Idempotency-Key, If-Match",
+    );
+
+    if (request.method === "OPTIONS") {
+      return reply.code(204).send();
+    }
+  });
+
   const checkDatabase =
     dependencies.checkDatabase ??
     (async () => {
