@@ -27,7 +27,7 @@
 const params=new URLSearchParams(location.search);
 const outletId=params.get('outletId')||'', tableId=params.get('tableId')||'', tableName=params.get('tableName')||'';
 const $=id=>document.getElementById(id);
-const state={menu:[],cart:new Map(),apiBase:(params.get('api')||'').replace(/\/$/,'')};
+const state={menu:[],cart:new Map(),apiBase:(params.get('api')||location.origin).replace(/\/$/,'')};
 $('outletTag').textContent='Outlet: '+(outletId||'tidak valid');
 $('tableTag').textContent='Meja: '+(tableName||'tidak valid');
 const valid=Boolean(outletId&&tableId&&tableName);
