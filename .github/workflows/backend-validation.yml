@@ -68,6 +68,28 @@ jobs:
       - name: Verify schema tables exist
         run: |
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF to_regclass('public.tenants') IS NULL OR to_regclass('public.outlets') IS NULL OR to_regclass('public.users') IS NULL OR to_regclass('public.orders') IS NULL OR to_regclass('public.sync_receipts') IS NULL OR to_regclass('public.order_events') IS NULL OR to_regclass('public.outlet_memberships') IS NULL OR to_regclass('public.menu_categories') IS NULL OR to_regclass('public.products') IS NULL OR to_regclass('public.inventory_items') IS NULL OR to_regclass('public.inventory_movements') IS NULL OR to_regclass('public.order_items') IS NULL OR to_regclass('public.payments') IS NULL OR to_regclass('public.audit_logs') IS NULL OR to_regclass('public.sync_devices') IS NULL OR to_regclass('public.refunds') IS NULL OR to_regclass('public.accounts_receivable') IS NULL OR to_regclass('public.platform_admins') IS NULL THEN RAISE EXCEPTION 'Required FIREFA tables are missing'; END IF; END \$\$;"
+      - name: Verify Super Admin isolation and Cloud Sync database constraints
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          DO $
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'platform_admins' AND column_name = 'user_id'
+            ) THEN RAISE EXCEPTION 'platform_admins identity table missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conrelid = 'public.tenant_memberships'::regclass
+                AND conname = 'tenant_memberships_role_check'
+                AND pg_get_constraintdef(oid) LIKE '%owner%cashier%'
+            ) THEN RAISE EXCEPTION 'Owner/Cashier tenant role constraint changed'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_indexes
+              WHERE schemaname = 'public' AND tablename = 'sync_receipts'
+                AND indexdef LIKE '%tenant_id, event_id%'
+            ) THEN RAISE EXCEPTION 'Cloud Sync idempotency uniqueness missing'; END IF;
+          END $;
+          SQL
       - name: Verify API readiness against PostgreSQL
         run: |
           node dist/server.js > /tmp/firefa-backend.log 2>&1 &
