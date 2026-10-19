@@ -12,6 +12,7 @@ class FirefaMenuItem {
     required this.category,
     required this.price,
     required this.isActive,
+    this.imageData,
   });
 
   final String id;
@@ -20,6 +21,8 @@ class FirefaMenuItem {
   final String category;
   final int price;
   final bool isActive;
+  /// Base64-encoded image bytes, stored locally with the menu item.
+  final String? imageData;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -28,6 +31,7 @@ class FirefaMenuItem {
     'category': category,
     'price': price,
     'isActive': isActive,
+    if (imageData != null && imageData!.isNotEmpty) 'imageData': imageData,
   };
 
   factory FirefaMenuItem.fromJson(Map<String, dynamic> json) => FirefaMenuItem(
@@ -37,15 +41,17 @@ class FirefaMenuItem {
     category: json['category'] as String,
     price: json['price'] as int,
     isActive: json['isActive'] as bool,
+    imageData: json['imageData'] as String?,
   );
 
-  FirefaMenuItem copyWith({bool? isActive, String? name, String? category, int? price}) => FirefaMenuItem(
+  FirefaMenuItem copyWith({bool? isActive, String? name, String? category, int? price, String? imageData, bool clearImage = false}) => FirefaMenuItem(
     id: id,
     outletId: outletId,
     name: name ?? this.name,
     category: category ?? this.category,
     price: price ?? this.price,
     isActive: isActive ?? this.isActive,
+    imageData: clearImage ? null : imageData ?? this.imageData,
   );
 }
 
@@ -96,6 +102,7 @@ class FirefaMenuStore extends ChangeNotifier {
     required String name,
     required String category,
     required int price,
+    String? imageData,
   }) {
     if (!_initialized) return false;
     final normalized = name.trim();
@@ -118,6 +125,7 @@ class FirefaMenuStore extends ChangeNotifier {
       category: category,
       price: price,
       isActive: true,
+      imageData: imageData,
     ));
     notifyListeners();
     _save();
@@ -143,6 +151,8 @@ class FirefaMenuStore extends ChangeNotifier {
     required String name,
     required String category,
     required int price,
+    String? imageData,
+    bool clearImage = false,
   }) {
     if (!_initialized) return false;
     final index = _items.indexWhere(
@@ -164,13 +174,16 @@ class FirefaMenuStore extends ChangeNotifier {
     final current = _items[index];
     if (current.name == normalized &&
         current.category == category &&
-        current.price == price) {
+        current.price == price &&
+      (clearImage ? current.imageData == null : imageData == null || current.imageData == imageData)) {
       return true;
     }
     _items[index] = current.copyWith(
       name: normalized,
       category: category,
       price: price,
+      imageData: imageData,
+      clearImage: clearImage,
     );
     notifyListeners();
     _save();
