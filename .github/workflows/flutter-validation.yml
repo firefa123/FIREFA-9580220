@@ -74,7 +74,7 @@ jobs:
             console.log('Validated ' + file);
           }
           const portal = fs.readFileSync('apps/firefa_super_admin/index.html', 'utf8');
-          for (const path of ['/auth/login','/overview','/tenants','/outlets','/audit-logs','/sync-status']) {
+          for (const path of ['/auth/bootstrap','/auth/login','/overview','/tenants','/outlets','/audit-logs','/sync-status','/status']) {
             if (!portal.includes(path)) throw new Error('Super Admin portal missing API path ' + path);
           }
           NODE
