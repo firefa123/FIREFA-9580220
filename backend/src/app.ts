@@ -6,6 +6,7 @@ import { syncRoutes } from "./routes/sync";
 import { catalogRoutes } from "./routes/catalog";
 import { paymentRoutes } from "./routes/payments";
 import { staffAttendanceRoutes } from "./routes/staff-attendance";
+import { outletLocationRoutes } from "./routes/outlet-location";
 
 export interface AppDependencies {
   checkDatabase?: () => Promise<void>;
@@ -55,6 +56,10 @@ export function buildApp(dependencies: AppDependencies = {}): FastifyInstance {
     pool,
   });
   app.register(staffAttendanceRoutes, {
+    prefix: "/api/v1",
+    pool,
+  });
+  app.register(outletLocationRoutes, {
     prefix: "/api/v1",
     pool,
   });
