@@ -1504,7 +1504,7 @@ class _PosPageState extends State<PosPage> {
                                           fit: BoxFit.cover,
                                           width: double.infinity,
                                           height: double.infinity,
-                                          errorBuilder: (_, __, ___) => Icon(
+                                          errorBuilder: (_, _, _) => Icon(
                                             product.icon,
                                             size: 54,
                                             color: ink,
