@@ -385,7 +385,7 @@ class _InventoryPageState extends State<InventoryPage> {
   }
 
   Future<void> manageRecipe() async {
-    if (!allowed) return;
+    if (!allowed || outlet.role != FirefaRole.owner) return;
     final sourceOutlet = outlet.selectedOutletId;
     final menus = menuStore.forOutlet(sourceOutlet)
         .where((menu) => menu.isActive)
@@ -409,46 +409,210 @@ class _InventoryPageState extends State<InventoryPage> {
     }
     final items = store.forOutlet(sourceOutlet);
     if (menus.isEmpty || items.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tambahkan menu dan barang inventory terlebih dahulu untuk mengatur resep.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Tambahkan menu dan barang inventory terlebih dahulu untuk mengatur resep.'),
+      ));
       return;
     }
+
     var menuId = menus.first.id;
-    var ingredientId = items.first.id;
-    final quantityController = TextEditingController(text: '1');
-    final result = await showDialog<({String menuId, String ingredientId, int quantity})>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, update) => AlertDialog(
-        title: const Text('Atur Resep Menu'),
-        content: SizedBox(width: 420, child: Column(mainAxisSize: MainAxisSize.min, children: [
-          DropdownButtonFormField<String>(
-            initialValue: menuId, isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Menu POS'),
-            items: menus.map((m) => DropdownMenuItem(value: m.id, child: Text(m.name))).toList(),
-            onChanged: (value) { if (value != null) update(() => menuId = value); }),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: ingredientId, isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Bahan inventory'),
-            items: items.map((i) => DropdownMenuItem(value: i.id, child: Text('${i.name} (${i.unit})'))).toList(),
-            onChanged: (value) { if (value != null) update(() => ingredientId = value); }),
-          const SizedBox(height: 12),
-          TextField(controller: quantityController, keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(9)],
-            decoration: const InputDecoration(labelText: 'Kebutuhan bahan per 1 menu')),
-          const SizedBox(height: 8),
-          const Text('Simpan satu bahan per baris resep. Ulangi untuk bahan lain pada menu yang sama.', style: TextStyle(fontSize: 12, color: muted)),
-        ])),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, (menuId: menuId, ingredientId: ingredientId, quantity: int.tryParse(quantityController.text) ?? 0)), child: const Text('Simpan Resep')),
-        ],
-      )),
-    );
-    quantityController.dispose();
-    if (!mounted || result == null || sourceOutlet != outlet.selectedOutletId || !allowed) return;
-    if (!store.addRecipeLine(outletId: sourceOutlet, menuId: result.menuId, ingredientId: result.ingredientId, quantity: result.quantity)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Resep tidak valid. Periksa menu, bahan, dan jumlah kebutuhan.')));
+    final rows = <({String ingredientId, TextEditingController quantity})>[];
+    void addRow({String? ingredientId, int quantity = 1}) {
+      rows.add((
+        ingredientId: ingredientId ?? items.first.id,
+        quantity: TextEditingController(text: quantity.toString()),
+      ));
     }
+    final existing = store.recipesForOutlet(sourceOutlet)
+        .where((line) => line.menuId == menuId).toList();
+    if (existing.isEmpty) {
+      addRow();
+    } else {
+      for (final line in existing) {
+        addRow(ingredientId: line.ingredientId, quantity: line.quantity);
+      }
+    }
+
+    final result = await showDialog<({String menuId, List<({String ingredientId, int quantity})> lines})>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, update) {
+          final selectedRecipe = store.recipesForOutlet(sourceOutlet)
+              .where((line) => line.menuId == menuId).toList();
+          return AlertDialog(
+            title: const Text('Atur Resep Menu'),
+            content: SizedBox(
+              width: 560,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      key: ValueKey('recipe-menu-$menuId'),
+                      initialValue: menuId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Menu POS'),
+                      items: menus.map((m) => DropdownMenuItem(
+                        value: m.id, child: Text(m.name),
+                      )).toList(),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        update(() {
+                          menuId = value;
+                          for (final row in rows) {
+                            row.quantity.dispose();
+                          }
+                          rows.clear();
+                          final lines = store.recipesForOutlet(sourceOutlet)
+                              .where((line) => line.menuId == menuId).toList();
+                          if (lines.isEmpty) {
+                            addRow();
+                          } else {
+                            for (final line in lines) {
+                              addRow(ingredientId: line.ingredientId, quantity: line.quantity);
+                            }
+                          }
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Expanded(child: Text('Bahan resep', style: TextStyle(fontWeight: FontWeight.bold))),
+                        TextButton.icon(
+                          onPressed: () => update(() => addRow()),
+                          icon: const Icon(Icons.add_circle_outline),
+                          label: const Text('Tambah bahan (+)'),
+                        ),
+                      ],
+                    ),
+                    if (selectedRecipe.isNotEmpty)
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text('Ubah, tambah, atau hapus baris lalu simpan untuk memperbarui resep.', style: TextStyle(fontSize: 12, color: muted)),
+                      ),
+                    const SizedBox(height: 6),
+                    for (var index = 0; index < rows.length; index++)
+                      Padding(
+                        key: ValueKey('recipe-line-$index'),
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              flex: 5,
+                              child: DropdownButtonFormField<String>(
+                                key: ValueKey('recipe-ingredient-$index-${rows[index].ingredientId}'),
+                                initialValue: rows[index].ingredientId,
+                                isExpanded: true,
+                                decoration: InputDecoration(
+                                  labelText: 'Bahan ${index + 1}',
+                                  helperText: 'Satuan stok: ${items.firstWhere((item) => item.id == rows[index].ingredientId).unit}',
+                                ),
+                                items: items.map((item) => DropdownMenuItem(
+                                  value: item.id,
+                                  child: Text('${item.name} (${item.unit})', overflow: TextOverflow.ellipsis),
+                                )).toList(),
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    update(() {
+                                      rows[index] = (ingredientId: value, quantity: rows[index].quantity);
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 2,
+                              child: TextField(
+                                controller: rows[index].quantity,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                  LengthLimitingTextInputFormatter(9),
+                                ],
+                                decoration: const InputDecoration(labelText: 'Jumlah'),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Hapus baris bahan',
+                              onPressed: rows.length <= 1 ? null : () => update(() {
+                                rows.removeAt(index).quantity.dispose();
+                              }),
+                              icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent),
+                            ),
+                          ],
+                        ),
+                      ),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('Contoh: Espresso 18 gram, Susu 150 ml, Gula 10 gram. Jumlah memakai satuan stok bahan.', style: TextStyle(fontSize: 12, color: muted)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+              FilledButton(
+                onPressed: () {
+                  final lines = rows.map((row) => (
+                    ingredientId: row.ingredientId,
+                    quantity: int.tryParse(row.quantity.text) ?? 0,
+                  )).toList();
+                  Navigator.pop(ctx, (menuId: menuId, lines: lines));
+                },
+                child: const Text('Simpan Resep'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    for (final row in rows) {
+      row.quantity.dispose();
+    }
+    if (!mounted || result == null || sourceOutlet != outlet.selectedOutletId ||
+        !allowed || outlet.role != FirefaRole.owner) return;
+
+    final seen = <String>{};
+    for (final line in result.lines) {
+      if (line.quantity <= 0 || !seen.add(line.ingredientId)) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Resep tidak valid: jumlah harus lebih dari nol dan setiap bahan hanya boleh satu baris.'),
+        ));
+        return;
+      }
+    }
+    if (result.lines.isEmpty) return;
+    final oldLines = store.recipesForOutlet(sourceOutlet)
+        .where((line) => line.menuId == result.menuId).toList();
+    for (final oldLine in oldLines) {
+      if (!seen.contains(oldLine.ingredientId)) {
+        store.removeRecipeLine(
+          outletId: sourceOutlet,
+          menuId: result.menuId,
+          ingredientId: oldLine.ingredientId,
+        );
+      }
+    }
+    for (final line in result.lines) {
+      if (!store.addRecipeLine(
+        outletId: sourceOutlet,
+        menuId: result.menuId,
+        ingredientId: line.ingredientId,
+        quantity: line.quantity,
+      )) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Resep tidak valid. Periksa menu, bahan, dan jumlah kebutuhan.'),
+        ));
+        return;
+      }
+    }
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Resep menu berhasil disimpan. Pemakaian stok mengikuti seluruh baris resep saat checkout.'),
+    ));
   }
 
   Future<void> addItem() async {
