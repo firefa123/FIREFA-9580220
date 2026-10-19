@@ -126,7 +126,7 @@ class _TablesPageState extends State<TablesPage> {
                     width: 260,
                     height: 260,
                     fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const SizedBox(
+                    errorBuilder: (_, _, _) => const SizedBox(
                       width: 260,
                       height: 120,
                       child: Center(child: Text(
@@ -158,7 +158,7 @@ class _TablesPageState extends State<TablesPage> {
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: orderUrl));
               if (dialogContext.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
                   const SnackBar(content: Text('Tautan pemesanan disalin.')),
                 );
               }
