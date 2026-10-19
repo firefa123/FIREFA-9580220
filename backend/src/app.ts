@@ -41,7 +41,7 @@ export function buildApp(dependencies: AppDependencies = {}): FastifyInstance {
     const origin = request.headers.origin;
     if (typeof origin !== "string") return;
 
-    const localOrigin = /^https?:\\/\\/(localhost|127\\.0\\.0\\.1)(:\\d+)?$/.test(origin);
+    const localOrigin = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
     if (!localOrigin && !configuredOrigins.has(origin)) return;
 
     reply.header("Access-Control-Allow-Origin", origin);
