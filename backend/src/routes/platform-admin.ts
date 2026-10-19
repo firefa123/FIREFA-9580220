@@ -47,6 +47,7 @@ export const platformAdminRoutes: FastifyPluginAsync<Options> = async (app, opti
         [email, hash, parsed.data.displayName ?? email],
       );
       await client.query("INSERT INTO platform_admins (user_id) VALUES ($1)", [user.rows[0]!.id]);
+      await client.query("INSERT INTO platform_admin_audit_logs (actor_user_id,action,resource_type,resource_id,changes) VALUES ($1,'platform_admin.bootstrap','platform_admin',$1,$2::jsonb)", [user.rows[0]!.id, JSON.stringify({email})]);
       await client.query("COMMIT");
       return reply.code(201).send({ id: user.rows[0]!.id, email, status: "active" });
     } catch (error) {
@@ -82,7 +83,7 @@ export const platformAdminRoutes: FastifyPluginAsync<Options> = async (app, opti
       );
       const tenant = created.rows[0]!;
       await client.query(
-        "INSERT INTO audit_logs (tenant_id,outlet_id,actor_user_id,action,resource_type,resource_id,changes) VALUES (NULL,NULL,$1,'platform_admin.tenant.create','tenant',$2,$3::jsonb)",
+        "INSERT INTO platform_admin_audit_logs (actor_user_id,action,resource_type,resource_id,changes) VALUES ($1,'platform_admin.tenant.create','tenant',$2,$3::jsonb)",
         [request.user.sub,tenant.id,JSON.stringify({name:tenant.name,status:tenant.status})],
       );
       await client.query("COMMIT");
@@ -106,7 +107,7 @@ export const platformAdminRoutes: FastifyPluginAsync<Options> = async (app, opti
       );
       if (!updated.rowCount) { await client.query("ROLLBACK"); return reply.code(404).send({error:"tenant_not_found"}); }
       await client.query(
-        "INSERT INTO audit_logs (tenant_id,outlet_id,actor_user_id,action,resource_type,resource_id,changes) VALUES (NULL,NULL,$1,'platform_admin.tenant.status','tenant',$2,$3::jsonb)",
+        "INSERT INTO platform_admin_audit_logs (actor_user_id,action,resource_type,resource_id,changes) VALUES ($1,'platform_admin.tenant.status','tenant',$2,$3::jsonb)",
         [request.user.sub,updated.rows[0]!.id,JSON.stringify({status:body.data.status})],
       );
       await client.query("COMMIT");
@@ -139,7 +140,7 @@ export const platformAdminRoutes: FastifyPluginAsync<Options> = async (app, opti
       if (!created.rowCount) { await client.query("ROLLBACK"); return reply.code(404).send({error:"active_tenant_not_found"}); }
       const outlet=created.rows[0]!;
       await client.query(
-        "INSERT INTO audit_logs (tenant_id,outlet_id,actor_user_id,action,resource_type,resource_id,changes) VALUES (NULL,NULL,$1,'platform_admin.outlet.create','outlet',$2,$3::jsonb)",
+        "INSERT INTO platform_admin_audit_logs (actor_user_id,action,resource_type,resource_id,changes) VALUES ($1,'platform_admin.outlet.create','outlet',$2,$3::jsonb)",
         [request.user.sub,outlet.id,JSON.stringify({tenantId:outlet.tenant_id,code:outlet.code,name:outlet.name,geofenceRadiusM:v.geofenceRadiusM})],
       );
       await client.query("COMMIT");
@@ -164,7 +165,7 @@ export const platformAdminRoutes: FastifyPluginAsync<Options> = async (app, opti
       );
       if (!updated.rowCount) { await client.query("ROLLBACK"); return reply.code(404).send({error:"outlet_not_found"}); }
       await client.query(
-        "INSERT INTO audit_logs (tenant_id,outlet_id,actor_user_id,action,resource_type,resource_id,changes) VALUES (NULL,NULL,$1,'platform_admin.outlet.status','outlet',$2,$3::jsonb)",
+        "INSERT INTO platform_admin_audit_logs (actor_user_id,action,resource_type,resource_id,changes) VALUES ($1,'platform_admin.outlet.status','outlet',$2,$3::jsonb)",
         [request.user.sub,updated.rows[0]!.id,JSON.stringify({tenantId:updated.rows[0]!.tenant_id,status:body.data.status})],
       );
       await client.query("COMMIT");
@@ -199,7 +200,7 @@ export const platformAdminRoutes: FastifyPluginAsync<Options> = async (app, opti
     const parsed = z.object({tenantId:z.string().uuid().optional(),limit:z.coerce.number().int().min(1).max(100).default(50),offset:z.coerce.number().int().min(0).max(100000).default(0)}).safeParse(request.query);
     if (!parsed.success) return reply.code(400).send({error:"invalid_request"});
     const q = parsed.data;
-    const rows = await options.pool.query("SELECT id::text AS id,tenant_id::text AS tenant_id,outlet_id::text AS outlet_id,actor_user_id::text AS actor_user_id,action,resource_type,resource_id,changes,created_at FROM audit_logs WHERE ($1::uuid IS NULL OR tenant_id=$1) ORDER BY created_at DESC LIMIT $2 OFFSET $3",[q.tenantId ?? null,q.limit,q.offset]);
+    const rows = await options.pool.query("SELECT id::text AS id,tenant_id::text AS tenant_id,outlet_id::text AS outlet_id,actor_user_id::text AS actor_user_id,action,resource_type,resource_id,changes,created_at FROM audit_logs WHERE ($1::uuid IS NULL OR tenant_id=$1) UNION ALL SELECT id::text AS id,tenant_id::text AS tenant_id,outlet_id::text AS outlet_id,actor_user_id::text AS actor_user_id,action,resource_type,resource_id,changes,created_at FROM platform_admin_audit_logs WHERE ($1::uuid IS NULL OR tenant_id=$1) ORDER BY created_at DESC LIMIT $2 OFFSET $3",[q.tenantId ?? null,q.limit,q.offset]);
     return {auditLogs:rows.rows,limit:q.limit,offset:q.offset};
   });
   app.get("/sync-status", { preHandler: guard }, async (request, reply) => {
