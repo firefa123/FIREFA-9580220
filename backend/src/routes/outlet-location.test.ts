@@ -1,6 +1,6 @@
 import Fastify from "fastify";
 import jwt from "@fastify/jwt";
-import type { Pool, PoolClient } from "pg";
+import type { Pool } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { outletLocationRoutes } from "./outlet-location";
 
@@ -57,7 +57,6 @@ describe("PATCH /api/v1/staff/geofence-location", () => {
     { outletId, latitude: -6.2, longitude: 181 },
   ])("rejects invalid coordinate values", async (payload) => {
     const { app, client, token } = await setup("owner", "owner");
-    await app.ready();
     const response = await app.inject({
       method: "PATCH",
       url: "/api/v1/staff/geofence-location",
@@ -71,7 +70,6 @@ describe("PATCH /api/v1/staff/geofence-location", () => {
 
   it.each(["cashier", "staff"])("denies %s even with valid coordinates", async (role) => {
     const { app, client, token } = await setup(role, role);
-    await app.ready();
     const response = await app.inject({
       method: "PATCH",
       url: "/api/v1/staff/geofence-location",
@@ -86,7 +84,6 @@ describe("PATCH /api/v1/staff/geofence-location", () => {
 
   it("denies an Owner who is not a member of the outlet", async () => {
     const { app, client, token } = await setup("owner", undefined);
-    await app.ready();
     const response = await app.inject({
       method: "PATCH",
       url: "/api/v1/staff/geofence-location",
@@ -101,7 +98,6 @@ describe("PATCH /api/v1/staff/geofence-location", () => {
 
   it("requires authentication", async () => {
     const { app, client } = await setup("owner", "owner");
-    await app.ready();
     const response = await app.inject({
       method: "PATCH",
       url: "/api/v1/staff/geofence-location",
