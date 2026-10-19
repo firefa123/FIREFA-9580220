@@ -574,7 +574,9 @@ class _InventoryPageState extends State<InventoryPage> {
       row.quantity.dispose();
     }
     if (!mounted || result == null || sourceOutlet != outlet.selectedOutletId ||
-        !allowed || outlet.role != FirefaRole.owner) return;
+        !allowed || outlet.role != FirefaRole.owner) {
+      return;
+    }
 
     final seen = <String>{};
     for (final line in result.lines) {
