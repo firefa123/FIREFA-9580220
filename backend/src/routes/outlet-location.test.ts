@@ -68,7 +68,7 @@ describe("PATCH /api/v1/staff/geofence-location", () => {
     await app.close();
   });
 
-  it.each(["cashier", "staff"])("denies %s even with valid coordinates", async (role) => {
+  it.each(["cashier", "staff"] as const)("denies %s even with valid coordinates", async (role) => {
     const { app, client, token } = await setup(role, role);
     const response = await app.inject({
       method: "PATCH",
