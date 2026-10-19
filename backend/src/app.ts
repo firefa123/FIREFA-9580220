@@ -7,6 +7,7 @@ import { catalogRoutes } from "./routes/catalog";
 import { paymentRoutes } from "./routes/payments";
 import { staffAttendanceRoutes } from "./routes/staff-attendance";
 import { outletLocationRoutes } from "./routes/outlet-location";
+import { publicOrderRoutes } from "./routes/public-orders";
 
 export interface AppDependencies {
   checkDatabase?: () => Promise<void>;
@@ -95,6 +96,10 @@ export function buildApp(dependencies: AppDependencies = {}): FastifyInstance {
   });
   app.register(outletLocationRoutes, {
     prefix: "/api/v1",
+    pool,
+  });
+  app.register(publicOrderRoutes, {
+    prefix: "/api/v1/public",
     pool,
   });
 
