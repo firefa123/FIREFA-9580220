@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/auth/role_permissions.dart';
 import '../../core/outlet/active_outlet_store.dart';
@@ -79,23 +82,90 @@ class _MenuPageState extends State<MenuPage> {
     ));
   }
 
+  Future<String?> _pickMenuImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 75,
+      maxWidth: 1200,
+      maxHeight: 1200,
+    );
+    if (picked == null) return null;
+    final bytes = await picked.readAsBytes();
+    if (bytes.isEmpty || bytes.length > 3 * 1024 * 1024) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Foto kosong atau terlalu besar. Pilih foto maksimal 3 MB.'),
+        ));
+      }
+      return null;
+    }
+    return base64Encode(bytes);
+  }
+
+  Widget _imageEditor(String? imageData, VoidCallback onPick, VoidCallback onRemove) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Align(alignment: Alignment.centerLeft, child: Text('Foto produk')),
+        const SizedBox(height: 8),
+        Container(
+          height: 150,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: border),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: imageData == null || imageData.isEmpty
+              ? const Center(child: Icon(Icons.image_outlined, size: 42, color: muted))
+              : Image.memory(base64Decode(imageData), fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const Center(
+                    child: Icon(Icons.broken_image_outlined, size: 42, color: muted),
+                  )),
+        ),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, children: [
+          OutlinedButton.icon(
+            onPressed: onPick,
+            icon: const Icon(Icons.upload_outlined),
+            label: Text(imageData == null || imageData.isEmpty ? 'Upload Foto' : 'Ganti Foto'),
+          ),
+          if (imageData != null && imageData.isNotEmpty)
+            TextButton.icon(
+              onPressed: onRemove,
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Hapus Foto'),
+            ),
+        ]),
+      ],
+    );
+  }
+
   Future<void> addMenu() async {
     if (!allowed) return;
     final sourceOutlet = outlet.selectedOutletId;
     final nameController = TextEditingController();
     final priceController = TextEditingController();
     var category = FirefaMenuStore.categories.first;
-    final input = await showDialog<({String name, String category, int price})>(
+    String? imageData;
+    final input = await showDialog<({String name, String category, int price, String? imageData})>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, update) => AlertDialog(
           title: const Text('Tambah Menu'),
           content: SizedBox(
-            width: 400,
+            width: 420,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  _imageEditor(imageData, () async {
+                    final picked = await _pickMenuImage();
+                    if (picked != null) update(() => imageData = picked);
+                  }, () => update(() => imageData = null)),
+                  const SizedBox(height: 12),
                   TextField(
                     controller: nameController,
                     autofocus: true,
@@ -111,10 +181,7 @@ class _MenuPageState extends State<MenuPage> {
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Kategori'),
                     items: FirefaMenuStore.categories
-                        .map((value) => DropdownMenuItem(
-                              value: value,
-                              child: Text(value),
-                            ))
+                        .map((value) => DropdownMenuItem(value: value, child: Text(value)))
                         .toList(),
                     onChanged: (value) {
                       if (value != null) update(() => category = value);
@@ -138,15 +205,14 @@ class _MenuPageState extends State<MenuPage> {
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Batal'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Batal')),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, (
                 name: nameController.text,
                 category: category,
                 price: int.tryParse(priceController.text) ?? 0,
+                imageData: imageData,
               )),
               child: const Text('Simpan'),
             ),
@@ -163,6 +229,7 @@ class _MenuPageState extends State<MenuPage> {
       name: input.name,
       category: input.category,
       price: input.price,
+      imageData: input.imageData,
     )) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Nama harus unik per outlet, kategori valid, dan harga lebih dari Rp 0.'),
@@ -176,17 +243,24 @@ class _MenuPageState extends State<MenuPage> {
     final nameController = TextEditingController(text: item.name);
     final priceController = TextEditingController(text: item.price.toString());
     var category = item.category;
-    final input = await showDialog<({String name, String category, int price})>(
+    String? imageData = item.imageData;
+    var clearImage = false;
+    final input = await showDialog<({String name, String category, int price, String? imageData, bool clearImage})>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, update) => AlertDialog(
           title: const Text('Edit Menu'),
           content: SizedBox(
-            width: 400,
+            width: 420,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  _imageEditor(imageData, () async {
+                    final picked = await _pickMenuImage();
+                    if (picked != null) update(() { imageData = picked; clearImage = false; });
+                  }, () => update(() { imageData = null; clearImage = true; })),
+                  const SizedBox(height: 12),
                   TextField(
                     controller: nameController,
                     autofocus: true,
@@ -199,10 +273,7 @@ class _MenuPageState extends State<MenuPage> {
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Kategori'),
                     items: FirefaMenuStore.categories
-                        .map((value) => DropdownMenuItem(
-                              value: value,
-                              child: Text(value),
-                            ))
+                        .map((value) => DropdownMenuItem(value: value, child: Text(value)))
                         .toList(),
                     onChanged: (value) {
                       if (value != null) update(() => category = value);
@@ -223,15 +294,15 @@ class _MenuPageState extends State<MenuPage> {
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Batal'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Batal')),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, (
                 name: nameController.text,
                 category: category,
                 price: int.tryParse(priceController.text) ?? 0,
+                imageData: imageData,
+                clearImage: clearImage,
               )),
               child: const Text('Simpan'),
             ),
@@ -249,6 +320,8 @@ class _MenuPageState extends State<MenuPage> {
       name: input.name,
       category: input.category,
       price: input.price,
+      imageData: input.imageData,
+      clearImage: input.clearImage,
     )) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Nama menu harus unik per outlet dan harga harus lebih dari Rp 0.'),
@@ -446,6 +519,20 @@ class _MenuPageState extends State<MenuPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            if (item.imageData != null && item.imageData!.isNotEmpty)
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.memory(
+                                  base64Decode(item.imageData!),
+                                  width: double.infinity,
+                                  height: 72,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const SizedBox(
+                                    height: 12,
+                                    child: Icon(Icons.broken_image_outlined, size: 14, color: muted),
+                                  ),
+                                ),
+                              ),
                             Text(item.name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
