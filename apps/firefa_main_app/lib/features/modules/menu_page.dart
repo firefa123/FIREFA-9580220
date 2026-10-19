@@ -92,10 +92,10 @@ class _MenuPageState extends State<MenuPage> {
     );
     if (picked == null) return null;
     final bytes = await picked.readAsBytes();
-    if (bytes.isEmpty || bytes.length > 3 * 1024 * 1024) {
+    if (bytes.isEmpty || bytes.length > 1024 * 1024) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Foto kosong atau terlalu besar. Pilih foto maksimal 3 MB.'),
+          content: Text('Foto kosong atau terlalu besar. Pilih foto maksimal 1 MB.'),
         ));
       }
       return null;
@@ -503,7 +503,7 @@ class _MenuPageState extends State<MenuPage> {
                               : narrow
                                   ? 1
                                   : 2,
-                      mainAxisExtent: 184,
+                      mainAxisExtent: 250,
                       crossAxisSpacing: 12,
                       mainAxisSpacing: 12,
                     ),
