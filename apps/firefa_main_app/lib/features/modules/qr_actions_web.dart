@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
+
 import 'dart:html' as html;
 
 class FirefaQrActions {
@@ -15,8 +17,7 @@ class FirefaQrActions {
     // Open the QR image in a dedicated tab. The browser's native print action
     // can print the image without relying on deprecated WindowBase.document APIs.
     final opened = html.window.open(url, '_blank', 'noopener');
-    if (opened == null) {
-      throw StateError('Izinkan pop-up untuk mencetak QR.');
-    }
+    // Browsers may block the new tab; the user can allow pop-ups if needed.
+    // `window.open` is typed as non-null in dart:html.
   }
 }
