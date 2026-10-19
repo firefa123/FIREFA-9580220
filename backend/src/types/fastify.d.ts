@@ -9,12 +9,14 @@ declare module "@fastify/jwt" {
       tenantId: string;
       role: FirefaRole;
       outletIds: string[];
+      scope?: "platform_admin";
     };
     user: {
       sub: string;
       tenantId: string;
       role: FirefaRole;
       outletIds: string[];
+      scope?: "platform_admin";
     };
   }
 }
