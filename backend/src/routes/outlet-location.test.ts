@@ -9,7 +9,7 @@ const outletId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const userId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const jwtSecret = "test-secret-that-is-long-enough-for-firefa";
 
-async function setup(role: string, outletRole: string | undefined = role) {
+async function setup(role: "owner" | "cashier" | "staff", outletRole: string | undefined = role) {
   const client = {
     query: vi.fn()
       .mockResolvedValueOnce({ rows: outletRole ? [{ role: outletRole }] : [], rowCount: outletRole ? 1 : 0 })
