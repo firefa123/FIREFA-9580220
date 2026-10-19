@@ -220,6 +220,31 @@ export const staffAttendanceRoutes: FastifyPluginAsync<StaffAttendanceOptions> =
     } finally { client.release(); }
   });
 
+  // Outlet coordinates are deliberately updated separately from geofence radius.
+  // This endpoint accepts only latitude/longitude, so a location edit cannot reset radius.
+  app.patch("/staff/outlet-location", {
+    preHandler: async (request, reply) => {
+      try { await request.jwtVerify(); } catch { return reply.code(401).send({ error: "unauthorized" }); }
+    },
+  }, async (request, reply) => {
+    if (request.user.role !== "owner") return reply.code(403).send({ error: "owner_required" });
+    const parsed = z.object({ outletId: uuid, ...coordinates.shape }).strict().safeParse(request.body);
+    if (!parsed.success) return invalid(reply);
+    const client = await options.pool.connect();
+    try {
+      const role = await authorizeOwnerOutlet(client, request.user.sub, request.user.tenantId, parsed.data.outletId);
+      if (role !== "ok") return reply.code(403).send({ error: role === "forbidden" ? "outlet_forbidden" : "owner_required" });
+      const result = await client.query(
+        "UPDATE outlets SET latitude = $1, longitude = $2, updated_at = now() " +
+        "WHERE id = $3 AND tenant_id = $4 AND status = 'active' " +
+        "RETURNING id::text AS \\"outletId\\", latitude::float8 AS latitude, longitude::float8 AS longitude, geofence_radius_m AS \\"radiusMeters\\"",
+        [parsed.data.latitude, parsed.data.longitude, parsed.data.outletId, request.user.tenantId],
+      );
+      if (!result.rowCount) return reply.code(404).send({ error: "outlet_not_found" });
+      return { geofence: result.rows[0] };
+    } finally { client.release(); }
+  });
+
   app.get("/staff/geofence-radius", {
     preHandler: async (request, reply) => {
       try { await request.jwtVerify(); } catch { return reply.code(401).send({ error: "unauthorized" }); }
