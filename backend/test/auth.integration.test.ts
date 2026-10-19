@@ -35,7 +35,7 @@ authSuite("authentication endpoints", () => {
 
   beforeEach(async () => {
     await adminPool.query(
-      "TRUNCATE TABLE order_events, sync_receipts, orders, refresh_tokens, " +
+      "TRUNCATE TABLE staff_attendance, staff_members, order_events, sync_receipts, orders, refresh_tokens, " +
         "outlet_memberships, tenant_memberships, users, outlets, tenants RESTART IDENTITY CASCADE",
     );
   });
