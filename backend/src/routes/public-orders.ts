@@ -12,6 +12,7 @@ const orderInput = z.object({
   tableName: z.string().trim().min(1).max(40),
   customerName: z.string().trim().max(100).optional().default(""),
   notes: z.string().trim().max(500).optional().default(""),
+  paymentMethod: z.enum(["cash", "qris"]).optional().default("cash"),
   items: z.array(z.object({
     productId: uuid,
     quantity: z.number().int().min(1).max(99),
@@ -91,7 +92,7 @@ export const publicOrderRoutes: FastifyPluginAsync<PublicOrderOptions> = async (
       }
       const snapshot = {
         source: "customer_qr", tableId: input.tableId, tableName: input.tableName,
-        customerName: input.customerName, notes: input.notes, items,
+        customerName: input.customerName, notes: input.notes, paymentMethod: input.paymentMethod, items,
       };
       const created = await client.query<{ id: string }>(
         "INSERT INTO orders (tenant_id, outlet_id, device_id, client_order_id, order_type, status, payment_status, subtotal, discount, tax, service_charge, total, snapshot) " +
@@ -112,7 +113,7 @@ export const publicOrderRoutes: FastifyPluginAsync<PublicOrderOptions> = async (
         [tenantId, input.outletId, orderId, "qr:" + key, JSON.stringify({ source: "customer_qr", tableId: input.tableId, tableName: input.tableName, status: "draft", paymentStatus: "unpaid" })],
       );
       await client.query("COMMIT");
-      return reply.code(201).send({ orderId, status: "draft", paymentStatus: "unpaid" });
+      return reply.code(201).send({ orderId, status: "draft", paymentStatus: "unpaid", paymentMethod: input.paymentMethod, paymentMessage: input.paymentMethod === "qris" ? "QRIS payment requires outlet-side QR display and verification; order is not marked paid." : "Pay at cashier." });
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       if ((error as { code?: string }).code === "23505") {
