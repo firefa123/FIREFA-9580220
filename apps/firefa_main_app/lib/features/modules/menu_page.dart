@@ -121,7 +121,7 @@ class _MenuPageState extends State<MenuPage> {
           child: imageData == null || imageData.isEmpty
               ? const Center(child: Icon(Icons.image_outlined, size: 42, color: muted))
               : Image.memory(base64Decode(imageData), fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const Center(
+                  errorBuilder: (_, _, _) => const Center(
                     child: Icon(Icons.broken_image_outlined, size: 42, color: muted),
                   )),
         ),
@@ -527,7 +527,7 @@ class _MenuPageState extends State<MenuPage> {
                                   width: double.infinity,
                                   height: 72,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => const SizedBox(
+                                  errorBuilder: (_, _, _) => const SizedBox(
                                     height: 12,
                                     child: Icon(Icons.broken_image_outlined, size: 14, color: muted),
                                   ),
