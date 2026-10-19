@@ -87,7 +87,7 @@ class _TablesPageState extends State<TablesPage> {
   }
 
   String _selfOrderUrl(FirefaTable table) {
-    final base = Uri.base.resolve('/firefa_customer_web/index.html');
+    final base = Uri.base.resolve('/customer/index.html');
     return base.replace(queryParameters: {
       'outletId': table.outletId,
       'tableId': table.id,
