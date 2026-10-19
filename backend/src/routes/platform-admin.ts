@@ -70,6 +70,111 @@ export const platformAdminRoutes: FastifyPluginAsync<Options> = async (app, opti
     const accessToken = app.jwt.sign({ sub:user.id, scope:"platform_admin" } as never, {expiresIn:"15m"});
     return reply.code(200).send({accessToken,expiresIn:900,user:{id:user.id,email:user.email,displayName:user.display_name},scope:"platform_admin"});
   });
+  app.post("/tenants", { preHandler: guard }, async (request, reply) => {
+    const parsed = z.object({name:z.string().trim().min(2).max(120)}).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({error:"invalid_request"});
+    const client = await options.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const created = await client.query<{id:string;name:string;status:string;created_at:string}>(
+        "INSERT INTO tenants (name) VALUES ($1) RETURNING id::text AS id,name,status,created_at",
+        [parsed.data.name],
+      );
+      const tenant = created.rows[0]!;
+      await client.query(
+        "INSERT INTO audit_logs (tenant_id,outlet_id,actor_user_id,action,resource_type,resource_id,changes) VALUES (NULL,NULL,$1,'platform_admin.tenant.create','tenant',$2,$3::jsonb)",
+        [request.user.sub,tenant.id,JSON.stringify({name:tenant.name,status:tenant.status})],
+      );
+      await client.query("COMMIT");
+      return reply.code(201).send({tenant});
+    } catch (error) {
+      await client.query("ROLLBACK").catch(()=>undefined);
+      request.log.error({err:error},"Platform tenant creation failed");
+      return reply.code(500).send({error:"internal_error"});
+    } finally { client.release(); }
+  });
+  app.patch("/tenants/:tenantId/status", { preHandler: guard }, async (request, reply) => {
+    const params = z.object({tenantId:z.string().uuid()}).safeParse(request.params);
+    const body = z.object({status:z.enum(["active","suspended"])}).safeParse(request.body);
+    if (!params.success || !body.success) return reply.code(400).send({error:"invalid_request"});
+    const client = await options.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const updated = await client.query<{id:string;name:string;status:string}>(
+        "UPDATE tenants SET status=$2,updated_at=now() WHERE id=$1 RETURNING id::text AS id,name,status",
+        [params.data.tenantId,body.data.status],
+      );
+      if (!updated.rowCount) { await client.query("ROLLBACK"); return reply.code(404).send({error:"tenant_not_found"}); }
+      await client.query(
+        "INSERT INTO audit_logs (tenant_id,outlet_id,actor_user_id,action,resource_type,resource_id,changes) VALUES (NULL,NULL,$1,'platform_admin.tenant.status','tenant',$2,$3::jsonb)",
+        [request.user.sub,updated.rows[0]!.id,JSON.stringify({status:body.data.status})],
+      );
+      await client.query("COMMIT");
+      return {tenant:updated.rows[0]};
+    } catch (error) {
+      await client.query("ROLLBACK").catch(()=>undefined);
+      request.log.error({err:error},"Platform tenant status update failed");
+      return reply.code(500).send({error:"internal_error"});
+    } finally { client.release(); }
+  });
+  app.post("/outlets", { preHandler: guard }, async (request, reply) => {
+    const parsed = z.object({
+      tenantId:z.string().uuid(),
+      code:z.string().trim().regex(/^[A-Za-z0-9_-]{2,32}$/),
+      name:z.string().trim().min(2).max(120),
+      address:z.string().trim().max(500).optional(),
+      latitude:z.number().min(-90).max(90).optional(),
+      longitude:z.number().min(-180).max(180).optional(),
+      geofenceRadiusM:z.number().int().min(25).max(2000).default(100),
+    }).refine(v=>(v.latitude===undefined)===(v.longitude===undefined)).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({error:"invalid_request"});
+    const v=parsed.data;
+    const client=await options.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const created=await client.query<{id:string;tenant_id:string;code:string;name:string;status:string}>(
+        "INSERT INTO outlets (tenant_id,code,name,address,latitude,longitude,geofence_radius_m) SELECT t.id,$2,$3,$4,$5,$6,$7 FROM tenants t WHERE t.id=$1 AND t.status='active' RETURNING id::text AS id,tenant_id::text AS tenant_id,code,name,status",
+        [v.tenantId,v.code,v.name,v.address??null,v.latitude??null,v.longitude??null,v.geofenceRadiusM],
+      );
+      if (!created.rowCount) { await client.query("ROLLBACK"); return reply.code(404).send({error:"active_tenant_not_found"}); }
+      const outlet=created.rows[0]!;
+      await client.query(
+        "INSERT INTO audit_logs (tenant_id,outlet_id,actor_user_id,action,resource_type,resource_id,changes) VALUES (NULL,NULL,$1,'platform_admin.outlet.create','outlet',$2,$3::jsonb)",
+        [request.user.sub,outlet.id,JSON.stringify({tenantId:outlet.tenant_id,code:outlet.code,name:outlet.name,geofenceRadiusM:v.geofenceRadiusM})],
+      );
+      await client.query("COMMIT");
+      return reply.code(201).send({outlet});
+    } catch (error) {
+      await client.query("ROLLBACK").catch(()=>undefined);
+      if ((error as {code?:string}).code==="23505") return reply.code(409).send({error:"outlet_code_exists"});
+      request.log.error({err:error},"Platform outlet creation failed");
+      return reply.code(500).send({error:"internal_error"});
+    } finally { client.release(); }
+  });
+  app.patch("/outlets/:outletId/status", { preHandler: guard }, async (request, reply) => {
+    const params=z.object({outletId:z.string().uuid()}).safeParse(request.params);
+    const body=z.object({status:z.enum(["active","inactive"])}).safeParse(request.body);
+    if (!params.success||!body.success) return reply.code(400).send({error:"invalid_request"});
+    const client=await options.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const updated=await client.query<{id:string;tenant_id:string;name:string;status:string}>(
+        "UPDATE outlets SET status=$2,updated_at=now() WHERE id=$1 RETURNING id::text AS id,tenant_id::text AS tenant_id,name,status",
+        [params.data.outletId,body.data.status],
+      );
+      if (!updated.rowCount) { await client.query("ROLLBACK"); return reply.code(404).send({error:"outlet_not_found"}); }
+      await client.query(
+        "INSERT INTO audit_logs (tenant_id,outlet_id,actor_user_id,action,resource_type,resource_id,changes) VALUES (NULL,NULL,$1,'platform_admin.outlet.status','outlet',$2,$3::jsonb)",
+        [request.user.sub,updated.rows[0]!.id,JSON.stringify({tenantId:updated.rows[0]!.tenant_id,status:body.data.status})],
+      );
+      await client.query("COMMIT");
+      return {outlet:updated.rows[0]};
+    } catch (error) {
+      await client.query("ROLLBACK").catch(()=>undefined);
+      request.log.error({err:error},"Platform outlet status update failed");
+      return reply.code(500).send({error:"internal_error"});
+    } finally { client.release(); }
+  });
   app.get("/overview", { preHandler: guard }, async () => {
     const result = await options.pool.query(
       "SELECT (SELECT count(*)::int FROM tenants) AS tenants_total, (SELECT count(*)::int FROM tenants WHERE status='active') AS tenants_active, (SELECT count(*)::int FROM outlets) AS outlets_total, (SELECT count(*)::int FROM outlets WHERE status='active') AS outlets_active, (SELECT count(*)::int FROM sync_receipts WHERE created_at >= now()-interval '24 hours') AS sync_events_24h, (SELECT count(*)::int FROM audit_logs WHERE created_at >= now()-interval '24 hours') AS audit_events_24h"
