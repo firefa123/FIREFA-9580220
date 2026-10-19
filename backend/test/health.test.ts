@@ -28,6 +28,24 @@ describe("health routes", () => {
     });
   });
 
+  it("allows Flutter Web localhost CORS preflight requests", async () => {
+    app = buildApp({ ...testSecrets, checkDatabase: async () => undefined });
+    const response = await app.inject({
+      method: "OPTIONS",
+      url: "/api/v1/auth/login",
+      headers: {
+        origin: "http://localhost:54321",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "content-type",
+      },
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:54321");
+    expect(response.headers["access-control-allow-methods"]).toContain("POST");
+    expect(response.headers["access-control-allow-headers"]).toContain("Content-Type");
+  });
+
   it("returns ready when the database check succeeds", async () => {
     app = buildApp({
       ...testSecrets,
