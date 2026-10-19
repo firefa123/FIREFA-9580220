@@ -20,7 +20,7 @@
 <section id="menu" class="grid"><div class="empty">Menu akan tampil setelah layanan FIREFA tersambung.</div></section>
 </main>
 <div class="cart"><div class="cart-inner"><div><strong id="cartCount">0 item</strong><div class="muted" id="cartTotal">Rp 0</div></div><button id="checkout" disabled>Lihat pesanan</button></div></div>
-<dialog id="checkoutDialog"><h2>Konfirmasi pesanan</h2><div id="cartLines"></div><label for="customerName">Nama (opsional)</label><input id="customerName" maxlength="100" placeholder="Nama Anda"><label for="notes">Catatan (opsional)</label><textarea id="notes" rows="2" maxlength="500" placeholder="Contoh: tidak pedas"></textarea><p class="muted" id="checkoutHint">Pesanan dikirim ke outlet yang tertera di QR.</p><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="secondary" id="closeDialog">Kembali</button><button id="submitOrder" disabled>Kirim pesanan</button></div></dialog>
+<dialog id="checkoutDialog"><h2>Konfirmasi pesanan</h2><div id="cartLines"></div><label for="customerName">Nama (opsional)</label><input id="customerName" maxlength="100" placeholder="Nama Anda"><label for="notes">Catatan (opsional)</label><textarea id="notes" rows="2" maxlength="500" placeholder="Contoh: tidak pedas"></textarea><fieldset style="border:1px solid #cbd5e1;border-radius:12px;padding:12px;margin:16px 0"><legend style="font-weight:800;padding:0 6px">Metode pembayaran</legend><label style="display:flex;gap:10px;align-items:flex-start;color:#172b4d"><input type="radio" name="paymentMethod" value="cash" checked style="width:auto;margin-top:3px"><span><strong>Bayar di Kasir</strong><br><small class="muted">Bayar langsung kepada kasir setelah memesan.</small></span></label><label style="display:flex;gap:10px;align-items:flex-start;color:#172b4d"><input type="radio" name="paymentMethod" value="qris" style="width:auto;margin-top:3px"><span><strong>Bayar lewat QRIS</strong><br><small class="muted">Pembayaran menunggu verifikasi; pesanan tidak otomatis dianggap lunas.</small></span></label><div id="qrisInfo" class="muted" style="display:none;background:#f1f5f9;border-radius:8px;padding:10px;font-size:13px">Ikuti instruksi QRIS yang disediakan outlet. Fitur ini belum menampilkan kode QRIS dinamis dari penyedia pembayaran.</div></fieldset><p class="muted" id="checkoutHint">Pesanan dikirim ke outlet yang tertera di QR.</p><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="secondary" id="closeDialog">Kembali</button><button id="submitOrder" disabled>Kirim pesanan</button></div></dialog>
 <script>
 (function(){
 'use strict';
@@ -72,16 +72,18 @@ $('checkout').onclick=()=>{
  for(const x of state.cart.values()){const line=document.createElement('div');line.className='line';const name=document.createElement('span');name.textContent=x.quantity+' × '+x.product.name;const price=document.createElement('strong');price.textContent=rupiah(x.quantity*x.product.unitPrice);line.append(name,price);root.append(line);total+=x.quantity*x.product.unitPrice}
  const line=document.createElement('div');line.className='line';line.innerHTML='<strong>Total</strong><strong>'+rupiah(total)+'</strong>';root.append(line);$('checkoutDialog').showModal();
 };
+document.querySelectorAll('input[name="paymentMethod"]').forEach(el=>el.addEventListener('change',()=>{$('qrisInfo').style.display=document.querySelector('input[name="paymentMethod"]:checked')?.value==='qris'?'block':'none'}));
 $('closeDialog').onclick=()=>$('checkoutDialog').close();
 $('submitOrder').onclick=async()=>{
  if(!valid||!state.apiBase||!state.cart.size)return;
  $('submitOrder').disabled=true;setStatus('Mengirim pesanan…');
  try{
-  const payload={outletId,tableId,tableName,customerName:$('customerName').value.trim(),notes:$('notes').value.trim(),items:[...state.cart.values()].map(x=>({productId:x.product.id,quantity:x.quantity}))};
+  const paymentMethod=document.querySelector('input[name="paymentMethod"]:checked')?.value||"cash";
+  const payload={outletId,tableId,tableName,customerName:$('customerName').value.trim(),notes:$('notes').value.trim(),paymentMethod,items:[...state.cart.values()].map(x=>({productId:x.product.id,quantity:x.quantity}))};
   const r=await fetch(state.apiBase+'/api/v1/public/orders',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json','Idempotency-Key':crypto.randomUUID()},body:JSON.stringify(payload)});
   const data=await r.json().catch(()=>({}));
   if(!r.ok)throw new Error(data.message||data.error||'Pesanan gagal dikirim ('+r.status+').');
-  state.cart.clear();renderCart();$('checkoutDialog').close();setStatus('Pesanan terkirim. Nomor pesanan: '+(data.orderId||data.id||'diterima')+'. Tunjukkan nomor ini kepada kasir.'); 
+  state.cart.clear();renderCart();$('checkoutDialog').close();setStatus('Pesanan terkirim. Nomor: '+(data.orderId||data.id||'diterima')+'. Metode: '+(paymentMethod==='qris'?'QRIS (menunggu verifikasi pembayaran)':'Bayar di Kasir')+'. Simpan nomor pesanan Anda.'); 
  }catch(e){setStatus((e&&e.message)||'Pengiriman gagal. Periksa koneksi lalu coba lagi.');renderCart()}
 };
 $('search').addEventListener('input',render);$('refresh').onclick=loadMenu;
