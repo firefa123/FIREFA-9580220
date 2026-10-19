@@ -8,22 +8,29 @@ import { paymentRoutes } from "./routes/payments";
 import { staffAttendanceRoutes } from "./routes/staff-attendance";
 import { outletLocationRoutes } from "./routes/outlet-location";
 import { publicOrderRoutes } from "./routes/public-orders";
+import { platformAdminRoutes } from "./routes/platform-admin";
 
 export interface AppDependencies {
   checkDatabase?: () => Promise<void>;
   pool?: Pool;
   jwtSecret?: string;
   bootstrapToken?: string;
+  platformAdminBootstrapToken?: string;
 }
 
 export function buildApp(dependencies: AppDependencies = {}): FastifyInstance {
   const jwtSecret = dependencies.jwtSecret ?? process.env.JWT_SECRET;
   const bootstrapToken = dependencies.bootstrapToken ?? process.env.BOOTSTRAP_TOKEN;
+  const platformAdminBootstrapToken = dependencies.platformAdminBootstrapToken ?? process.env.PLATFORM_ADMIN_BOOTSTRAP_TOKEN;
   if (!jwtSecret || jwtSecret.length < 32) {
     throw new Error("JWT_SECRET must contain at least 32 characters");
   }
   if (!bootstrapToken || bootstrapToken.length < 32) {
     throw new Error("BOOTSTRAP_TOKEN must contain at least 32 characters");
+  }
+
+  if (!platformAdminBootstrapToken || platformAdminBootstrapToken.length < 32) {
+    throw new Error("PLATFORM_ADMIN_BOOTSTRAP_TOKEN must contain at least 32 characters");
   }
 
   const app = Fastify({ logger: process.env.NODE_ENV !== "test" });
