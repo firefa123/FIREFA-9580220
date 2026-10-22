@@ -1,0 +1,157 @@
+name: FIREFA distribution builds
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [development]
+    paths:
+      - "apps/firefa_main_app/**"
+      - "apps/firefa_staff_app/**"
+      - "apps/firefa_customer_web/**"
+      - "apps/firefa_super_admin/**"
+      - ".github/workflows/firefa-distribution-build.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  main-app:
+    name: Main App Web and Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+          cache-dependency-path: apps/firefa_main_app/pubspec.lock
+      - name: Install dependencies
+        working-directory: apps/firefa_main_app
+        run: flutter pub get
+      - name: Analyze
+        working-directory: apps/firefa_main_app
+        run: flutter analyze
+      - name: Test
+        working-directory: apps/firefa_main_app
+        run: flutter test --reporter expanded
+      - name: Build web
+        working-directory: apps/firefa_main_app
+        run: flutter build web --release
+      - name: Build Android APK
+        working-directory: apps/firefa_main_app
+        run: flutter build apk --release
+      - name: Upload Main App Web
+        uses: actions/upload-artifact@v4
+        with:
+          name: firefa-main-app-web
+          path: apps/firefa_main_app/build/web/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Main App Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: firefa-main-app-android-apk
+          path: apps/firefa_main_app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  staff-app:
+    name: Staff App Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+          cache-dependency-path: apps/firefa_staff_app/pubspec.lock
+      - name: Install dependencies
+        working-directory: apps/firefa_staff_app
+        run: flutter pub get
+      - name: Analyze
+        working-directory: apps/firefa_staff_app
+        run: flutter analyze
+      - name: Test
+        working-directory: apps/firefa_staff_app
+        run: flutter test --reporter expanded
+      - name: Build Android APK
+        working-directory: apps/firefa_staff_app
+        run: flutter build apk --release
+      - name: Upload Staff App Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: firefa-staff-app-android-apk
+          path: apps/firefa_staff_app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  web-portals:
+    name: Customer Web and Super Admin Web
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate portal HTML and inline JavaScript
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const files = [
+            'apps/firefa_customer_web/index.html',
+            'apps/firefa_main_app/web/customer/index.html',
+            'apps/firefa_super_admin/index.html'
+          ];
+          for (const file of files) {
+            if (!fs.existsSync(file)) throw new Error('Missing web entrypoint: ' + file);
+            const html = fs.readFileSync(file, 'utf8');
+            if (!/<html[\\s>]/i.test(html) || !/<body[\\s>]/i.test(html)) {
+              throw new Error('Invalid HTML entrypoint: ' + file);
+            }
+            for (const match of html.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)) {
+              if (match[1].trim()) new Function(match[1]);
+            }
+            console.log('Validated ' + file);
+          }
+          NODE
+      - name: Package Customer Web
+        run: |
+          mkdir -p dist/customer-web
+          cp -R apps/firefa_customer_web/. dist/customer-web/
+          cp -R apps/firefa_main_app/web/customer dist/customer-web/main-app-customer-menu
+          cd dist && zip -qr firefa-customer-web.zip customer-web
+      - name: Package Super Admin Web
+        run: |
+          mkdir -p dist/super-admin
+          cp -R apps/firefa_super_admin/. dist/super-admin/
+          cd dist && zip -qr firefa-super-admin-web.zip super-admin
+      - name: Upload Customer Web
+        uses: actions/upload-artifact@v4
+        with:
+          name: firefa-customer-web
+          path: dist/firefa-customer-web.zip
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Super Admin Web
+        uses: actions/upload-artifact@v4
+        with:
+          name: firefa-super-admin-web
+          path: dist/firefa-super-admin-web.zip
+          if-no-files-found: error
+          retention-days: 14
