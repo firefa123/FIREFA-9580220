@@ -88,6 +88,9 @@ jobs:
       - name: Test
         working-directory: apps/firefa_staff_app
         run: flutter test --reporter expanded
+      - name: Generate Android platform files
+        working-directory: apps/firefa_staff_app
+        run: flutter create --platforms=android .
       - name: Build Android APK
         working-directory: apps/firefa_staff_app
         run: flutter build apk --release
@@ -118,14 +121,18 @@ jobs:
             'apps/firefa_main_app/web/customer/index.html',
             'apps/firefa_super_admin/index.html'
           ];
+          const scriptPattern = new RegExp('<script[^>]*>([\\\\s\\\\S]*?)</script>', 'gi');
           for (const file of files) {
             if (!fs.existsSync(file)) throw new Error('Missing web entrypoint: ' + file);
             const html = fs.readFileSync(file, 'utf8');
-            if (!/<html[\\s>]/i.test(html) || !/<body[\\s>]/i.test(html)) {
+            if (!html.toLowerCase().includes('<html') || !html.toLowerCase().includes('<body')) {
               throw new Error('Invalid HTML entrypoint: ' + file);
             }
-            for (const match of html.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)) {
-              if (match[1].trim()) new Function(match[1]);
+            for (const match of html.matchAll(scriptPattern)) {
+              if (match[1].trim()) {
+                try { new Function(match[1]); }
+                catch (error) { throw new Error('JavaScript syntax error in ' + file + ': ' + error.message); }
+              }
             }
             console.log('Validated ' + file);
           }
